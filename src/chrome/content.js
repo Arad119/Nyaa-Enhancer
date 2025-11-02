@@ -26,6 +26,7 @@ function loadStoredPreferences() {
         showATLinks: true,
         showMagnetButtons: true,
         showQuickFilter: true,
+        showMonitorButtons: true,
         hideDeadTorrents: false,
         keywords: [],
         keywordFilterEnabled: false,
@@ -35,6 +36,7 @@ function loadStoredPreferences() {
         fileSizeRange: "less_than_1gb",
         showChangelogNav: true,
         monitoredUsers: [], // Array of objects {username, url, torrentCount, lastChecked, lastDismissedCount}
+        monitoredKeywords: [], // Array of objects {keyword, url, lastTorrentId}
       },
       (items) => {
         resolve(items);
@@ -148,12 +150,23 @@ async function addCopyButton() {
     '<i class="fa fa-check-square"></i> Keyword Select';
   keywordSelectButton.addEventListener("click", showKeywordSelectPopup);
 
+  // Create Keyword Monitor button
+  const keywordMonitorButton = document.createElement("button");
+  keywordMonitorButton.className = "copy-magnets-button keyword-monitor-button";
+  keywordMonitorButton.style.marginRight = "10px";
+  keywordMonitorButton.style.display = prefs.showMonitorButtons
+    ? "inline-block"
+    : "none";
+  keywordMonitorButton.innerHTML = '<i class="fa fa-bell"></i> Keyword Monitor';
+  keywordMonitorButton.addEventListener("click", showKeywordMonitorPopup);
+
   buttonContainer.appendChild(copyButton);
   buttonContainer.appendChild(copyAllButton);
   buttonContainer.appendChild(downloadButton);
   buttonContainer.appendChild(downloadAllButton);
   buttonContainer.appendChild(invertButton);
   buttonContainer.appendChild(keywordSelectButton);
+  buttonContainer.appendChild(keywordMonitorButton);
   buttonContainer.appendChild(clearButton);
   buttonContainer.appendChild(selectionCounter);
   buttonContainer.appendChild(quickFilterButton);
@@ -753,7 +766,8 @@ async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Fixed sidebar layout to maintain consistent height during state changes
+        • Added a Keyword Monitoring system to track new uploads that has specific keywords<br>
+        • Added a Show Monitor Buttons setting to control visibility of monitor buttons
       </div>
       <div class="changelog-actions">
         <button class="changelog-button okay">Okay</button>
@@ -804,6 +818,26 @@ chrome.runtime.onMessage.addListener((message) => {
 
 async function handleSettingChange(setting, value) {
   switch (setting) {
+    case "showMonitorButtons":
+      // Update keyword monitor button on homepage
+      const keywordMonitorBtn = document.querySelector(
+        ".keyword-monitor-button"
+      );
+      if (keywordMonitorBtn) {
+        keywordMonitorBtn.style.display = value ? "inline-block" : "none";
+      }
+
+      // Update monitor button on user pages
+      if (window.location.pathname.startsWith("/user/")) {
+        const monitorBtn = document.querySelector(".monitor-button");
+        if (monitorBtn) {
+          monitorBtn.style.display = value ? "inline-block" : "none";
+        } else if (value) {
+          // If the button doesn't exist but should be shown, add it
+          addMonitorButton();
+        }
+      }
+      break;
     case "showButtons":
       if (value) {
         initializeExtension(false);
@@ -2034,6 +2068,229 @@ async function filterByFileSize() {
   }
 }
 
+function showKeywordMonitorPopup() {
+  const popup = document.createElement("div");
+  popup.className = "quick-filter-popup"; // Reuse existing popup styles
+  popup.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+    z-index: 1001;
+    min-width: 320px;
+    max-width: 400px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  `;
+
+  const content = `
+    <h3 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Keyword Monitor</h3>
+    
+    <div class="filter-group" style="margin-bottom: 18px;">
+      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Enter Keyword to Monitor:</label>
+      <input type="text" id="keyword-monitor-input" class="filter-input" style="
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      ">
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+      <button id="cancel-monitor" class="copy-magnets-button" style="
+        padding: 8px 16px;
+        border: none;
+        background: #337ab7;
+        border-radius: 8px;
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      ">Cancel</button>
+      <button id="apply-monitor" class="copy-magnets-button" style="
+        padding: 8px 16px;
+        border: none;
+        background: #337ab7;
+        border-radius: 8px;
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      ">Add Monitor</button>
+    </div>
+  `;
+
+  // Create overlay
+  const overlay = document.createElement("div");
+  overlay.className = "quick-filter-overlay";
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+  `;
+
+  popup.innerHTML = content;
+  document.body.appendChild(overlay);
+  document.body.appendChild(popup);
+  document.body.style.overflow = "hidden";
+
+  // Add hover effects and animations for inputs and buttons
+  const style = document.createElement("style");
+  style.textContent = `
+    .quick-filter-popup {
+      animation: popupFadeIn 0.3s ease;
+    }
+
+    .quick-filter-overlay {
+      animation: overlayFadeIn 0.3s ease;
+    }
+
+    @keyframes popupFadeIn {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -48%) scale(0.96);
+      }
+      to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+    }
+
+    @keyframes overlayFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .quick-filter-popup.hiding {
+      animation: popupFadeOut 0.3s ease;
+    }
+
+    .quick-filter-overlay.hiding {
+      animation: overlayFadeOut 0.3s ease;
+    }
+
+    @keyframes popupFadeOut {
+      from {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+      to {
+        opacity: 0;
+        transform: translate(-50%, -48%) scale(0.96);
+      }
+    }
+
+    @keyframes overlayFadeOut {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+
+    .quick-filter-popup input:focus {
+      outline: none;
+      border-color: #337ab7;
+      box-shadow: 0 0 0 3px rgba(51, 122, 183, 0.1);
+    }
+    .quick-filter-popup input:hover {
+      border-color: #337ab7;
+    }
+    #cancel-select:hover,
+    #apply-select:hover {
+      background-color: #286090;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Add dark mode styles if needed
+  if (document.body.classList.contains("dark")) {
+    popup.style.background = "#34353b";
+    popup.style.color = "#ffffff";
+    const input = popup.querySelector("input");
+    input.style.background = "#232327";
+    input.style.color = "#ffffff";
+    input.style.border = "1px solid #666";
+  }
+
+  // Handle Enter key
+  document
+    .getElementById("keyword-monitor-input")
+    .addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        document.getElementById("apply-monitor").click();
+      }
+    });
+
+  // Focus the input field
+  setTimeout(() => {
+    document.getElementById("keyword-monitor-input").focus();
+  }, 100);
+
+  // Handle selection
+  document
+    .getElementById("apply-monitor")
+    .addEventListener("click", async () => {
+      const keyword = document
+        .getElementById("keyword-monitor-input")
+        .value.trim();
+      if (keyword) {
+        // Get the latest torrent ID from the search page
+        const latestTorrentId = await getLatestTorrentIdForKeyword(keyword);
+
+        // Add the keyword to monitoring with the correct torrent ID
+        await addKeywordMonitoring(keyword, latestTorrentId);
+
+        // Close the popup
+        closePopup();
+
+        // Show confirmation
+        showNotification(`Added "${keyword}" to keyword monitoring`);
+      } else {
+        showNotification("Please enter a keyword to monitor", false);
+        return;
+      }
+    });
+
+  // Handle cancel and close
+  const closePopup = () => {
+    popup.classList.add("hiding");
+    overlay.classList.add("hiding");
+    document.body.style.overflow = "";
+
+    // Wait for animations to finish before removing elements
+    popup.addEventListener(
+      "animationend",
+      () => {
+        popup.remove();
+      },
+      { once: true }
+    );
+
+    overlay.addEventListener(
+      "animationend",
+      () => {
+        overlay.remove();
+      },
+      { once: true }
+    );
+  };
+
+  document
+    .getElementById("cancel-monitor")
+    .addEventListener("click", closePopup);
+  overlay.addEventListener("click", closePopup);
+}
+
 function showKeywordSelectPopup() {
   const popup = document.createElement("div");
   popup.className = "quick-filter-popup"; // Reuse existing popup styles
@@ -2301,6 +2558,18 @@ async function handleChangelogPage() {
     </div>
     <div class="version-entry">
       <h2>
+        Version 1.9.0
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.9.0" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added a Keyword Monitoring system to track new uploads that has specific keywords</li>
+        <li>Added a Show Monitor Buttons setting to control visibility of monitor buttons</li>
+      </ul>
+    </div>
+    <div class="version-entry">
+      <h2>
         Version 1.8.1
         <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.8.1" target="_blank" class="version-link">
           <i class="fa fa-github"></i> View Release
@@ -2534,6 +2803,9 @@ async function addMonitorButton() {
 
   const prefs = await loadStoredPreferences();
 
+  // If monitor buttons are disabled, don't add the button
+  if (!prefs.showMonitorButtons) return;
+
   // Find the h3 heading with the user information
   const userHeading = document.querySelector("h3");
   if (!userHeading) return;
@@ -2612,11 +2884,95 @@ async function addMonitorButton() {
   userHeading.insertBefore(monitorButton, userHeading.firstChild);
 }
 
+// Function to add keyword monitoring
+// Function to get the latest torrent ID for a keyword
+async function getLatestTorrentIdForKeyword(keyword) {
+  try {
+    // Create search URL for this keyword
+    const searchUrl = `https://nyaa.si/?f=0&c=0_0&q=${encodeURIComponent(
+      keyword
+    )}`;
+
+    // Fetch the search results page
+    const response = await fetch(searchUrl);
+    const html = await response.text();
+
+    // Create a temporary DOM element to parse the HTML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    // Get the first torrent row (latest upload)
+    const firstRow = doc.querySelector("table.torrent-list tbody tr");
+
+    if (firstRow) {
+      // Extract the torrent ID from the first row
+      const torrentLink = firstRow.querySelector("td:nth-child(2) a");
+      if (torrentLink && torrentLink.href) {
+        const match = torrentLink.href.match(/view\/(\d+)/);
+        if (match && match[1]) {
+          return match[1]; // Return the torrent ID
+        }
+      }
+    }
+
+    // If no torrent found, return a placeholder value
+    return "no_torrents_found";
+  } catch (error) {
+    console.error("Error fetching latest torrent ID:", error);
+    return "fetch_error";
+  }
+}
+
+async function addKeywordMonitoring(keyword, torrentId) {
+  const prefs = await loadStoredPreferences();
+
+  // Initialize monitoredKeywords if it doesn't exist
+  if (!prefs.monitoredKeywords) {
+    prefs.monitoredKeywords = [];
+  }
+
+  // Check if this keyword is already being monitored
+  const existingIndex = prefs.monitoredKeywords.findIndex(
+    (item) => item.keyword === keyword
+  );
+
+  if (existingIndex !== -1) {
+    // Update existing entry
+    prefs.monitoredKeywords[existingIndex].lastTorrentId = torrentId;
+    showNotification(`Updated monitoring for "${keyword}"`, true);
+  } else {
+    // Create search URL for this keyword
+    const searchUrl = `https://nyaa.si/?f=0&c=0_0&q=${encodeURIComponent(
+      keyword
+    )}`;
+
+    // Add new entry
+    prefs.monitoredKeywords.push({
+      keyword: keyword,
+      url: searchUrl,
+      lastTorrentId: torrentId,
+      lastDismissedTorrentId: torrentId, // Initialize with the current torrent ID
+      lastChecked: Date.now(),
+    });
+
+    showNotification(`Now monitoring uploads with "${keyword}"`, true);
+  }
+
+  // Save updated preferences
+  chrome.storage.sync.set({ monitoredKeywords: prefs.monitoredKeywords });
+}
+
 // Function to check for new uploads from monitored users when on the homepage
 async function checkMonitoredUsers() {
   // Get user preferences
   const prefs = await loadStoredPreferences();
-  if (!prefs.monitoredUsers || prefs.monitoredUsers.length === 0) return;
+
+  // Check if we have anything to monitor
+  const hasUsers = prefs.monitoredUsers && prefs.monitoredUsers.length > 0;
+  const hasKeywords =
+    prefs.monitoredKeywords && prefs.monitoredKeywords.length > 0;
+
+  if (!hasUsers && !hasKeywords) return;
 
   // Create or update the sidebar
   const sidebar = createOrUpdateSidebar();
@@ -2624,16 +2980,46 @@ async function checkMonitoredUsers() {
   // Show loading state
   showSidebarLoadingState(sidebar);
 
-  // Check for updates
-  const { updatesFound, pendingUpdates, updatedUsers } = await checkForUpdates(
-    prefs.monitoredUsers
-  );
+  // Initialize variables
+  let updatesFound = false;
+  let pendingUpdates = [];
+  let updatedUsers = prefs.monitoredUsers || [];
+  let keywordPendingUpdates = [];
+
+  // Check for user updates if we have monitored users
+  if (hasUsers) {
+    const userResults = await checkForUpdates(prefs.monitoredUsers);
+    updatesFound = userResults.updatesFound;
+    pendingUpdates = userResults.pendingUpdates;
+    updatedUsers = userResults.updatedUsers;
+
+    // Save the updated user data
+    chrome.storage.sync.set({ monitoredUsers: updatedUsers });
+  }
+
+  // Check for keyword updates if we have monitored keywords
+  let updatedKeywords = prefs.monitoredKeywords || [];
+  if (hasKeywords) {
+    const keywordResults = await checkKeywordUpdates(prefs.monitoredKeywords);
+    updatesFound = updatesFound || keywordResults.updatesFound;
+    keywordPendingUpdates = keywordResults.pendingUpdates;
+    updatedKeywords = keywordResults.updatedKeywords;
+
+    // Save the updated keyword data
+    if (keywordResults.updatesFound) {
+      chrome.storage.sync.set({ monitoredKeywords: updatedKeywords });
+    }
+  }
 
   // Update the sidebar content
-  updateSidebarContent(sidebar, updatesFound, pendingUpdates, updatedUsers);
-
-  // Save the updated user data
-  chrome.storage.sync.set({ monitoredUsers: updatedUsers });
+  updateSidebarContent(
+    sidebar,
+    updatesFound,
+    pendingUpdates,
+    updatedUsers,
+    keywordPendingUpdates,
+    updatedKeywords
+  );
 }
 
 // Creates the sidebar if it doesn't exist, or returns the existing one
@@ -2701,7 +3087,7 @@ function createOrUpdateSidebar() {
     font-weight: bold;
     font-size: 14px;
   `;
-  tabIndicator.textContent = "Monitored Users";
+  tabIndicator.textContent = "Monitored Torrents";
   sidebar.appendChild(tabIndicator);
 
   // Add notification dot
@@ -2847,12 +3233,78 @@ async function checkForUpdates(monitoredUsers) {
   return { updatesFound, pendingUpdates, updatedUsers };
 }
 
+// Checks for updates from monitored keywords
+async function checkKeywordUpdates(monitoredKeywords) {
+  let updatesFound = false;
+  let updatedKeywords = [...monitoredKeywords];
+  let pendingUpdates = [];
+
+  // Check each monitored keyword for updates
+  for (let i = 0; i < monitoredKeywords.length; i++) {
+    const item = monitoredKeywords[i];
+    try {
+      const response = await fetch(item.url);
+      const text = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, "text/html");
+
+      // Find the first torrent in the results
+      const firstTorrentRow = doc.querySelector("table.torrent-list tbody tr");
+      if (firstTorrentRow) {
+        // Find the torrent link in the second column (td) that contains the view link
+        const torrentLinkCell =
+          firstTorrentRow.querySelector("td:nth-child(2)") ||
+          firstTorrentRow.querySelector("td[colspan='2']");
+
+        if (torrentLinkCell) {
+          const viewLink = torrentLinkCell.querySelector("a[href^='/view/']");
+
+          if (viewLink && viewLink.href) {
+            // Extract the torrent ID from the href attribute
+            const href = viewLink.getAttribute("href");
+            const torrentId = href.split("/").pop();
+
+            // If there's a new torrent with a different ID than the last dismissed one
+            if (torrentId && torrentId !== item.lastDismissedTorrentId) {
+              // Store the update information
+              pendingUpdates.push({
+                keyword: item.keyword,
+                url: item.url,
+                torrentId: torrentId,
+                torrentName: viewLink.textContent.trim(),
+              });
+
+              updatesFound = true;
+            }
+
+            // Always update the lastTorrentId but keep lastDismissedTorrentId unchanged
+            updatedKeywords[i] = {
+              ...item,
+              lastTorrentId: torrentId,
+              lastChecked: Date.now(),
+            };
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        `Error checking updates for keyword "${item.keyword}":`,
+        error
+      );
+    }
+  }
+
+  return { updatesFound, pendingUpdates, updatedKeywords };
+}
+
 // Updates the sidebar content based on the updates check
 function updateSidebarContent(
   sidebar,
   updatesFound,
   pendingUpdates,
-  updatedUsers
+  updatedUsers,
+  keywordUpdates = [],
+  updatedKeywords = []
 ) {
   const contentWrapper = sidebar.querySelector(".sidebar-content");
   const tabIndicator = sidebar.querySelector(".sidebar-tab");
@@ -2882,7 +3334,7 @@ function updateSidebarContent(
     width: 100%;
   `;
 
-  if (updatesFound) {
+  if (updatesFound || keywordUpdates.length > 0) {
     // Create list for notifications
     const notificationList = document.createElement("ul");
     notificationList.style.cssText = `
@@ -2935,6 +3387,66 @@ function updateSidebarContent(
       notificationList.appendChild(listItem);
     }
 
+    // Add keyword updates to the list
+    for (const update of keywordUpdates) {
+      // Create notification list item
+      const listItem = document.createElement("li");
+      listItem.style.marginBottom = "10px";
+      listItem.style.wordBreak = "break-word";
+      listItem.style.backgroundColor = "transparent";
+      listItem.style.color = "#ffffff";
+
+      // Create the keyword link
+      const keywordSpan = document.createElement("a");
+      keywordSpan.textContent = update.keyword;
+      keywordSpan.href = update.url;
+      keywordSpan.style.cssText = `
+        font-weight: bold;
+        color: #5cb8ff;
+        text-decoration: none;
+      `;
+
+      keywordSpan.addEventListener("mouseenter", () => {
+        keywordSpan.style.textDecoration = "underline";
+      });
+
+      keywordSpan.addEventListener("mouseleave", () => {
+        keywordSpan.style.textDecoration = "none";
+      });
+
+      keywordSpan.addEventListener("click", (e) => {
+        e.preventDefault();
+        window.location.href = update.url;
+      });
+
+      // Create the torrent link
+      const torrentLink = document.createElement("a");
+      torrentLink.href = `https://nyaa.si/view/${update.torrentId}`;
+      torrentLink.textContent = update.torrentName;
+      torrentLink.style.cssText = `
+        color: #5cb8ff;
+        text-decoration: none;
+      `;
+
+      torrentLink.addEventListener("mouseenter", () => {
+        torrentLink.style.textDecoration = "underline";
+      });
+
+      torrentLink.addEventListener("mouseleave", () => {
+        torrentLink.style.textDecoration = "none";
+      });
+
+      torrentLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        window.open(`https://nyaa.si/view/${update.torrentId}`, "_blank");
+      });
+
+      listItem.appendChild(document.createTextNode("New torrent for keyword "));
+      listItem.appendChild(keywordSpan);
+
+      notificationList.appendChild(listItem);
+    }
+
     scrollableArea.appendChild(notificationList);
 
     // Update visual indicators
@@ -2971,7 +3483,7 @@ function updateSidebarContent(
       word-break: break-word;
       background-color: transparent;
     `;
-    noUpdatesMsg.textContent = "No new updates from monitored users";
+    noUpdatesMsg.textContent = "No new updates from monitored torrents";
 
     emptyStateContainer.appendChild(noUpdatesMsg);
     scrollableArea.appendChild(emptyStateContainer);
@@ -3011,13 +3523,32 @@ function updateSidebarContent(
         lastDismissedCount: user.torrentCount,
       }));
 
-      // Save the current torrent counts and dismissed state
-      chrome.storage.sync.set({ monitoredUsers: dismissedUsers });
+      // Update lastDismissedTorrentId to current lastTorrentId for all keywords
+      const dismissedKeywords = updatedKeywords.map((keyword) => ({
+        ...keyword,
+        lastDismissedTorrentId: keyword.lastTorrentId,
+      }));
+
+      // Save the current torrent counts and dismissed state for both users and keywords
+      chrome.storage.sync.set({
+        monitoredUsers: dismissedUsers,
+        monitoredKeywords: dismissedKeywords,
+      });
 
       // Reset the notification dot to red
       notificationDot.style.backgroundColor = "#ff5252"; // Red
 
       // Stop the tab pulsing animation
+
+      // Update the sidebar content to clear notifications
+      updateSidebarContent(
+        sidebar,
+        false,
+        [],
+        dismissedUsers,
+        [],
+        dismissedKeywords
+      );
       tabIndicator.style.animation = "none";
 
       // Show notification that updates were dismissed

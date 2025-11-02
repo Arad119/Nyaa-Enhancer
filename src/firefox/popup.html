@@ -9,9 +9,7 @@
       <button class="nav-button" data-tab="keyword-filter">
         Keyword Filter
       </button>
-      <button class="nav-button" data-tab="monitored-users">
-        Monitored Users
-      </button>
+      <button class="nav-button" data-tab="monitored-users">Monitoring</button>
       <button class="nav-button active" data-tab="settings">Settings</button>
       <button class="nav-button" data-tab="about">About</button>
     </div>
@@ -48,58 +46,149 @@
       </div>
 
       <div id="monitored-users" class="tab-content">
-        <div class="keyword-info">
-          <p class="keyword-explanation">
-            <strong>User Monitoring</strong> lets you track new uploads from
-            your favorite uploaders.
-          </p>
-          <div class="how-to-monitor">
-            <h4 style="margin-bottom: 5px; color: #337ab7">
-              How to monitor a user:
-            </h4>
-            <ol style="margin-top: 5px; padding-left: 20px">
-              <li>
-                Visit any user's page on Nyaa (e.g.,
-                https://nyaa.si/user/username)
-              </li>
-              <li>
-                Click the
-                <strong style="color: #337ab7"
-                  ><i class="fa fa-bell"></i> Monitor</strong
-                >
-                button next to their name
-              </li>
-              <li>
-                You'll receive notifications in the sidebar to the left when
-                they upload new torrents
-              </li>
-            </ol>
-            <p style="font-style: italic; margin-top: 10px; color: #666">
-              The sidebar appears on the left edge of your screen and shows a
-              notification dot when new uploads are detected.
-            </p>
-          </div>
-        </div>
-        <div
-          class="monitored-users-header"
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 15px 0 10px 0;
-          "
-        >
-          <h3 style="margin: 0; font-size: 16px">Currently Monitored</h3>
+        <!-- Monitoring Sub-Navigation -->
+        <div class="monitoring-nav">
           <button
-            id="unmonitor-all-users"
-            class="keyword-remove-all"
-            style="margin: 0"
+            class="monitoring-nav-button active"
+            data-monitoring-tab="user-monitoring"
           >
-            Unmonitor All
+            User Monitoring
+          </button>
+          <button
+            class="monitoring-nav-button"
+            data-monitoring-tab="keyword-monitoring"
+          >
+            Keyword Monitoring
           </button>
         </div>
-        <div id="monitored-users-list" class="keywords-list">
-          <!-- Monitored users will be added here dynamically -->
+
+        <!-- User Monitoring Content -->
+        <div id="user-monitoring" class="monitoring-tab-content active">
+          <div class="keyword-info">
+            <p class="keyword-explanation">
+              <strong>User Monitoring</strong> lets you track new uploads from
+              your favorite uploaders.
+            </p>
+            <div class="accordion">
+              <div class="accordion-header">
+                <h4 style="margin: 0; color: #337ab7; display: inline-block">
+                  How to monitor a user
+                </h4>
+                <span class="accordion-icon">+</span>
+              </div>
+              <div class="accordion-content">
+                <ol style="margin-top: 10px; padding-left: 20px">
+                  <li>
+                    Visit any user's page on Nyaa (e.g.,
+                    https://nyaa.si/user/username)
+                  </li>
+                  <li>
+                    Click the
+                    <strong style="color: #337ab7"
+                      ><i class="fa fa-bell"></i> Monitor</strong
+                    >
+                    button next to their name
+                  </li>
+                  <li>
+                    You'll receive notifications in the sidebar to the left when
+                    they upload new torrents
+                  </li>
+                </ol>
+                <p style="font-style: italic; margin-top: 10px; color: #666">
+                  The sidebar appears on the left edge of your screen and shows
+                  a notification dot when new uploads are detected.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div
+            class="monitored-users-header"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin: 15px 0 10px 0;
+            "
+          >
+            <h3 style="margin: 0; font-size: 16px">Currently Monitored</h3>
+            <button
+              id="unmonitor-all-users"
+              class="keyword-remove-all"
+              style="margin: 0"
+            >
+              Unmonitor All
+            </button>
+          </div>
+          <div id="monitored-users-list" class="keywords-list">
+            <!-- Monitored users will be added here dynamically -->
+          </div>
+        </div>
+
+        <!-- Keyword Monitoring Content -->
+        <div id="keyword-monitoring" class="monitoring-tab-content">
+          <div class="keyword-info">
+            <p class="keyword-explanation">
+              <strong>Keyword Monitoring</strong> lets you track new uploads
+              containing specific keywords you're interested in.
+            </p>
+            <div class="accordion">
+              <div class="accordion-header">
+                <h4 style="margin: 0; color: #337ab7; display: inline-block">
+                  How to monitor keywords
+                </h4>
+                <span class="accordion-icon">+</span>
+              </div>
+              <div class="accordion-content">
+                <ol style="margin-top: 10px; padding-left: 20px">
+                  <li>
+                    Visit the homepage of Nyaa or any page that shows the
+                    torrent list (e.g., https://nyaa.si)
+                  </li>
+                  <li>
+                    Click the
+                    <strong style="color: #337ab7"
+                      ><i class="fa fa-bell"></i> Keyword Monitor</strong
+                    >
+                    button to open the monitoring popup
+                  </li>
+                  <li>
+                    Add a keyword you want to monitor by typing it into the
+                    input field and clicking Add Monitor
+                  </li>
+                  <li>
+                    You'll receive notifications in the sidebar when new
+                    torrents containing these keywords are uploaded
+                  </li>
+                </ol>
+                <p style="font-style: italic; margin-top: 10px; color: #666">
+                  The sidebar appears on the left edge of your screen and shows
+                  a notification dot when new uploads are detected.
+                </p>
+              </div>
+            </div>
+          </div>
+          <!-- Keyword input functionality removed as requested -->
+          <div
+            class="monitored-keywords-header"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin: 15px 0 10px 0;
+            "
+          >
+            <h3 style="margin: 0; font-size: 16px">Currently Monitored</h3>
+            <button
+              id="unmonitor-all-keywords"
+              class="keyword-remove-all"
+              style="margin: 0"
+            >
+              Unmonitor All
+            </button>
+          </div>
+          <div id="monitored-keywords-list" class="keywords-list">
+            <!-- Monitored keywords will be added here dynamically -->
+          </div>
         </div>
       </div>
 
@@ -153,6 +242,18 @@
               <button
                 class="toggle-button"
                 data-toggle="showMagnetButtonsToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <span>Show Monitor Buttons</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showMonitorButtonsToggle"
               >
                 <span class="toggle-indicator"></span>
               </button>

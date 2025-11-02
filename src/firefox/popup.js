@@ -1,17 +1,57 @@
-// Handle tab switching
-document.querySelectorAll(".nav-button").forEach((button) => {
-  button.addEventListener("click", () => {
-    // Remove active class from all buttons and content
-    document
-      .querySelectorAll(".nav-button")
-      .forEach((b) => b.classList.remove("active"));
-    document
-      .querySelectorAll(".tab-content")
-      .forEach((c) => c.classList.remove("active"));
+document.addEventListener("DOMContentLoaded", function () {
+  // Handle main tab switching
+  document.querySelectorAll(".nav-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      // Remove active class from all buttons and content
+      document
+        .querySelectorAll(".nav-button")
+        .forEach((b) => b.classList.remove("active"));
+      document
+        .querySelectorAll(".tab-content")
+        .forEach((c) => c.classList.remove("active"));
 
-    // Add active class to clicked button and corresponding content
-    button.classList.add("active");
-    document.getElementById(button.dataset.tab).classList.add("active");
+      // Add active class to clicked button and corresponding content
+      button.classList.add("active");
+      document.getElementById(button.dataset.tab).classList.add("active");
+    });
+  });
+
+  // Handle monitoring tab switching
+  document.querySelectorAll(".monitoring-nav-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      // Remove active class from all monitoring buttons and content
+      document
+        .querySelectorAll(".monitoring-nav-button")
+        .forEach((b) => b.classList.remove("active"));
+      document
+        .querySelectorAll(".monitoring-tab-content")
+        .forEach((c) => c.classList.remove("active"));
+
+      // Add active class to clicked button and corresponding content
+      button.classList.add("active");
+      document
+        .getElementById(button.dataset.monitoringTab)
+        .classList.add("active");
+    });
+  });
+
+  // Accordion functionality
+  const accordionHeaders = document.querySelectorAll(".accordion-header");
+
+  accordionHeaders.forEach((header) => {
+    header.addEventListener("click", () => {
+      const content = header.nextElementSibling;
+      const icon = header.querySelector(".accordion-icon");
+
+      // Toggle accordion state
+      if (content.style.maxHeight) {
+        content.style.maxHeight = null;
+        icon.textContent = "+";
+      } else {
+        content.style.maxHeight = content.scrollHeight + "px";
+        icon.textContent = "-";
+      }
+    });
   });
 });
 
@@ -58,6 +98,8 @@ browser.storage.sync.get(
     fileSizeFilterEnabled: false,
     fileSizeRange: "less_than_256mb",
     showChangelogNav: true,
+    showMonitorButtons: true,
+    monitoredKeywords: [],
   },
   (items) => {
     document
@@ -99,11 +141,15 @@ browser.storage.sync.get(
     document
       .querySelector('[data-toggle="showChangelogNavToggle"]')
       .setAttribute("aria-checked", items.showChangelogNav);
+    document
+      .querySelector('[data-toggle="showMonitorButtonsToggle"]')
+      .setAttribute("aria-checked", items.showMonitorButtons);
 
     // Initialize dependent toggles state
     updateDependentToggles(items.showButtons);
 
     displayKeywords(items.keywords);
+    displayMonitoredKeywords(items.monitoredKeywords || []);
 
     const sizeSelect = document.getElementById("sizeRangeSelect");
     sizeSelect.value = items.fileSizeRange;
@@ -258,6 +304,20 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
           }
         );
         break;
+      case "showMonitorButtonsToggle":
+        setting = "showMonitorButtons";
+        browser.storage.sync.set({ [setting]: newState });
+        browser.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            browser.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showMonitorButtons",
+              value: newState,
+            });
+          }
+        );
+        break;
     }
     browser.storage.sync.set({ [setting]: newState });
   });
@@ -347,6 +407,153 @@ function removeAllKeywords() {
   });
 }
 
+// Function to display monitored keywords
+function displayMonitoredKeywords(monitoredKeywords) {
+  const keywordsList = document.getElementById("monitored-keywords-list");
+  keywordsList.innerHTML = "";
+
+  if (!monitoredKeywords || monitoredKeywords.length === 0) {
+    const emptyMessage = document.createElement("p");
+    emptyMessage.className = "empty-list-message";
+    emptyMessage.textContent = "You are not monitoring any keywords yet.";
+    emptyMessage.style.fontStyle = "italic";
+    emptyMessage.style.color = "#888";
+    emptyMessage.style.textAlign = "center";
+    emptyMessage.style.margin = "20px 0";
+    keywordsList.appendChild(emptyMessage);
+    return;
+  }
+
+  monitoredKeywords.forEach((keywordObj) => {
+    const item = document.createElement("div");
+    item.className = "monitored-user-item";
+    item.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      margin-bottom: 8px;
+      border-radius: 4px;
+      background-color: #2a2a2a;
+      transition: background-color 0.3s ease;
+    `;
+
+    // Create left section with keyword info
+    const keywordInfo = document.createElement("div");
+    keywordInfo.className = "user-info";
+    keywordInfo.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      flex-grow: 1;
+    `;
+
+    const keywordLink = document.createElement("a");
+    keywordLink.textContent = keywordObj.keyword;
+    keywordLink.href =
+      keywordObj.url ||
+      `https://nyaa.si/?f=0&c=0_0&q=${encodeURIComponent(keywordObj.keyword)}`;
+    keywordLink.style.cssText = `
+      font-weight: 500;
+      color: #337ab7;
+      text-decoration: none;
+      margin-bottom: 2px;
+    `;
+
+    keywordLink.addEventListener("mouseenter", () => {
+      keywordLink.style.textDecoration = "underline";
+    });
+    keywordLink.addEventListener("mouseleave", () => {
+      keywordLink.style.textDecoration = "none";
+    });
+    keywordLink.target = "_blank";
+
+    const statsContainer = document.createElement("div");
+    statsContainer.style.cssText = `
+      display: flex;
+      font-size: 12px;
+      color: #919191;
+    `;
+
+    const timestamp = document.createElement("span");
+    const lastChecked = keywordObj.lastCheckedAt
+      ? new Date(keywordObj.lastCheckedAt)
+      : new Date();
+    const now = new Date();
+    const diffMs = now - lastChecked;
+    const diffMins = Math.round(diffMs / 60000);
+    timestamp.textContent = `Checked ${diffMins} mins ago`;
+    timestamp.style.fontStyle = "italic";
+
+    statsContainer.appendChild(timestamp);
+    keywordInfo.appendChild(keywordLink);
+    keywordInfo.appendChild(statsContainer);
+
+    // Create right section with unmonitor button
+    const buttonContainer = document.createElement("div");
+    const unmonitorButton = document.createElement("button");
+    unmonitorButton.textContent = "Unmonitor";
+    unmonitorButton.className = "keyword-remove unmonitor-btn";
+    unmonitorButton.addEventListener("click", () => {
+      removeMonitoredKeyword(keywordObj.keyword);
+    });
+
+    buttonContainer.appendChild(unmonitorButton);
+
+    item.appendChild(keywordInfo);
+    item.appendChild(buttonContainer);
+    keywordsList.appendChild(item);
+  });
+}
+
+// Function to add a monitored keyword
+function addMonitoredKeyword() {
+  const input = document.getElementById("monitored-keyword-input");
+  const keyword = input.value.trim();
+
+  if (keyword) {
+    browser.storage.sync.get({ monitoredKeywords: [] }, (items) => {
+      const monitoredKeywords = items.monitoredKeywords;
+      const exists = monitoredKeywords.some((k) => k.keyword === keyword);
+
+      if (!exists) {
+        monitoredKeywords.push({
+          keyword: keyword,
+          url: `https://nyaa.si/?f=0&c=0_0&q=${encodeURIComponent(keyword)}`,
+          lastTorrentId: 0,
+          lastDismissedTorrentId: 0,
+        });
+
+        browser.storage.sync.set({ monitoredKeywords }, () => {
+          displayMonitoredKeywords(monitoredKeywords);
+          input.value = "";
+        });
+      } else {
+        input.value = "";
+      }
+    });
+  }
+}
+
+// Function to remove a monitored keyword
+function removeMonitoredKeyword(keywordToRemove) {
+  browser.storage.sync.get({ monitoredKeywords: [] }, (items) => {
+    const monitoredKeywords = items.monitoredKeywords.filter(
+      (k) => k.keyword !== keywordToRemove
+    );
+
+    browser.storage.sync.set({ monitoredKeywords }, () => {
+      displayMonitoredKeywords(monitoredKeywords);
+    });
+  });
+}
+
+// Function to remove all monitored keywords
+function removeAllMonitoredKeywords() {
+  browser.storage.sync.set({ monitoredKeywords: [] }, () => {
+    displayMonitoredKeywords([]);
+  });
+}
+
 // Add event listeners
 document.getElementById("add-keyword").addEventListener("click", addKeyword);
 document.getElementById("keyword-input").addEventListener("keypress", (e) => {
@@ -357,6 +564,11 @@ document.getElementById("keyword-input").addEventListener("keypress", (e) => {
 document
   .getElementById("remove-all-keywords")
   .addEventListener("click", removeAllKeywords);
+
+// Monitored Keywords functionality
+document
+  .getElementById("unmonitor-all-keywords")
+  .addEventListener("click", removeAllMonitoredKeywords);
 
 // Add size range change handler
 document.getElementById("sizeRangeSelect").addEventListener("change", (e) => {

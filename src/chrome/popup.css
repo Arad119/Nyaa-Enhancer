@@ -58,6 +58,79 @@ body {
   display: block;
 }
 
+/* Monitoring Tab Navigation */
+.monitoring-nav {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.monitoring-nav-button {
+  background: transparent;
+  border: none;
+  color: #999;
+  padding: 8px 15px;
+  cursor: pointer;
+  flex: 1;
+  border-radius: 4px;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.monitoring-nav-button:hover {
+  background: #3a3a3a;
+  color: #fff;
+}
+
+.monitoring-nav-button.active {
+  background: #3a3a3a;
+  color: #fff;
+}
+
+.monitoring-tab-content {
+  display: none;
+}
+
+.monitoring-tab-content.active {
+  display: block;
+}
+
+/* Accordion styles */
+.accordion {
+  margin: 10px 0;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.accordion-header {
+  padding: 10px 15px;
+  background: #2a2a2a;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.accordion-header:hover {
+  background: #3a3a3a;
+}
+
+.accordion-icon {
+  font-weight: bold;
+  font-size: 18px;
+  color: #4caf50;
+}
+
+.accordion-content {
+  padding: 0 15px;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+}
+
 .setting-item {
   display: flex;
   justify-content: space-between;
@@ -239,7 +312,6 @@ body {
   font-size: 12px;
   font-weight: 500;
   font-family: "Segoe UI", Tahoma, sans-serif;
-  width: 100%;
 }
 
 .keyword-remove-all:hover {

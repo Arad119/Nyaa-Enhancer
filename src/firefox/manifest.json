@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Nyaa Enhancer",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "description": "Enhances Nyaa with batch magnet copying, torrent file downloading, and customizable filename options.",
   "background": {
     "scripts": ["background.js"],
@@ -46,7 +46,10 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "{c5d1e29f-8044-41be-8af5-ef30718de438}"
+      "id": "{c5d1e29f-8044-41be-8af5-ef30718de438}",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   }
 }

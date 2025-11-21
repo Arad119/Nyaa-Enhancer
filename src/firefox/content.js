@@ -766,8 +766,7 @@ async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added a Keyword Monitoring system to track new uploads that has specific keywords<br>
-        • Added a Show Monitor Buttons setting to control visibility of monitor buttons
+        • Added "Last 30 Days" date filter to Quick Search to show only recent uploads
       </div>
       <div class="changelog-actions">
         <button class="changelog-button okay">Okay</button>
@@ -1258,6 +1257,38 @@ function invertSelection() {
   );
 }
 
+// Function to filter torrents by last 30 days
+function filterByLast30Days() {
+  const rows = document.querySelectorAll("table.torrent-list tbody tr");
+  const now = Date.now() / 1000; // Current time in seconds (Unix timestamp)
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60; // 30 days in seconds
+  let hiddenCount = 0;
+  let visibleCount = 0;
+
+  rows.forEach((row) => {
+    // Find the date cell with data-timestamp attribute
+    const dateCell = row.querySelector("td[data-timestamp]");
+
+    if (dateCell) {
+      const timestamp = parseInt(dateCell.getAttribute("data-timestamp"), 10);
+
+      // Hide rows older than 30 days
+      if (timestamp < thirtyDaysAgo) {
+        row.style.display = "none";
+        hiddenCount++;
+      } else {
+        row.style.display = "";
+        visibleCount++;
+      }
+    }
+  });
+
+  showNotification(
+    `Showing ${visibleCount} torrents from the last 30 days (${hiddenCount} hidden)`,
+    true
+  );
+}
+
 // Function to show Quick Filter popup
 function showQuickFilterPopup() {
   const popup = document.createElement("div");
@@ -1384,7 +1415,7 @@ function showQuickFilterPopup() {
     </div>
 
     <div class="filter-group" style="margin-bottom: 25px;">
-      <div style="display: flex; gap: 20px;">
+      <div style="display: flex; gap: 20px; flex-wrap: wrap;">
         <label style="display: flex; align-items: center; font-size: 14px; cursor: pointer;">
           <input type="checkbox" id="dual-audio" style="
             margin: 0;
@@ -1400,6 +1431,14 @@ function showQuickFilterPopup() {
             cursor: pointer;
           ">
           <span style="font-weight: 500;">Season Pack</span>
+        </label>
+        <label style="display: flex; align-items: center; font-size: 14px; cursor: pointer;">
+          <input type="checkbox" id="last-30-days" style="
+            margin: 0;
+            margin-right: 8px;
+            cursor: pointer;
+          ">
+          <span style="font-weight: 500;">Last 30 Days</span>
         </label>
       </div>
     </div>
@@ -1584,7 +1623,8 @@ function showQuickFilterPopup() {
       document.getElementById("source").value ||
       document.getElementById("category").value !== "0" ||
       document.getElementById("dual-audio").checked ||
-      document.getElementById("season-pack").checked;
+      document.getElementById("season-pack").checked ||
+      document.getElementById("last-30-days").checked;
 
     // Only show reset notification if there were active filters
     if (hasActiveFilters) {
@@ -1596,6 +1636,7 @@ function showQuickFilterPopup() {
       document.getElementById("category").value = "0";
       document.getElementById("dual-audio").checked = false;
       document.getElementById("season-pack").checked = false;
+      document.getElementById("last-30-days").checked = false;
       showNotification("All filters have been reset", true);
     } else {
       showNotification("No active filters to reset", false);
@@ -1614,6 +1655,7 @@ function showQuickFilterPopup() {
     const source = document.getElementById("source").value;
     const dualAudio = document.getElementById("dual-audio").checked;
     const seasonPack = document.getElementById("season-pack").checked;
+    const last30Days = document.getElementById("last-30-days").checked;
 
     if (animeName) searchParams.push(animeName);
     if (encoder) searchParams.push(encoder);
@@ -1623,8 +1665,8 @@ function showQuickFilterPopup() {
     if (dualAudio) searchParams.push("Dual");
     if (seasonPack) searchParams.push("Season");
 
-    // Check if any filter option is selected
-    const hasFilters =
+    // Check if any filter option is selected (excluding last30Days for URL search)
+    const hasSearchFilters =
       animeName ||
       encoder ||
       quality ||
@@ -1632,9 +1674,12 @@ function showQuickFilterPopup() {
       source ||
       dualAudio ||
       seasonPack ||
-      category;
+      category !== "0";
 
-    if (!hasFilters) {
+    // Check if any filter option is selected at all
+    const hasAnyFilters = hasSearchFilters || last30Days;
+
+    if (!hasAnyFilters) {
       showNotification(
         "No filter options selected. Please select at least one option to search.",
         false
@@ -1642,11 +1687,26 @@ function showQuickFilterPopup() {
       return;
     }
 
+    // If only last30Days is checked, filter the current page
+    if (last30Days && !hasSearchFilters) {
+      closePopup();
+      filterByLast30Days();
+      return;
+    }
+
+    // If other filters are present, navigate to search results
     const searchQuery = searchParams.join(" ");
     const categoryParam = category === "0" ? "0_0" : `1_${category}`;
-    window.location.href = `${
+    let targetUrl = `${
       window.location.origin
     }/?f=0&c=${categoryParam}&q=${encodeURIComponent(searchQuery)}`;
+
+    // Add date filter parameter if checked
+    if (last30Days) {
+      targetUrl += "&dateFilter=30days";
+    }
+
+    window.location.href = targetUrl;
   });
 
   // Handle cancel
@@ -1882,6 +1942,17 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Function to check URL for date filter parameter and apply it
+function checkAndApplyDateFilter() {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get("dateFilter") === "30days") {
+    // Wait a bit for the page to fully load before filtering
+    setTimeout(() => {
+      filterByLast30Days();
+    }, 500);
+  }
+}
+
 async function initializeExtension(isInitialLoad = false) {
   addCopyButton();
   addCheckboxColumn();
@@ -1897,6 +1968,7 @@ async function initializeExtension(isInitialLoad = false) {
   addChangelogNavItem();
   addMonitorButton();
   checkMonitoredUsers();
+  checkAndApplyDateFilter();
 }
 
 async function addMagnetButtonToViewPage() {
@@ -2555,6 +2627,17 @@ async function handleChangelogPage() {
           <i class="fa fa-github"></i> GitHub
         </a>
       </p>
+    </div>
+    <div class="version-entry">
+      <h2>
+        Version 1.9.1
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.9.1" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added "Last 30 Days" date filter to Quick Search to show only recent uploads</li>
+      </ul>
     </div>
     <div class="version-entry">
       <h2>

@@ -340,9 +340,9 @@
           </div>
         </div>
 
-        <!-- Additional Features -->
+        <!-- AnimeTosho Settings -->
         <div class="settings-category">
-          <h3 class="category-title">Additional Features</h3>
+          <h3 class="category-title">AnimeTosho</h3>
           <div class="setting-item">
             <span>Show Animetosho Links</span>
             <div class="toggle-container">
@@ -352,6 +352,97 @@
             </div>
           </div>
 
+          <div class="setting-item">
+            <span>New AnimeTosho Domain</span>
+            <div class="toggle-container">
+              <button class="toggle-button" data-toggle="useNewATDomainToggle">
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <span>Show AnimeTosho Comments</span>
+            <div class="toggle-container">
+              <button class="toggle-button" data-toggle="showATCommentsToggle">
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ameNZB Settings -->
+        <div class="settings-category">
+          <h3 class="category-title">ameNZB</h3>
+          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <span>API Key</span>
+            <span style="color: #999; font-size: 12px;">Your API key can be found in <a href="https://amenzb.moe/profile" target="_blank" style="color: #337ab7;">amenzb.moe/profile</a> under API Access.</span>
+            <div class="api-key-wrapper">
+              <input
+                type="password"
+                id="ameNZBApiKey"
+                placeholder="Enter your ameNZB API key"
+                class="api-key-input"
+              />
+              <button type="button" id="ameNZBApiKeyToggle" class="api-key-eye" title="Show/hide API key">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+            <div class="api-key-actions">
+              <button type="button" id="ameNZBApiKeyTest" class="api-key-action-btn api-key-test-btn">Test</button>
+              <button type="button" id="ameNZBApiKeyClear" class="api-key-action-btn api-key-clear-btn">Clear</button>
+              <span id="ameNZBTestStatus" class="api-key-test-status"></span>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <span>Display ameNZB Links</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showAmeNZBLinksToggle"
+                disabled
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-item amenzb-quota-row">
+            <span style="color: #999;">API Requests Today</span>
+            <span id="ameNZBRequestCount" style="color: #999; font-size: 13px;">0 / 10,000</span>
+          </div>
+
+          <div class="setting-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+            <span style="color: #999; font-size: 12px;">⚠ API calls must come from your pinned IP address (set on ameNZB in Account Settings → IP Security). Requests from other IPs are rejected.</span>
+          </div>
+        </div>
+
+        <!-- nekoBT Settings -->
+        <div class="settings-category">
+          <h3 class="category-title">nekoBT</h3>
+          <div class="setting-item">
+            <span>Display nekoBT Links</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showNekoBTLinksToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+            <span style="color: #999; font-size: 12px;">⚠ Rate limits are enforced but not publicly disclosed. If exceeded, requests will silently fail until the limit resets.</span>
+          </div>
+        </div>
+
+        <!-- Additional Features -->
+        <div class="settings-category">
+          <h3 class="category-title">Additional Features</h3>
           <div class="setting-item">
             <span>Add Changelog Link to Navbar</span>
             <div class="toggle-container">

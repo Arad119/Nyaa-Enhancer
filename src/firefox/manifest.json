@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Nyaa Enhancer",
-  "version": "1.9.1",
+  "version": "1.10.0",
   "description": "Enhances Nyaa with batch magnet copying, torrent file downloading, and customizable filename options.",
   "background": {
     "scripts": ["background.js"],
@@ -14,7 +14,11 @@
     "*://*.nyaa.ink/*",
     "*://*.nyaa.land/*",
     "*://*.nyaa.digital/*",
-    "*://*.ny.iss.one/*"
+    "*://*.ny.iss.one/*",
+    "*://*.animetosho.org/*",
+    "*://*.animetosho.xyz/*",
+    "*://*.amenzb.moe/*",
+    "*://*.nekobt.to/*"
   ],
   "icons": {
     "16": "icons/icon16.png",

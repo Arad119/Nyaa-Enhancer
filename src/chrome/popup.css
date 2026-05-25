@@ -215,6 +215,102 @@ body {
   text-decoration: underline;
 }
 
+.toggle-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.api-key-input {
+  width: 100%;
+  padding: 7px 36px 7px 10px;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #fff;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 13px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.api-key-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.api-key-eye {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.api-key-eye:hover {
+  color: #fff;
+}
+
+.api-key-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.api-key-action-btn {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 4px;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.api-key-test-btn {
+  background: #337ab7;
+  color: #fff;
+}
+
+.api-key-test-btn:hover:not(:disabled) {
+  background: #2a6496;
+}
+
+.api-key-test-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.api-key-clear-btn {
+  background: #555;
+  color: #fff;
+}
+
+.api-key-clear-btn:hover {
+  background: #444;
+}
+
+.api-key-test-status {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.api-key-input:focus {
+  outline: none;
+  border-color: #4caf50;
+}
+
+.api-key-input::placeholder {
+  color: #666;
+}
+
 .settings-category {
   margin-bottom: 20px;
 }

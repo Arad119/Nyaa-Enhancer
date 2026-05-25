@@ -20,10 +20,19 @@ function loadStoredPreferences() {
         // - hideComments: whether to hide comments on view pages
         // - fileSizeFilterEnabled: whether to enable file size filtering
         // - fileSizeRange: the range for file size filtering
+        // - useNewATDomain: whether to use animetosho.xyz instead of animetosho.org
+        // - showATComments: whether to show AnimeTosho comments on view pages
+        // - ameNZBApiKey: the user's ameNZB API key
+        // - showAmeNZBLinks: whether to show ameNZB links on supported view pages
         useDisplayName: true,
         useZip: true,
         showButtons: true,
         showATLinks: true,
+        useNewATDomain: true,
+        showATComments: false,
+        ameNZBApiKey: "",
+        showAmeNZBLinks: false,
+        showNekoBTLinks: false,
         showMagnetButtons: true,
         showQuickFilter: true,
         showMonitorButtons: true,
@@ -249,8 +258,11 @@ async function addCheckboxColumn() {
         const titleLink = row.querySelector('td a[href^="/view/"]');
         if (titleLink) {
           const nyaaId = titleLink.href.split("/").pop();
+          const atDomain = prefs.useNewATDomain
+            ? "animetosho.xyz"
+            : "animetosho.org";
           const atLink = document.createElement("a");
-          atLink.href = `https://animetosho.org/view/n${nyaaId}`;
+          atLink.href = `https://${atDomain}/view/n${nyaaId}`;
           atLink.target = "_blank";
           atLink.innerHTML = '<i class="fa fa-external-link"></i>';
           atLink.style.color = "#337ab7";
@@ -766,7 +778,11 @@ async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added "Last 30 Days" date filter to Quick Search to show only recent uploads
+        • Added a dedicated AnimeTosho settings section with a "New AnimeTosho Domain" toggle to switch links between animetosho.org and animetosho.xyz (Enabled by default due to old one being deprecated)<br>
+        • Added "Show AnimeTosho Comments" toggle to display AnimeTosho comments on supported English-translated anime view pages<br>
+        • Added a ameNZB settings section with API key management (API Key required for it to work)<br>
+        • Added "Display ameNZB Links" toggle to show ameNZB release links on supported view pages<br>
+        • Added a nekoBT settings section with a "Display nekoBT Links" toggle to show nekoBT links on supported view pages
       </div>
       <div class="changelog-actions">
         <button class="changelog-button okay">Okay</button>
@@ -1025,6 +1041,10 @@ async function handleSettingChange(setting, value) {
         }
 
         // Add AT cells
+        const atPrefs = await loadStoredPreferences();
+        const atDomain = atPrefs.useNewATDomain
+          ? "animetosho.xyz"
+          : "animetosho.org";
         const rows = document.querySelectorAll("table.torrent-list tbody tr");
         rows.forEach((row) => {
           const atCell = document.createElement("td");
@@ -1040,7 +1060,7 @@ async function handleSettingChange(setting, value) {
             if (titleLink) {
               const nyaaId = titleLink.href.split("/").pop();
               const atLink = document.createElement("a");
-              atLink.href = `https://animetosho.org/view/n${nyaaId}`;
+              atLink.href = `https://${atDomain}/view/n${nyaaId}`;
               atLink.target = "_blank";
               atLink.innerHTML = '<i class="fa fa-external-link"></i>';
               atLink.style.color = "#337ab7";
@@ -1173,6 +1193,61 @@ async function handleSettingChange(setting, value) {
         addChangelogNavItem();
       }
       break;
+    case "useNewATDomain":
+      if (window.location.pathname.startsWith("/view/")) {
+        const atRow = Array.from(document.querySelectorAll(".row")).find(
+          (row) => row.textContent.includes("Animetosho:")
+        );
+        if (atRow) {
+          const atAnchor = atRow.querySelector("a");
+          if (atAnchor) {
+            const torrentId = window.location.pathname.split("/").pop();
+            const newDomain = value ? "animetosho.xyz" : "animetosho.org";
+            atAnchor.href = `https://${newDomain}/view/n${torrentId}`;
+            atAnchor.textContent = `https://${newDomain}/view/n${torrentId}`;
+          }
+        }
+        const toshoPanel = document.getElementById("tosho-comments");
+        if (toshoPanel) {
+          toshoPanel.remove();
+          addAnimetoshoComments();
+        }
+      } else {
+        document.querySelectorAll(".at-column a").forEach((link) => {
+          const newDomain = value ? "animetosho.xyz" : "animetosho.org";
+          link.href = link.href.replace(
+            /animetosho\.(org|xyz)/,
+            newDomain
+          );
+        });
+      }
+      break;
+    case "showATComments":
+      if (value) {
+        addAnimetoshoComments();
+      } else {
+        document.getElementById("tosho-comments")?.remove();
+      }
+      break;
+    case "showAmeNZBLinks":
+      if (value) {
+        addAmeNZBToViewPage();
+      } else {
+        removeAmeNZBRow();
+      }
+      break;
+    case "ameNZBApiKey":
+      // Re-run if links are enabled so the link refreshes with the new key
+      removeAmeNZBRow();
+      addAmeNZBToViewPage();
+      break;
+    case "showNekoBTLinks":
+      if (value) {
+        addNekoBTToViewPage();
+      } else {
+        removeNekoBTRow();
+      }
+      break;
   }
 }
 
@@ -1198,6 +1273,8 @@ async function addAnimetoshoToViewPage() {
   // Get the torrent ID from the URL
   const torrentId = window.location.pathname.split("/").pop();
 
+  const atDomain = prefs.useNewATDomain ? "animetosho.xyz" : "animetosho.org";
+
   // Find the info hash row
   const infoHashRow = Array.from(document.querySelectorAll(".row")).find(
     (row) => row.textContent.includes("Info hash:")
@@ -1217,8 +1294,8 @@ async function addAnimetoshoToViewPage() {
   newRow.innerHTML = `
     <div class="col-md-1">Animetosho:</div>
     <div class="col-md-5">
-      <a rel="noopener noreferrer nofollow" href="https://animetosho.org/view/n${torrentId}">
-        https://animetosho.org/view/n${torrentId}
+      <a rel="noopener noreferrer nofollow" href="https://${atDomain}/view/n${torrentId}">
+        https://${atDomain}/view/n${torrentId}
       </a>
     </div>
     ${infoHashContent}
@@ -1228,7 +1305,483 @@ async function addAnimetoshoToViewPage() {
   infoHashRow.replaceWith(newRow);
 }
 
-// Function to invert the current selection state of all checkboxes
+// Function to add AnimeTosho comments to supported view pages
+async function addAnimetoshoComments() {
+  if (!window.location.pathname.startsWith("/view/")) return;
+
+  const prefs = await loadStoredPreferences();
+  if (!prefs.showATComments) return;
+
+  const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
+  const isAnime = Array.from(categoryLinks).some(
+    (link) => link.textContent === "Anime"
+  );
+  const isEnglish = Array.from(categoryLinks).some(
+    (link) => link.textContent === "English-translated"
+  );
+
+  if (!isAnime || !isEnglish) return;
+
+  if (document.getElementById("tosho-comments")) return;
+
+  const nyaaId = window.location.pathname.split("/")[2];
+  const atDomain = prefs.useNewATDomain ? "animetosho.xyz" : "animetosho.org";
+  const toshoUrl = `https://${atDomain}/view/n${nyaaId}`;
+
+  const containers = document.getElementsByClassName("container");
+  const nyaaContainer = containers[containers.length - 1];
+
+  const toshoPanel = document.createElement("div");
+  toshoPanel.id = "tosho-comments";
+  toshoPanel.className = "panel panel-default";
+  toshoPanel.innerHTML =
+    '<div class="panel-heading">' +
+    '<a data-toggle="collapse" href="#collapse-tosho-comments">' +
+    '<h3 class="panel-title">AnimeTosho Comments</h3>' +
+    "</a>" +
+    "</div>";
+  nyaaContainer.insertAdjacentElement("beforeend", toshoPanel);
+
+  const toshoCommentsContainer = document.createElement("div");
+  toshoCommentsContainer.id = "collapse-tosho-comments";
+  toshoCommentsContainer.className = "collapse in";
+  toshoPanel.insertAdjacentElement("beforeend", toshoCommentsContainer);
+
+  const loadingMsg = document.createElement("p");
+  loadingMsg.className = "comment-panel";
+  loadingMsg.style.padding = "10px";
+  loadingMsg.textContent = "Loading AnimeTosho comments...";
+  toshoCommentsContainer.appendChild(loadingMsg);
+
+  try {
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "fetchUrl", url: toshoUrl }, resolve);
+    });
+    if (!result?.ok) throw new Error(result?.error || "Unknown error");
+    const html = result.text;
+
+    const parser = new DOMParser();
+    const toshoDocument = parser.parseFromString(html, "text/html");
+
+    loadingMsg.remove();
+
+    const toshoAvatarsStyle = toshoDocument.getElementsByTagName("style")[0];
+    if (toshoAvatarsStyle) {
+      toshoCommentsContainer.insertAdjacentElement(
+        "beforebegin",
+        toshoAvatarsStyle.cloneNode(true)
+      );
+    }
+
+    const toshoComments = toshoDocument.getElementById("view_comments");
+    if (!toshoComments) {
+      const noComments = document.createElement("p");
+      noComments.className = "comment-panel";
+      noComments.style.padding = "10px";
+      noComments.textContent = "No comments found on AnimeTosho.";
+      toshoCommentsContainer.appendChild(noComments);
+    } else {
+      function filterComments(node) {
+        const result = [];
+        for (const child of node.childNodes) {
+          if (child.className === "comment" || child.className === "comment2") {
+            result.push(child);
+          }
+          if (child.id && child.id.startsWith("comment_body_")) {
+            result.push(...filterComments(child));
+          }
+        }
+        return result;
+      }
+
+      function findAvatar(comment) {
+        for (const child of comment.childNodes) {
+          if (
+            child.className &&
+            child.className.startsWith("comment_user_avatar")
+          ) {
+            return child;
+          }
+        }
+        return null;
+      }
+
+      function makeCommentElement(toshoComment) {
+        const userEl = toshoComment.getElementsByClassName("comment_user")[0];
+        const commentInfo =
+          userEl?.children[0]?.innerHTML?.split(" — ") || [];
+        const time = commentInfo[0] || "";
+        const user = commentInfo[1] || "Unknown";
+        const commentBody =
+          toshoComment.getElementsByClassName("comment_message")[0];
+
+        const commentEl = document.createElement("div");
+        commentEl.className = "panel panel-default comment-panel";
+
+        let comHtml = '<div class="panel-body">';
+
+        let avatar = null;
+        if (toshoAvatarsStyle) {
+          avatar = findAvatar(toshoComment);
+          if (avatar) {
+            comHtml += '<div style="float: left;">';
+            comHtml += avatar.outerHTML;
+            comHtml += "</div>";
+            comHtml += '<div class="col-md-10">';
+          }
+        }
+
+        comHtml +=
+          '<div class="comment-details">' +
+          user +
+          " <small>" +
+          time +
+          "</small></div>";
+        comHtml +=
+          '<div class="comment-body">' +
+          (commentBody ? commentBody.innerHTML : "") +
+          "</div>";
+        comHtml += "</div>";
+
+        if (toshoAvatarsStyle && avatar) {
+          comHtml += "</div>";
+        }
+
+        commentEl.innerHTML = comHtml;
+
+        for (const nested of filterComments(toshoComment)) {
+          commentEl.appendChild(makeCommentElement(nested));
+        }
+
+        return commentEl;
+      }
+
+      for (const comment of filterComments(toshoComments)) {
+        toshoCommentsContainer.appendChild(makeCommentElement(comment));
+      }
+    }
+
+    const toshoLink = document.createElement("p");
+    toshoLink.className = "comment-panel";
+    toshoLink.style.padding = "10px";
+    toshoLink.innerHTML = `<a href="${toshoUrl}" target="_blank" rel="noopener noreferrer">Please visit AnimeTosho to participate</a>`;
+    toshoCommentsContainer.appendChild(toshoLink);
+  } catch (err) {
+    loadingMsg.textContent = `Failed to load AnimeTosho comments: ${err.message}`;
+  }
+}
+
+// Remove the ameNZB row, restoring the original info hash row if it was integrated
+function removeAmeNZBRow() {
+  const ameNZBRow = document.querySelector(".amenzb-row");
+  if (!ameNZBRow) return;
+
+  if (ameNZBRow.dataset.integrated === "true") {
+    const kbd = ameNZBRow.querySelector("kbd");
+    if (!kbd) return;
+    const infoHash = kbd.textContent;
+
+    // If a standalone nekoBT row exists, re-integrate it into the info hash slot
+    const nekoBTRow = document.querySelector(".nekobt-row:not([data-integrated])");
+    if (nekoBTRow) {
+      const nekoBTHref = nekoBTRow.querySelector("a")?.href || "";
+      nekoBTRow.remove();
+      const newRow = document.createElement("div");
+      newRow.className = "row nekobt-row";
+      newRow.dataset.integrated = "true";
+      newRow.innerHTML = `
+        <div class="col-md-1">nekoBT:</div>
+        <div class="col-md-5">
+          <a rel="noopener noreferrer nofollow" href="${nekoBTHref}" target="_blank">
+            ${nekoBTHref}
+          </a>
+        </div>
+        <div class="col-md-1">Info hash:</div>
+        <div class="col-md-5"><kbd>${infoHash}</kbd></div>
+      `;
+      ameNZBRow.replaceWith(newRow);
+    } else {
+      const restoredRow = document.createElement("div");
+      restoredRow.className = "row";
+      restoredRow.innerHTML = `
+        <div class="col-md-offset-6 col-md-1">Info hash:</div>
+        <div class="col-md-5"><kbd>${infoHash}</kbd></div>
+      `;
+      ameNZBRow.replaceWith(restoredRow);
+    }
+  } else {
+    ameNZBRow.remove();
+  }
+}
+
+// Lock to prevent concurrent ameNZB fetch calls
+let ameNZBFetchInProgress = false;
+
+// Function to add ameNZB link to supported torrent view pages
+async function addAmeNZBToViewPage() {
+  if (!window.location.pathname.startsWith("/view/")) return;
+  if (ameNZBFetchInProgress) return;
+  if (document.querySelector(".amenzb-row")) return;
+
+  ameNZBFetchInProgress = true;
+  try {
+    const prefs = await loadStoredPreferences();
+    if (!prefs.showAmeNZBLinks || !prefs.ameNZBApiKey) return;
+
+    const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
+    const isAnime = Array.from(categoryLinks).some(
+      (link) => link.textContent === "Anime"
+    );
+    const isSupported = Array.from(categoryLinks).some(
+      (link) =>
+        link.textContent === "English-translated" ||
+        link.textContent === "Raw"
+    );
+
+    if (!isAnime || !isSupported) return;
+
+    // Guard again after async prefs load in case something raced past the lock
+    if (document.querySelector(".amenzb-row")) return;
+
+    // Get the info hash from the page
+    const infoHashKbd = document.querySelector("kbd");
+    if (!infoHashKbd) return;
+    const infoHash = infoHashKbd.textContent.trim();
+
+    const apiUrl = `https://amenzb.moe/api?t=search&apikey=${encodeURIComponent(prefs.ameNZBApiKey)}&info_hash=${encodeURIComponent(infoHash)}`;
+
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "fetchUrl", url: apiUrl }, resolve);
+    });
+
+    // Count every request that actually reached ameNZB, regardless of result
+    if (result) await incrementAmeNZBRequestCount();
+
+    if (!result?.ok) return;
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(result.text, "text/xml");
+    const commentsEl = xmlDoc.querySelector("item > comments");
+    if (!commentsEl) return;
+
+    const ameNZBLink = commentsEl.textContent.trim();
+
+    // If AnimeTosho already claimed the info hash row, append after it.
+    // Otherwise (Raw or AT disabled) integrate ameNZB into the info hash row
+    // so the layout mirrors what the AT row does on English-translated pages.
+    const atRow = Array.from(document.querySelectorAll(".row")).find((row) =>
+      row.textContent.includes("Animetosho:")
+    );
+
+    if (atRow) {
+      const newRow = document.createElement("div");
+      newRow.className = "row amenzb-row";
+      newRow.innerHTML = `
+        <div class="col-md-1">ameNZB:</div>
+        <div class="col-md-5">
+          <a rel="noopener noreferrer nofollow" href="${ameNZBLink}" target="_blank">
+            ${ameNZBLink}
+          </a>
+        </div>
+      `;
+      atRow.insertAdjacentElement("afterend", newRow);
+    } else {
+      // Replace the offset info hash row with ameNZB on the left + info hash on the right.
+      // If nekoBT is already integrated there, evict it to a standalone row first.
+      const integratedNekoBT = document.querySelector(".nekobt-row[data-integrated]");
+      if (integratedNekoBT) {
+        const nekoBTHref = integratedNekoBT.querySelector("a")?.href || "";
+        const newAmeNZBRow = document.createElement("div");
+        newAmeNZBRow.className = "row amenzb-row";
+        newAmeNZBRow.dataset.integrated = "true";
+        newAmeNZBRow.innerHTML = `
+          <div class="col-md-1">ameNZB:</div>
+          <div class="col-md-5">
+            <a rel="noopener noreferrer nofollow" href="${ameNZBLink}" target="_blank">
+              ${ameNZBLink}
+            </a>
+          </div>
+          <div class="col-md-1">Info hash:</div>
+          <div class="col-md-5"><kbd>${infoHash}</kbd></div>
+        `;
+        integratedNekoBT.replaceWith(newAmeNZBRow);
+        if (nekoBTHref) {
+          const nekoBTRow = document.createElement("div");
+          nekoBTRow.className = "row nekobt-row";
+          nekoBTRow.innerHTML = `
+            <div class="col-md-1">nekoBT:</div>
+            <div class="col-md-5">
+              <a rel="noopener noreferrer nofollow" href="${nekoBTHref}" target="_blank">
+                ${nekoBTHref}
+              </a>
+            </div>
+          `;
+          newAmeNZBRow.insertAdjacentElement("afterend", nekoBTRow);
+        }
+      } else {
+        const infoHashRow = Array.from(document.querySelectorAll(".row")).find(
+          (row) => row.textContent.includes("Info hash:")
+        );
+        if (!infoHashRow) return;
+
+        const newRow = document.createElement("div");
+        newRow.className = "row amenzb-row";
+        newRow.dataset.integrated = "true";
+        newRow.innerHTML = `
+          <div class="col-md-1">ameNZB:</div>
+          <div class="col-md-5">
+            <a rel="noopener noreferrer nofollow" href="${ameNZBLink}" target="_blank">
+              ${ameNZBLink}
+            </a>
+          </div>
+          <div class="col-md-1">Info hash:</div>
+          <div class="col-md-5"><kbd>${infoHash}</kbd></div>
+        `;
+        infoHashRow.replaceWith(newRow);
+      }
+    }
+  } finally {
+    ameNZBFetchInProgress = false;
+  }
+}
+
+// Increment the ameNZB daily request counter, resetting at midnight UTC
+function incrementAmeNZBRequestCount() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(
+      { ameNZBRequestCount: 0, ameNZBRequestDate: "" },
+      (items) => {
+        const todayUTC = new Date().toISOString().slice(0, 10);
+        const count =
+          items.ameNZBRequestDate === todayUTC
+            ? items.ameNZBRequestCount + 1
+            : 1;
+        chrome.storage.sync.set(
+          { ameNZBRequestCount: count, ameNZBRequestDate: todayUTC },
+          resolve
+        );
+      }
+    );
+  });
+}
+
+// Lock to prevent concurrent nekoBT fetch calls
+let nekoBTFetchInProgress = false;
+
+// Remove the nekoBT row, restoring the original info hash row if it was integrated
+function removeNekoBTRow() {
+  const nekoBTRow = document.querySelector(".nekobt-row");
+  if (!nekoBTRow) return;
+  if (nekoBTRow.dataset.integrated === "true") {
+    const kbd = nekoBTRow.querySelector("kbd");
+    if (kbd) {
+      const restoredRow = document.createElement("div");
+      restoredRow.className = "row";
+      restoredRow.innerHTML = `
+        <div class="col-md-offset-6 col-md-1">Info hash:</div>
+        <div class="col-md-5"><kbd>${kbd.textContent}</kbd></div>
+      `;
+      nekoBTRow.replaceWith(restoredRow);
+    }
+  } else {
+    nekoBTRow.remove();
+  }
+}
+
+// Function to add nekoBT link to supported torrent view pages
+async function addNekoBTToViewPage() {
+  if (!window.location.pathname.startsWith("/view/")) return;
+  if (nekoBTFetchInProgress) return;
+  if (document.querySelector(".nekobt-row")) return;
+
+  nekoBTFetchInProgress = true;
+  try {
+    const prefs = await loadStoredPreferences();
+    if (!prefs.showNekoBTLinks) return;
+
+    const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
+    const isAnime = Array.from(categoryLinks).some(
+      (link) => link.textContent === "Anime"
+    );
+    const isSupported = Array.from(categoryLinks).some(
+      (link) =>
+        link.textContent === "English-translated" ||
+        link.textContent === "Raw"
+    );
+
+    if (!isAnime || !isSupported) return;
+
+    if (document.querySelector(".nekobt-row")) return;
+
+    const infoHashKbd = document.querySelector("kbd");
+    if (!infoHashKbd) return;
+    const infoHash = infoHashKbd.textContent.trim();
+
+    const apiUrl = `https://nekobt.to/api/v1/torrents/search?query=${encodeURIComponent(infoHash)}`;
+
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "fetchUrl", url: apiUrl }, resolve);
+    });
+
+    if (!result?.ok) return;
+
+    let json;
+    try {
+      json = JSON.parse(result.text);
+    } catch {
+      return;
+    }
+
+    if (json.error || !json.data?.infohash_match) return;
+
+    const nekoBTLink = `https://nekobt.to/torrents/${json.data.infohash_match}`;
+
+    // If another row already claimed the info hash slot, append after the last of them.
+    // Otherwise (Raw page with no AT and no ameNZB) integrate into the info hash row.
+    const anchorRow =
+      document.querySelector(".amenzb-row") ||
+      Array.from(document.querySelectorAll(".row")).find((row) =>
+        row.textContent.includes("Animetosho:")
+      );
+
+    if (anchorRow) {
+      const newRow = document.createElement("div");
+      newRow.className = "row nekobt-row";
+      newRow.innerHTML = `
+        <div class="col-md-1">nekoBT:</div>
+        <div class="col-md-5">
+          <a rel="noopener noreferrer nofollow" href="${nekoBTLink}" target="_blank">
+            ${nekoBTLink}
+          </a>
+        </div>
+      `;
+      anchorRow.insertAdjacentElement("afterend", newRow);
+    } else {
+      // Replace the offset info hash row with nekoBT on the left + info hash on the right
+      const infoHashRow = Array.from(document.querySelectorAll(".row")).find(
+        (row) => row.textContent.includes("Info hash:")
+      );
+      if (!infoHashRow) return;
+
+      const newRow = document.createElement("div");
+      newRow.className = "row nekobt-row";
+      newRow.dataset.integrated = "true";
+      newRow.innerHTML = `
+        <div class="col-md-1">nekoBT:</div>
+        <div class="col-md-5">
+          <a rel="noopener noreferrer nofollow" href="${nekoBTLink}" target="_blank">
+            ${nekoBTLink}
+          </a>
+        </div>
+        <div class="col-md-1">Info hash:</div>
+        <div class="col-md-5"><kbd>${infoHash}</kbd></div>
+      `;
+      infoHashRow.replaceWith(newRow);
+    }
+  } finally {
+    nekoBTFetchInProgress = false;
+  }
+}
 function invertSelection() {
   const checkboxes = document.querySelectorAll(".magnet-checkbox");
   let invertedCount = 0;
@@ -1957,6 +2510,9 @@ async function initializeExtension(isInitialLoad = false) {
   addCopyButton();
   addCheckboxColumn();
   addAnimetoshoToViewPage();
+  addAnimetoshoComments();
+  addAmeNZBToViewPage();
+  addNekoBTToViewPage();
   addMagnetButtonToViewPage();
   showChangelog();
   filterDeadTorrents(isInitialLoad);
@@ -2627,6 +3183,21 @@ async function handleChangelogPage() {
           <i class="fa fa-github"></i> GitHub
         </a>
       </p>
+    </div>
+    <div class="version-entry">
+      <h2>
+        Version 1.10.0
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.10.0" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added a dedicated AnimeTosho settings section with a "New AnimeTosho Domain" toggle to switch links between animetosho.org and animetosho.xyz (Enabled by default due to old one being deprecated)</li>
+        <li>Added "Show AnimeTosho Comments" toggle to display AnimeTosho comments on supported English-translated anime view pages</li>
+        <li>Added a ameNZB settings section with API key management (API Key required for it to work)</li>
+        <li>Added "Display ameNZB Links" toggle to show ameNZB release links on supported view pages</li>
+        <li>Added a nekoBT settings section with a "Display nekoBT Links" toggle to show nekoBT links on supported view pages</li>
+      </ul>
     </div>
     <div class="version-entry">
       <h2>

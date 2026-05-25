@@ -47,3 +47,14 @@ function updatePopupState(url) {
     browser.action.setPopup({ popup: "" });
   }
 }
+
+// Proxy fetch requests from content scripts to bypass CORS restrictions
+browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === "fetchUrl") {
+    fetch(message.url)
+      .then((response) => response.text())
+      .then((text) => sendResponse({ ok: true, text }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true; // Keep the message channel open for the async response
+  }
+});

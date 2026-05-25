@@ -87,6 +87,13 @@ chrome.storage.sync.get(
     useZip: true,
     showButtons: true,
     showATLinks: true,
+    useNewATDomain: true,
+    showATComments: false,
+    ameNZBApiKey: "",
+    showAmeNZBLinks: false,
+    ameNZBRequestCount: 0,
+    ameNZBRequestDate: "",
+    showNekoBTLinks: false,
     showMagnetButtons: true,
     showQuickFilter: true,
     changelogDismissed: false,
@@ -114,6 +121,12 @@ chrome.storage.sync.get(
     document
       .querySelector('[data-toggle="showATLinksToggle"]')
       .setAttribute("aria-checked", items.showATLinks);
+    document
+      .querySelector('[data-toggle="useNewATDomainToggle"]')
+      .setAttribute("aria-checked", items.useNewATDomain);
+    document
+      .querySelector('[data-toggle="showATCommentsToggle"]')
+      .setAttribute("aria-checked", items.showATComments);
     document
       .querySelector('[data-toggle="showMagnetButtonsToggle"]')
       .setAttribute("aria-checked", items.showMagnetButtons);
@@ -145,6 +158,24 @@ chrome.storage.sync.get(
       .querySelector('[data-toggle="showMonitorButtonsToggle"]')
       .setAttribute("aria-checked", items.showMonitorButtons);
 
+    const ameNZBApiKeyInput = document.getElementById("ameNZBApiKey");
+    ameNZBApiKeyInput.value = items.ameNZBApiKey || "";
+    const ameNZBToggle = document.querySelector(
+      '[data-toggle="showAmeNZBLinksToggle"]'
+    );
+    ameNZBToggle.setAttribute("aria-checked", items.showAmeNZBLinks);
+    ameNZBToggle.disabled = !items.ameNZBApiKey;
+
+    const todayUTC = new Date().toISOString().slice(0, 10);
+    const todayCount =
+      items.ameNZBRequestDate === todayUTC ? items.ameNZBRequestCount : 0;
+    document.getElementById("ameNZBRequestCount").textContent =
+      `${todayCount.toLocaleString()} / 10,000`;
+
+    document
+      .querySelector('[data-toggle="showNekoBTLinksToggle"]')
+      .setAttribute("aria-checked", items.showNekoBTLinks);
+
     // Initialize dependent toggles state
     updateDependentToggles(items.showButtons);
 
@@ -156,6 +187,153 @@ chrome.storage.sync.get(
     sizeSelect.disabled = !items.fileSizeFilterEnabled;
   }
 );
+
+const EYE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const EYE_SLASH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+
+// ameNZB eye button — toggle password visibility
+document.getElementById("ameNZBApiKeyToggle").addEventListener("click", () => {
+  const input = document.getElementById("ameNZBApiKey");
+  const btn = document.getElementById("ameNZBApiKeyToggle");
+  if (input.type === "password") {
+    input.type = "text";
+    btn.innerHTML = EYE_SLASH_SVG;
+  } else {
+    input.type = "password";
+    btn.innerHTML = EYE_SVG;
+  }
+});
+
+// ameNZB Test button — validate the API key
+document.getElementById("ameNZBApiKeyTest").addEventListener("click", async () => {
+  const key = document.getElementById("ameNZBApiKey").value.trim();
+  const statusEl = document.getElementById("ameNZBTestStatus");
+  const testBtn = document.getElementById("ameNZBApiKeyTest");
+
+  if (!key) {
+    statusEl.textContent = "Enter an API key first.";
+    statusEl.style.color = "#999";
+    return;
+  }
+
+  testBtn.disabled = true;
+  statusEl.textContent = "Testing…";
+  statusEl.style.color = "#999";
+
+  const result = await new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      { type: "fetchUrl", url: `https://amenzb.moe/api?t=search&apikey=${encodeURIComponent(key)}` },
+      resolve
+    );
+  });
+
+  testBtn.disabled = false;
+
+  if (!result?.ok) {
+    statusEl.textContent = "✗ Request failed.";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+
+  try {
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(result.text, "text/xml");
+    // Check for Newznab error element
+    const errorEl = xml.querySelector("error");
+    if (errorEl) {
+      const code = errorEl.getAttribute("code");
+      const desc = errorEl.getAttribute("description") || "Unknown error";
+      statusEl.textContent = `✗ ${desc}`;
+      statusEl.style.color = "#ff4444";
+      return;
+    }
+    // A valid response has a <channel> with Newznab response element
+    const channel = xml.querySelector("channel");
+    if (channel) {
+      // Only count against the quota when the key was accepted
+      const todayUTC = new Date().toISOString().slice(0, 10);
+      chrome.storage.sync.get({ ameNZBRequestCount: 0, ameNZBRequestDate: "" }, (items) => {
+        const count = items.ameNZBRequestDate === todayUTC ? items.ameNZBRequestCount + 1 : 1;
+        chrome.storage.sync.set({ ameNZBRequestCount: count, ameNZBRequestDate: todayUTC });
+      });
+      statusEl.textContent = "✓ API key is valid.";
+      statusEl.style.color = "#4caf50";
+    } else {
+      statusEl.textContent = "✗ Unexpected response.";
+      statusEl.style.color = "#ff4444";
+    }
+  } catch {
+    statusEl.textContent = "✗ Could not parse response.";
+    statusEl.style.color = "#ff4444";
+  }
+});
+
+// ameNZB Clear button — wipe the API key from input and storage
+document.getElementById("ameNZBApiKeyClear").addEventListener("click", () => {
+  const input = document.getElementById("ameNZBApiKey");
+  input.value = "";
+  input.type = "password";
+  document.getElementById("ameNZBApiKeyToggle").innerHTML = EYE_SVG;
+  document.getElementById("ameNZBTestStatus").textContent = "";
+
+  const ameNZBToggle = document.querySelector('[data-toggle="showAmeNZBLinksToggle"]');
+  ameNZBToggle.disabled = true;
+  ameNZBToggle.setAttribute("aria-checked", false);
+
+  chrome.storage.sync.set({ ameNZBApiKey: "", showAmeNZBLinks: false });
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.tabs.sendMessage(tabs[0].id, {
+      type: "settingChanged",
+      setting: "showAmeNZBLinks",
+      value: false,
+    });
+  });
+});
+
+// ameNZB API key input — enable/disable toggle and persist key
+document.getElementById("ameNZBApiKey").addEventListener("input", (e) => {
+  const key = e.target.value.trim();
+  const ameNZBToggle = document.querySelector(
+    '[data-toggle="showAmeNZBLinksToggle"]'
+  );
+  ameNZBToggle.disabled = !key;
+  if (!key) {
+    ameNZBToggle.setAttribute("aria-checked", false);
+    chrome.storage.sync.set({ ameNZBApiKey: "", showAmeNZBLinks: false });
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      chrome.tabs.sendMessage(tabs[0].id, {
+        type: "settingChanged",
+        setting: "showAmeNZBLinks",
+        value: false,
+      });
+    });
+  } else {
+    chrome.storage.sync.set({ ameNZBApiKey: key });
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      chrome.tabs.sendMessage(tabs[0].id, {
+        type: "settingChanged",
+        setting: "ameNZBApiKey",
+        value: key,
+      });
+    });
+  }
+});
+
+// Keep ameNZB request counter live while popup is open
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.ameNZBRequestCount || changes.ameNZBRequestDate) {
+    chrome.storage.sync.get(
+      { ameNZBRequestCount: 0, ameNZBRequestDate: "" },
+      (items) => {
+        const todayUTC = new Date().toISOString().slice(0, 10);
+        const todayCount =
+          items.ameNZBRequestDate === todayUTC ? items.ameNZBRequestCount : 0;
+        const el = document.getElementById("ameNZBRequestCount");
+        if (el) el.textContent = `${todayCount.toLocaleString()} / 10,000`;
+      }
+    );
+  }
+});
 
 // Add click handlers for toggle buttons
 document.querySelectorAll(".toggle-button").forEach((button) => {
@@ -195,6 +373,58 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
             chrome.tabs.sendMessage(tabs[0].id, {
               type: "settingChanged",
               setting: "showATLinks",
+              value: newState,
+            });
+          }
+        );
+        break;
+      case "useNewATDomainToggle":
+        setting = "useNewATDomain";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "useNewATDomain",
+              value: newState,
+            });
+          }
+        );
+        break;
+      case "showATCommentsToggle":
+        setting = "showATComments";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showATComments",
+              value: newState,
+            });
+          }
+        );
+        break;
+      case "showAmeNZBLinksToggle":
+        setting = "showAmeNZBLinks";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showAmeNZBLinks",
+              value: newState,
+            });
+          }
+        );
+        break;
+      case "showNekoBTLinksToggle":
+        setting = "showNekoBTLinks";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showNekoBTLinks",
               value: newState,
             });
           }

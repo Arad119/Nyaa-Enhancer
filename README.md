@@ -123,17 +123,17 @@ To install the extension in your browser, follow these steps.
 
 ### Installation
 
-**Chrome Web Store (up-to-date at 1.9.1):**  
+**Chrome Web Store (pending update, currently at 1.9.1):**  
 <a href="https://chromewebstore.google.com/detail/nyaa-enhancer/donibkpnifppkihgmnoocogmmbbocpdd" target="_blank">
 <img src="https://developer.chrome.com/static/docs/webstore/branding/image/HRs9MPufa1J1h5glNhut.png" alt="Chrome Web Store" height="50px" >
 </a>
 
-**Firefox Add-Ons Store (up-to-date at 1.9.1):**  
+**Firefox Add-Ons Store (up-to-date at 1.10.0):**  
 <a href="https://addons.mozilla.org/en-US/firefox/addon/nyaa-enhancer/" target="_blank">
 <img src="https://extensionworkshop.com/assets/img/documentation/publish/get-the-addon-178x60px.dad84b42.png" alt="Firefox Add-Ons Store" height="50px" >
 </a>
 
-**Edge Add-Ons Store (up-to-date at 1.9.1):**  
+**Edge Add-Ons Store (pending update, currently at 1.9.1):**  
 <a href="https://microsoftedge.microsoft.com/addons/detail/nyaa-enhancer/cpkcppifogblfgbggdeljjnibjfcdakf" target="_blank">
 <img src="https://developer.microsoft.com/store/badges/images/English_get-it-from-MS.png" alt="Edge Add-Ons Store" height="50px" >
 </a>
@@ -239,7 +239,7 @@ Distributed under the GPLv3 License. See `LICENSE.txt` for more information.
 [issues-shield]: https://img.shields.io/github/issues/Arad119/Nyaa-Enhancer.svg?style=for-the-badge
 [issues-url]: https://github.com/Arad119/Nyaa-Enhancer/issues
 [license-shield]: https://img.shields.io/github/license/Arad119/Nyaa-Enhancer.svg?style=for-the-badge
-[license-url]: https://github.com/Arad119/Nyaa-Enhancer/blob/master/LICENSE.txt
+[license-url]: https://github.com/Arad119/Nyaa-Enhancer/blob/main/LICENSE.txt
 [product-screenshot]: images/Program.png
 [product-preview]: images/Screenshot.png
 [popup-preview]: images/Popup.gif

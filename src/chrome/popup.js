@@ -55,6 +55,21 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 
+// Enable/disable the screenshot preview delay inputs based on the toggle state
+function setScreenshotPreviewInputsEnabled(enabled) {
+  const hoverInput = document.getElementById("screenshotPreviewHoverDelay");
+  const slideInput = document.getElementById("screenshotPreviewSlideDelay");
+  if (hoverInput) hoverInput.disabled = !enabled;
+  if (slideInput) slideInput.disabled = !enabled;
+  updateScreenshotPreviewDisclaimer(enabled);
+}
+
+function updateScreenshotPreviewDisclaimer(featureEnabled) {
+  const disclaimer = document.getElementById("screenshotPreviewDisclaimer");
+  if (!disclaimer) return;
+  disclaimer.classList.toggle("visible", !!featureEnabled);
+}
+
 // Function to update dependent toggles
 function updateDependentToggles(buttonsEnabled) {
   const dependentToggles = [
@@ -95,6 +110,7 @@ chrome.storage.sync.get(
     ameNZBRequestDate: "",
     showNekoBTLinks: false,
     showMagnetButtons: true,
+    showSendButtons: true,
     showQuickFilter: true,
     changelogDismissed: false,
     hideDeadTorrents: false,
@@ -107,6 +123,17 @@ chrome.storage.sync.get(
     showChangelogNav: true,
     showMonitorButtons: true,
     monitoredKeywords: [],
+    showSeaDex: false,
+    screenshotPreviewEnabled: false,
+    screenshotPreviewHoverDelay: 2,
+    screenshotPreviewSlideDelay: 2,
+    torrentClient: "qbittorrent",
+    torrentClientUrl: "",
+    qbtUsername: "",
+    qbtPassword: "",
+    transmissionUsername: "",
+    transmissionPassword: "",
+    delugePassword: "",
   },
   (items) => {
     document
@@ -157,6 +184,16 @@ chrome.storage.sync.get(
     document
       .querySelector('[data-toggle="showMonitorButtonsToggle"]')
       .setAttribute("aria-checked", items.showMonitorButtons);
+    document
+      .querySelector('[data-toggle="showSendButtonsToggle"]')
+      .setAttribute("aria-checked", items.showSendButtons);
+
+    // Load torrent client settings
+    const tc = items.torrentClient || "qbittorrent";
+    document.getElementById("tcClientSelect").value = tc;
+    document.getElementById("tcIp").value = items.torrentClientUrl || "";
+    loadClientAuth(tc, items);
+    applyClientUI(tc);
 
     const ameNZBApiKeyInput = document.getElementById("ameNZBApiKey");
     ameNZBApiKeyInput.value = items.ameNZBApiKey || "";
@@ -175,6 +212,23 @@ chrome.storage.sync.get(
     document
       .querySelector('[data-toggle="showNekoBTLinksToggle"]')
       .setAttribute("aria-checked", items.showNekoBTLinks);
+    document
+      .querySelector('[data-toggle="showSeaDexToggle"]')
+      .setAttribute("aria-checked", items.showSeaDex);
+
+    document
+      .querySelector('[data-toggle="screenshotPreviewToggle"]')
+      .setAttribute("aria-checked", items.screenshotPreviewEnabled);
+
+    const screenshotHoverInput = document.getElementById(
+      "screenshotPreviewHoverDelay"
+    );
+    const screenshotSlideInput = document.getElementById(
+      "screenshotPreviewSlideDelay"
+    );
+    screenshotHoverInput.value = items.screenshotPreviewHoverDelay;
+    screenshotSlideInput.value = items.screenshotPreviewSlideDelay;
+    setScreenshotPreviewInputsEnabled(items.screenshotPreviewEnabled);
 
     // Initialize dependent toggles state
     updateDependentToggles(items.showButtons);
@@ -334,6 +388,168 @@ chrome.storage.onChanged.addListener((changes) => {
     );
   }
 });
+
+// ── Torrent Client Tab ──────────────────────────────────────────────────────
+
+const CLIENT_LABELS = {
+  qbittorrent: "qBittorrent",
+  transmission: "Transmission",
+  deluge: "Deluge",
+};
+
+// Show/hide the username row and adjust password margin depending on client
+function applyClientUI(client) {
+  const usernameWrapper = document.getElementById("tcUsernameWrapper");
+  if (client === "deluge") {
+    usernameWrapper.style.display = "none";
+    // Remove top margin gap since username is gone
+    usernameWrapper.nextElementSibling.style.marginTop = "0";
+  } else {
+    usernameWrapper.style.display = "";
+    usernameWrapper.nextElementSibling.style.marginTop = "6px";
+  }
+}
+
+// Populate auth fields from a storage items object for the given client
+function loadClientAuth(client, items) {
+  const usernameEl = document.getElementById("tcUsername");
+  const passwordEl = document.getElementById("tcPassword");
+  if (client === "transmission") {
+    usernameEl.value = items.transmissionUsername || "";
+    passwordEl.value = items.transmissionPassword || "";
+  } else if (client === "deluge") {
+    usernameEl.value = "";
+    passwordEl.value = items.delugePassword || "";
+  } else {
+    usernameEl.value = items.qbtUsername || "";
+    passwordEl.value = items.qbtPassword || "";
+  }
+}
+
+// Persist settings for the currently selected client
+function saveTorrentClientSettings() {
+  const client = document.getElementById("tcClientSelect").value;
+  const url = document.getElementById("tcIp").value.trim();
+  const username = document.getElementById("tcUsername").value.trim();
+  const password = document.getElementById("tcPassword").value;
+
+  const settings = { torrentClient: client, torrentClientUrl: url };
+  if (client === "transmission") {
+    settings.transmissionUsername = username;
+    settings.transmissionPassword = password;
+  } else if (client === "deluge") {
+    settings.delugePassword = password;
+  } else {
+    settings.qbtUsername = username;
+    settings.qbtPassword = password;
+  }
+  chrome.storage.sync.set(settings);
+}
+
+// Client dropdown change — reload auth fields and adjust UI
+document.getElementById("tcClientSelect").addEventListener("change", (e) => {
+  const client = e.target.value;
+  applyClientUI(client);
+  document.getElementById("tcStatus").textContent = "";
+  chrome.storage.sync.get(
+    { qbtUsername: "", qbtPassword: "", transmissionUsername: "", transmissionPassword: "", delugePassword: "" },
+    (items) => loadClientAuth(client, items)
+  );
+});
+
+// Password show/hide toggle
+document.getElementById("tcPasswordToggle").addEventListener("click", () => {
+  const input = document.getElementById("tcPassword");
+  const btn = document.getElementById("tcPasswordToggle");
+  if (input.type === "password") {
+    input.type = "text";
+    btn.innerHTML = EYE_SLASH_SVG;
+  } else {
+    input.type = "password";
+    btn.innerHTML = EYE_SVG;
+  }
+});
+
+// Save button
+document.getElementById("tcSaveBtn").addEventListener("click", () => {
+  saveTorrentClientSettings();
+  const statusEl = document.getElementById("tcStatus");
+  statusEl.textContent = "✓ Saved";
+  statusEl.style.color = "#4caf50";
+  setTimeout(() => { statusEl.textContent = ""; }, 2000);
+});
+
+// Test Connection button
+document.getElementById("tcTestBtn").addEventListener("click", async () => {
+  const client = document.getElementById("tcClientSelect").value;
+  const url = document.getElementById("tcIp").value.trim();
+  const username = document.getElementById("tcUsername").value.trim();
+  const password = document.getElementById("tcPassword").value;
+  const statusEl = document.getElementById("tcStatus");
+  const testBtn = document.getElementById("tcTestBtn");
+
+  if (!url) {
+    statusEl.textContent = "Enter a Torrent Client URL first.";
+    statusEl.style.color = "#999";
+    return;
+  }
+
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    statusEl.textContent = "✗ URL must start with http:// or https://";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+
+  // Request optional host permissions before attempting connection
+  const granted = await new Promise((resolve) => {
+    chrome.permissions.request({ origins: ["http://*/*", "https://*/*"] }, resolve);
+  });
+
+  if (!granted) {
+    statusEl.textContent = "✗ Host permission denied";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+
+  testBtn.disabled = true;
+  statusEl.textContent = "Testing...";
+  statusEl.style.color = "#999";
+
+  const result = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "testConnection", client, url, username, password }, resolve);
+  });
+
+  testBtn.disabled = false;
+
+  if (!result) {
+    statusEl.textContent = "✗ No response from background";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+
+  if (result.ok) {
+    const label = CLIENT_LABELS[client] || client;
+    statusEl.textContent = result.version
+      ? `✓ Connected! (${label} ${result.version})`
+      : `✓ Connected! (${label})`;
+    statusEl.style.color = "#4caf50";
+    saveTorrentClientSettings();
+  } else {
+    switch (result.error) {
+      case "auth_failed":
+        statusEl.textContent = "✗ Authentication failed - wrong credentials";
+        break;
+      case "auth_required":
+        statusEl.textContent = "✗ Server requires authentication";
+        break;
+      default:
+        statusEl.textContent = "✗ Connection failed. Check the URL";
+    }
+    statusEl.style.color = "#ff4444";
+  }
+});
+
+// ── End Torrent Client Tab ───────────────────────────────────────────────────
 
 // Add click handlers for toggle buttons
 document.querySelectorAll(".toggle-button").forEach((button) => {
@@ -548,10 +764,90 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
           }
         );
         break;
+      case "showSendButtonsToggle":
+        setting = "showSendButtons";
+        chrome.storage.sync.set({ [setting]: newState });
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showSendButtons",
+              value: newState,
+            });
+          }
+        );
+        break;
+      case "showSeaDexToggle":
+        setting = "showSeaDex";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showSeaDex",
+              value: newState,
+            });
+          }
+        );
+        break;
+      case "screenshotPreviewToggle":
+        setting = "screenshotPreviewEnabled";
+        setScreenshotPreviewInputsEnabled(newState);
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "screenshotPreviewEnabled",
+              value: newState,
+            });
+          }
+        );
+        break;
     }
     chrome.storage.sync.set({ [setting]: newState });
   });
 });
+
+// Screenshot Preview delay inputs — persist values and notify content script
+function attachScreenshotPreviewInputHandler(inputId, settingKey, defaultValue, minValue) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  const commitValue = () => {
+    let value = parseFloat(input.value);
+    if (!isFinite(value) || value < minValue) {
+      value = defaultValue;
+      input.value = value;
+    }
+    chrome.storage.sync.set({ [settingKey]: value });
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs[0]) return;
+      chrome.tabs.sendMessage(tabs[0].id, {
+        type: "settingChanged",
+        setting: settingKey,
+        value,
+      });
+    });
+  };
+
+  input.addEventListener("change", commitValue);
+  input.addEventListener("blur", commitValue);
+}
+
+attachScreenshotPreviewInputHandler(
+  "screenshotPreviewHoverDelay",
+  "screenshotPreviewHoverDelay",
+  2,
+  0
+);
+attachScreenshotPreviewInputHandler(
+  "screenshotPreviewSlideDelay",
+  "screenshotPreviewSlideDelay",
+  2,
+  0.1
+);
 
 // Get version from manifest.json and update the version number in popup
 fetch(chrome.runtime.getURL("manifest.json"))

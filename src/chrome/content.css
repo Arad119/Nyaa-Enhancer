@@ -313,3 +313,62 @@ body.dark .version-link:hover {
 body.dark .changelog-repo {
   color: #999;
 }
+
+/* Screenshot Preview floating window */
+.nyaa-screenshot-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483646;
+  background: #1a1a1a;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.96);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  max-width: min(640px, 60vw);
+  max-height: min(420px, 70vh);
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-weight: 500;
+  color: #fff;
+}
+
+.nyaa-screenshot-preview.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: scale(1);
+}
+
+.nyaa-screenshot-preview-img {
+  display: block;
+  max-width: min(620px, 58vw);
+  max-height: min(390px, 64vh);
+  width: auto;
+  height: auto;
+  border-radius: 3px;
+  background: #0d0d0d;
+}
+
+.nyaa-screenshot-preview-loader {
+  padding: 24px 32px;
+  font-size: 13px;
+  color: #ccc;
+  text-align: center;
+  min-width: 140px;
+}
+
+.nyaa-screenshot-preview-counter {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 10px;
+  font-size: 11px;
+  color: #fff;
+  letter-spacing: 0.3px;
+}

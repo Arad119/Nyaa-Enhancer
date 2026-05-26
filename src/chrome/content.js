@@ -33,7 +33,12 @@ function loadStoredPreferences() {
         ameNZBApiKey: "",
         showAmeNZBLinks: false,
         showNekoBTLinks: false,
+        showSeaDex: false,
+        screenshotPreviewEnabled: false,
+        screenshotPreviewHoverDelay: 3,
+        screenshotPreviewSlideDelay: 3,
         showMagnetButtons: true,
+        showSendButtons: true,
         showQuickFilter: true,
         showMonitorButtons: true,
         hideDeadTorrents: false,
@@ -44,8 +49,15 @@ function loadStoredPreferences() {
         fileSizeFilterEnabled: false,
         fileSizeRange: "less_than_1gb",
         showChangelogNav: true,
-        monitoredUsers: [], // Array of objects {username, url, torrentCount, lastChecked, lastDismissedCount}
-        monitoredKeywords: [], // Array of objects {keyword, url, lastTorrentId}
+        monitoredUsers: [],
+        monitoredKeywords: [],
+        torrentClient: "qbittorrent",
+        torrentClientUrl: "",
+        qbtUsername: "",
+        qbtPassword: "",
+        transmissionUsername: "",
+        transmissionPassword: "",
+        delugePassword: "",
       },
       (items) => {
         resolve(items);
@@ -229,6 +241,24 @@ async function addCheckboxColumn() {
     }
   }
 
+  // Add Send column header if enabled and doesn't exist
+  if (
+    prefs.showSendButtons &&
+    !headerRow.querySelector('th.text-center[title="Send"]')
+  ) {
+    const sendHeader = document.createElement("th");
+    sendHeader.className = "text-center";
+    sendHeader.style.width = "70px";
+    sendHeader.textContent = "Client";
+    sendHeader.title = "Send";
+    const checkboxHeader = headerRow.querySelector(".magnet-checkbox-column");
+    if (checkboxHeader) {
+      headerRow.insertBefore(sendHeader, checkboxHeader);
+    } else {
+      headerRow.appendChild(sendHeader);
+    }
+  }
+
   // Add checkbox column header only if buttons are enabled and doesn't exist
   if (
     prefs.showButtons &&
@@ -312,6 +342,27 @@ async function addCheckboxColumn() {
         row.insertBefore(magnetCell, checkboxCell);
       } else {
         row.appendChild(magnetCell);
+      }
+    }
+
+    // Add Send cell if enabled and doesn't exist
+    if (prefs.showSendButtons && !row.querySelector(".send-column")) {
+      const sendCell = document.createElement("td");
+      sendCell.className = "text-center send-column";
+
+      const linkCell = row.querySelector('td:has(a[href^="magnet:"])');
+      if (linkCell) {
+        const magnetLink = linkCell.querySelector('a[href^="magnet:"]');
+        if (magnetLink) {
+          sendCell.appendChild(createSendButton(magnetLink.href));
+        }
+      }
+
+      const checkboxCell = row.querySelector(".magnet-checkbox")?.closest("td");
+      if (checkboxCell) {
+        row.insertBefore(sendCell, checkboxCell);
+      } else {
+        row.appendChild(sendCell);
       }
     }
 
@@ -778,11 +829,10 @@ async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added a dedicated AnimeTosho settings section with a "New AnimeTosho Domain" toggle to switch links between animetosho.org and animetosho.xyz (Enabled by default due to old one being deprecated)<br>
-        • Added "Show AnimeTosho Comments" toggle to display AnimeTosho comments on supported English-translated anime view pages<br>
-        • Added a ameNZB settings section with API key management (API Key required for it to work)<br>
-        • Added "Display ameNZB Links" toggle to show ameNZB release links on supported view pages<br>
-        • Added a nekoBT settings section with a "Display nekoBT Links" toggle to show nekoBT links on supported view pages
+        • Added a dedicated "Torrent Client" tab with support for qBittorrent, Transmission, and Deluge - required to use the "Send" button<br>
+        • Added a "Send" button to torrent view pages and the main torrent list, sending the torrent directly to your configured client - needs a Torrent Client to be configured first in the extension settings<br>
+        • Added a "Display Best Release (Seadex)" toggle in Additional Features to highlight best and alternate releases on torrent list and view pages according to SeaDex (Disabled by default)<br>
+        • Added "Screenshot Preview" toggle to the Additional Features section - hovering over a torrent link for the set delay opens a floating image popup that cycles through screenshots from the torrent's description (Disabled by default)
       </div>
       <div class="changelog-actions">
         <button class="changelog-button okay">Okay</button>
@@ -978,7 +1028,10 @@ async function handleSettingChange(setting, value) {
 
         // Add magnet button to view page if we're on one
         if (window.location.pathname.startsWith("/view/")) {
+          // Remove and re-add send button so it stays to the right of Copy
+          document.querySelector(".send-torrent-button")?.remove();
           addMagnetButtonToViewPage();
+          addSendButtonToViewPage();
         }
       }
       break;
@@ -1246,6 +1299,57 @@ async function handleSettingChange(setting, value) {
         addNekoBTToViewPage();
       } else {
         removeNekoBTRow();
+      }
+      break;
+    case "showSeaDex":
+      if (value) {
+        initializeSeaDex();
+      } else {
+        removeSeaDexHighlights();
+      }
+      break;
+    case "screenshotPreviewEnabled":
+      screenshotPreview.enabled = !!value;
+      if (value) {
+        ensureScreenshotPreviewDelegation();
+        setupTitleSuppression();
+      } else {
+        cancelScreenshotPreview();
+        teardownTitleSuppression();
+      }
+      break;
+    case "screenshotPreviewHoverDelay":
+      screenshotPreview.hoverDelayMs = Math.max(
+        0,
+        Math.round((parseFloat(value) || 0) * 1000)
+      );
+      break;
+    case "screenshotPreviewSlideDelay":
+      screenshotPreview.slideDelayMs = Math.max(
+        100,
+        Math.round((parseFloat(value) || 0) * 1000)
+      );
+      break;
+    case "showSendButtons":
+      if (window.location.pathname.startsWith("/view/")) {
+        if (value) {
+          addSendButtonToViewPage();
+        } else {
+          document.querySelector(".send-torrent-button")?.remove();
+        }
+      } else {
+        if (!value) {
+          // Remove Send column header
+          const sendHeaders = document.querySelectorAll("th.text-center");
+          sendHeaders.forEach((th) => {
+            if (th.title === "Send") th.remove();
+          });
+          // Remove all Send cells
+          document.querySelectorAll(".send-column").forEach((cell) => cell.remove());
+        } else {
+          // Re-add Send column via addCheckboxColumn (it guards against duplicates)
+          addCheckboxColumn();
+        }
       }
       break;
   }
@@ -1782,6 +1886,669 @@ async function addNekoBTToViewPage() {
     nekoBTFetchInProgress = false;
   }
 }
+
+// ── SeaDex (Best Release Highlighting) ──────────────────────────────────────
+
+let seaDexStylesInjected = false;
+let seaDexViewFetchInProgress = false;
+
+function injectSeaDexStyles() {
+  if (seaDexStylesInjected) return;
+  seaDexStylesInjected = true;
+  const style = document.createElement("style");
+  style.id = "seadex-styles";
+  style.textContent = `
+    .seadex-best { background-color: rgba(0, 172, 255, 0.12) !important; }
+    .seadex-best:hover { background-color: rgba(0, 172, 255, 0.18) !important; }
+    .seadex-best-alt { background-color: rgba(255, 172, 0, 0.12) !important; }
+    .seadex-best-alt:hover { background-color: rgba(255, 172, 0, 0.18) !important; }
+  `;
+  document.head.appendChild(style);
+}
+
+function removeSeaDexHighlights() {
+  document.querySelectorAll(".seadex-best, .seadex-best-alt").forEach((el) => {
+    el.classList.remove("seadex-best", "seadex-best-alt");
+  });
+  document.querySelectorAll(".seadex-link").forEach((el) => el.remove());
+  const styleEl = document.getElementById("seadex-styles");
+  if (styleEl) {
+    styleEl.remove();
+    seaDexStylesInjected = false;
+  }
+  seaDexViewFetchInProgress = false;
+}
+
+function getInfoHashFromMagnet(href) {
+  const match = href.match(/urn:btih:([^&]*)/i);
+  return match ? match[1].toLowerCase() : "";
+}
+
+async function seaDexFetch(url) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "fetchUrl", url }, resolve);
+  });
+}
+
+async function applySeaDexToListPage() {
+  const rows = document.querySelectorAll("table.torrent-list tbody tr");
+  const infoHashList = [];
+
+  rows.forEach((row) => {
+    const magnetLink = row.querySelector('a[href^="magnet:"]');
+    const infoHash = magnetLink
+      ? getInfoHashFromMagnet(magnetLink.href)
+      : "";
+    infoHashList.push({ element: row, infoHash });
+  });
+
+  const validEntries = infoHashList.filter(({ infoHash }) => infoHash);
+  if (!validEntries.length) return;
+
+  // Clear previous highlights on visible rows before re-fetching
+  infoHashList.forEach(({ element }) => {
+    element.classList.remove("seadex-best", "seadex-best-alt");
+  });
+
+  const filterParam = validEntries
+    .map(({ infoHash }) => `infoHash="${infoHash}"`)
+    .join("||");
+
+  const apiUrl =
+    `https://releases.moe/api/collections/torrents/records` +
+    `?filter=${encodeURIComponent(filterParam)}&skipTotal=true&perPage=75`;
+
+  const result = await seaDexFetch(apiUrl);
+  if (!result?.ok) return;
+
+  let json;
+  try {
+    json = JSON.parse(result.text);
+  } catch {
+    return;
+  }
+
+  if (!json.items?.length) return;
+
+  const bestHashes = new Set(
+    json.items.filter((t) => t.isBest).map((t) => t.infoHash.toLowerCase())
+  );
+  const altHashes = new Set(
+    json.items.filter((t) => !t.isBest).map((t) => t.infoHash.toLowerCase())
+  );
+
+  for (const { element, infoHash } of validEntries) {
+    if (bestHashes.has(infoHash)) element.classList.add("seadex-best");
+    else if (altHashes.has(infoHash)) element.classList.add("seadex-best-alt");
+  }
+}
+
+async function applySeaDexToViewPage() {
+  if (!window.location.pathname.startsWith("/view/")) return;
+  if (document.querySelector(".seadex-link")) return;
+  if (seaDexViewFetchInProgress) return;
+
+  seaDexViewFetchInProgress = true;
+  try {
+  const infoHashKbd = document.querySelector("kbd");
+  if (!infoHashKbd) return;
+  const infoHash = infoHashKbd.textContent.trim().toLowerCase();
+  if (!infoHash) return;
+
+  const apiUrl =
+    `https://releases.moe/api/collections/entries/records` +
+    `?filter=${encodeURIComponent(`trs.infoHash?="${infoHash}"`)}&expand=trs&skipTotal=true`;
+
+  const result = await seaDexFetch(apiUrl);
+  if (!result?.ok) return;
+
+  let json;
+  try {
+    json = JSON.parse(result.text);
+  } catch {
+    return;
+  }
+
+  if (!json.items?.length) return;
+
+  // Determine best/alt from the expanded trs array
+  const matchingTr = json.items[0].expand?.trs?.find(
+    (t) => t.infoHash?.toLowerCase() === infoHash
+  );
+  const isBest = matchingTr?.isBest ?? false;
+
+  // Apply highlight class to the main panel
+  const panel = document.querySelector(".panel");
+  if (panel) {
+    panel.classList.add(isBest ? "seadex-best" : "seadex-best-alt");
+  }
+
+  // Add "Go to SeaDex" button(s) near the magnet link
+  const magnetLink = document.querySelector('a[href^="magnet:"]');
+  if (magnetLink) {
+    for (const entry of json.items) {
+      const seaDexBtn = document.createElement("button");
+      seaDexBtn.className = "magnet-button seadex-link";
+      seaDexBtn.textContent = "Go to SeaDex";
+      seaDexBtn.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
+      seaDexBtn.style.fontWeight = "500";
+      seaDexBtn.style.marginLeft = "10px";
+      seaDexBtn.addEventListener("click", () => {
+        window.open(`https://releases.moe/${entry.alID}`, "_blank", "noopener,noreferrer");
+      });
+      magnetLink.parentNode.insertBefore(seaDexBtn, magnetLink.nextSibling);
+    }
+  }
+  } finally {
+    seaDexViewFetchInProgress = false;
+  }
+}
+
+async function initializeSeaDex() {
+  const prefs = await loadStoredPreferences();
+  if (!prefs.showSeaDex) return;
+
+  injectSeaDexStyles();
+
+  if (window.location.pathname.startsWith("/view/")) {
+    applySeaDexToViewPage();
+  } else {
+    applySeaDexToListPage();
+  }
+}
+
+// ── Screenshot Preview (hover thumbnail carousel) ───────────────────────────
+
+const screenshotPreview = {
+  enabled: false,
+  hoverDelayMs: 3000,
+  slideDelayMs: 3000,
+  hoverTimer: null,
+  slideTimer: null,
+  currentAnchor: null,
+  popupEl: null,
+  imgEl: null,
+  loaderEl: null,
+  counterEl: null,
+  imageCache: new Map(),     // viewUrl -> string[]  (result of page parse)
+  preloadedImages: new Map(), // imageUrl -> HTMLImageElement (preloaded pixel data)
+  inflightFetches: new Map(), // viewUrl -> Promise<string[]>
+  mouseX: 0,
+  mouseY: 0,
+  images: [],
+  imageIndex: 0,
+  delegationInitialized: false,
+  titleStore: new Map(),   // anchor element -> original title string
+  titleObserver: null,     // MutationObserver watching for new table rows
+  prefetchTimer: null,     // fires at hoverDelayMs/2 to start background fetch
+};
+
+const SCREENSHOT_IMG_REGEX = /\.(png|jpe?g|webp|gif|bmp|avif)(\?|#|$)/i;
+
+function ensureScreenshotPreviewDelegation() {
+  if (screenshotPreview.delegationInitialized) return;
+  screenshotPreview.delegationInitialized = true;
+  document.addEventListener("mouseover", screenshotPreviewMouseOver, true);
+  document.addEventListener("mouseout", screenshotPreviewMouseOut, true);
+  document.addEventListener("mousemove", screenshotPreviewMouseMove, true);
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (screenshotPreview.popupEl?.classList.contains("visible")) {
+        updateScreenshotPreviewPosition();
+      }
+    },
+    true
+  );
+}
+
+function getScreenshotTorrentLink(target) {
+  if (!target || !target.closest) return null;
+  return target.closest('table.torrent-list td a[href^="/view/"]');
+}
+
+function screenshotPreviewMouseOver(e) {
+  if (!screenshotPreview.enabled) return;
+  const anchor = getScreenshotTorrentLink(e.target);
+  if (!anchor) return;
+  if (anchor === screenshotPreview.currentAnchor) return;
+
+  cancelScreenshotPreview();
+  screenshotPreview.currentAnchor = anchor;
+
+  // Schedule the background page-fetch to start at the halfway point of the
+  // hover delay so fast mouse passes don't fire unnecessary requests to Nyaa.
+  // When the delay is 0 we fetch immediately (user accepted the trade-off).
+  const prefetchDelay = Math.floor(screenshotPreview.hoverDelayMs / 2);
+  if (prefetchDelay === 0) {
+    prefetchScreenshotAnchor(anchor.href);
+  } else {
+    screenshotPreview.prefetchTimer = setTimeout(() => {
+      prefetchScreenshotAnchor(anchor.href);
+    }, prefetchDelay);
+  }
+
+  screenshotPreview.hoverTimer = setTimeout(() => {
+    startScreenshotPreview(anchor);
+  }, screenshotPreview.hoverDelayMs);
+}
+
+// Begin fetching and preloading images for a torrent link.
+// Safe to call multiple times — idempotent thanks to the cache/inflight guards.
+function prefetchScreenshotAnchor(viewUrl) {
+  if (screenshotPreview.imageCache.has(viewUrl)) return;
+  if (screenshotPreview.inflightFetches.has(viewUrl)) return;
+
+  const promise = fetchScreenshotImages(viewUrl)
+    .then((images) => {
+      const list = images || [];
+      screenshotPreview.imageCache.set(viewUrl, list);
+      if (list.length) preloadScreenshotImages(list);
+      return list;
+    })
+    .finally(() => {
+      screenshotPreview.inflightFetches.delete(viewUrl);
+    });
+
+  screenshotPreview.inflightFetches.set(viewUrl, promise);
+}
+
+// Eagerly create Image objects for each URL so browsers cache the pixel data
+// before we need to display them.
+function preloadScreenshotImages(urls) {
+  urls.forEach((url) => {
+    if (screenshotPreview.preloadedImages.has(url)) return;
+    const img = new Image();
+    img.src = url;
+    screenshotPreview.preloadedImages.set(url, img);
+  });
+}
+
+function screenshotPreviewMouseOut(e) {
+  if (!screenshotPreview.enabled) return;
+  const anchor = screenshotPreview.currentAnchor;
+  if (!anchor) return;
+  // Only react when the mouse actually left the anchor element (or a descendant of it).
+  // This prevents stray mouseout events from unrelated elements (or synthetic events
+  // triggered by DOM insertions) from incorrectly cancelling the preview.
+  if (e.target !== anchor && !anchor.contains(e.target)) return;
+  const related = e.relatedTarget;
+  if (related && (related === anchor || anchor.contains(related))) return;
+  cancelScreenshotPreview();
+}
+
+function screenshotPreviewMouseMove(e) {
+  screenshotPreview.mouseX = e.clientX;
+  screenshotPreview.mouseY = e.clientY;
+  if (screenshotPreview.popupEl?.classList.contains("visible")) {
+    updateScreenshotPreviewPosition();
+  }
+}
+
+function cancelScreenshotPreview() {
+  if (screenshotPreview.prefetchTimer) {
+    clearTimeout(screenshotPreview.prefetchTimer);
+    screenshotPreview.prefetchTimer = null;
+  }
+  if (screenshotPreview.hoverTimer) {
+    clearTimeout(screenshotPreview.hoverTimer);
+    screenshotPreview.hoverTimer = null;
+  }
+  if (screenshotPreview.slideTimer) {
+    clearTimeout(screenshotPreview.slideTimer);
+    screenshotPreview.slideTimer = null;
+  }
+  screenshotPreview.currentAnchor = null;
+  screenshotPreview.images = [];
+  screenshotPreview.imageIndex = 0;
+  hideScreenshotPreview();
+}
+
+async function startScreenshotPreview(anchor) {
+  // Confirm the mouse is actually still over the anchor at timer-fire time.
+  const underCursor = document.elementFromPoint(
+    screenshotPreview.mouseX,
+    screenshotPreview.mouseY
+  );
+  if (!underCursor || (underCursor !== anchor && !anchor.contains(underCursor))) {
+    cancelScreenshotPreview();
+    return;
+  }
+
+  const viewUrl = anchor.href;
+
+  // Fast path: images already fetched and preloaded — show with no loading state.
+  let images = screenshotPreview.imageCache.get(viewUrl);
+
+  if (!images) {
+    // Show the loader only while waiting for the in-flight prefetch
+    // (prefetchScreenshotAnchor started it the moment the mouse entered).
+    showScreenshotPreviewLoader();
+
+    let inflight = screenshotPreview.inflightFetches.get(viewUrl);
+    if (!inflight) {
+      // Fallback: prefetch wasn't started (shouldn't normally happen), kick it off now.
+      prefetchScreenshotAnchor(viewUrl);
+      inflight = screenshotPreview.inflightFetches.get(viewUrl);
+    }
+
+    images = await inflight;
+  }
+
+  // Bail out if the user moved away while we were waiting
+  if (anchor !== screenshotPreview.currentAnchor) return;
+
+  if (!images || !images.length) {
+    hideScreenshotPreview();
+    return;
+  }
+
+  screenshotPreview.images = images;
+  screenshotPreview.imageIndex = 0;
+  await showScreenshotPreviewImage();
+
+  // Start the slideshow only after the first image is fully painted.
+  // Each tick waits until the next image is decoded before displaying it, then
+  // schedules itself again — so the delay is always "time between visible frames".
+  if (
+    images.length > 1 &&
+    screenshotPreview.slideDelayMs > 0 &&
+    screenshotPreview.currentAnchor === anchor
+  ) {
+    const scheduleNextSlide = () => {
+      screenshotPreview.slideTimer = setTimeout(async () => {
+        if (!screenshotPreview.currentAnchor || !screenshotPreview.images.length) return;
+        screenshotPreview.imageIndex =
+          (screenshotPreview.imageIndex + 1) % screenshotPreview.images.length;
+        await showScreenshotPreviewImage();
+        if (screenshotPreview.currentAnchor) scheduleNextSlide();
+      }, screenshotPreview.slideDelayMs);
+    };
+    scheduleNextSlide();
+  }
+}
+
+async function fetchScreenshotImages(viewUrl) {
+  const result = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "fetchUrl", url: viewUrl }, resolve);
+  });
+  if (!result?.ok || !result.text) return [];
+
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(result.text, "text/html");
+  } catch {
+    return [];
+  }
+
+  const description = doc.querySelector("#torrent-description");
+  if (!description) return [];
+
+  const seen = new Set();
+  const collected = [];
+
+  // Nyaa runs `window.markdown_proxy_images = true` which makes its client-side
+  // JS rewrite <img src> attributes to route through the WordPress.com image CDN
+  // (i0.wp.com) before the page is rendered.  Our background fetch gets the raw
+  // server HTML *before* that JS runs, so image srcs may still be the original
+  // host.  Some hosts (e.g. i.kek.sh) use hotlink protection and will refuse to
+  // serve images directly from the extension context.  Applying the same proxy
+  // Nyaa uses guarantees the images load regardless of the origin host.
+  function toWpProxy(resolvedUrl) {
+    if (/^https?:\/\/i\d*\.wp\.com\//i.test(resolvedUrl)) return resolvedUrl;
+    const withoutScheme = resolvedUrl.replace(/^https?:\/\//i, "");
+    return `https://i0.wp.com/${withoutScheme}?ssl=1`;
+  }
+
+  // Helper: resolve, deduplicate, proxy and push a candidate src URL
+  function addSrc(rawSrc) {
+    let resolved;
+    try {
+      resolved = new URL(rawSrc, viewUrl).toString();
+    } catch {
+      return;
+    }
+    if (!SCREENSHOT_IMG_REGEX.test(resolved)) return;
+    if (seen.has(resolved)) return;
+    seen.add(resolved);
+    collected.push(toWpProxy(resolved));
+  }
+
+  // Primary: rendered <img> tags (Nyaa renders markdown server-side)
+  description.querySelectorAll("img").forEach((img) => {
+    let src = img.getAttribute("src");
+    if (!src) return;
+
+    // When a thumbnail is wrapped in an <a> pointing to the full image, prefer that
+    const parentA = img.closest("a");
+    if (parentA) {
+      const parentHref = parentA.getAttribute("href");
+      if (parentHref && SCREENSHOT_IMG_REGEX.test(parentHref)) {
+        src = parentHref;
+      }
+    }
+    addSrc(src);
+  });
+
+  // Fallback: if no <img> tags were found the description may be unrendered markdown.
+  // Extract URLs from the standard markdown image syntax: ![alt](url)
+  if (collected.length === 0) {
+    const mdText = description.textContent || "";
+    const mdImgRe = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g;
+    let m;
+    while ((m = mdImgRe.exec(mdText)) !== null) {
+      addSrc(m[1]);
+    }
+  }
+
+  return collected;
+}
+
+// Returns a promise that resolves once the preloaded Image for `url` is fully
+// decoded (pixel data in memory).  We await this before assigning the src to
+// the visible element so the browser paints from cache in one instant frame.
+function waitForImageReady(url) {
+  let img = screenshotPreview.preloadedImages.get(url);
+  if (!img) {
+    img = new Image();
+    img.src = url;
+    screenshotPreview.preloadedImages.set(url, img);
+  }
+  if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+  // decode() resolves only after the image is fully decoded — never progressively.
+  return img.decode().catch(() => {});
+}
+
+function ensureScreenshotPreviewPopup() {
+  if (screenshotPreview.popupEl) return;
+
+  const popup = document.createElement("div");
+  popup.className = "nyaa-screenshot-preview";
+
+  const loader = document.createElement("div");
+  loader.className = "nyaa-screenshot-preview-loader";
+  loader.textContent = "Loading…";
+
+  const img = document.createElement("img");
+  img.className = "nyaa-screenshot-preview-img";
+  img.alt = "";
+  img.addEventListener("load", () => {
+    if (screenshotPreview.popupEl?.classList.contains("visible")) {
+      updateScreenshotPreviewPosition();
+    }
+  });
+
+  const counter = document.createElement("div");
+  counter.className = "nyaa-screenshot-preview-counter";
+
+  popup.appendChild(loader);
+  popup.appendChild(img);
+  popup.appendChild(counter);
+  document.body.appendChild(popup);
+
+  screenshotPreview.popupEl = popup;
+  screenshotPreview.imgEl = img;
+  screenshotPreview.loaderEl = loader;
+  screenshotPreview.counterEl = counter;
+}
+
+function showScreenshotPreviewLoader() {
+  ensureScreenshotPreviewPopup();
+  screenshotPreview.popupEl.classList.add("visible");
+  screenshotPreview.loaderEl.style.display = "block";
+  screenshotPreview.loaderEl.textContent = "Loading…";
+  screenshotPreview.imgEl.style.display = "none";
+  screenshotPreview.imgEl.removeAttribute("src");
+  screenshotPreview.counterEl.style.display = "none";
+  updateScreenshotPreviewPosition();
+}
+
+async function showScreenshotPreviewImage() {
+  ensureScreenshotPreviewPopup();
+
+  const capturedIndex = screenshotPreview.imageIndex;
+  const nextSrc = screenshotPreview.images[capturedIndex];
+
+  // Check whether the image is already fully decoded in memory.
+  const preloaded = screenshotPreview.preloadedImages.get(nextSrc);
+  const isReady = preloaded && preloaded.complete && preloaded.naturalWidth > 0;
+
+  if (!isReady) {
+    // Image not in cache yet — show a clean loader so the popup never renders
+    // a blank frame or stale counter from the previous hover session.
+    screenshotPreview.loaderEl.style.display = "block";
+    screenshotPreview.loaderEl.textContent = "Loading…";
+    screenshotPreview.imgEl.style.display = "none";
+    screenshotPreview.counterEl.style.display = "none";
+    screenshotPreview.popupEl.classList.add("visible");
+    updateScreenshotPreviewPosition();
+
+    // Block until pixel data is fully in the browser's image cache.
+    await waitForImageReady(nextSrc);
+
+    // Bail out if the slide changed or the preview was closed while decoding.
+    if (
+      screenshotPreview.imageIndex !== capturedIndex ||
+      !screenshotPreview.popupEl.classList.contains("visible")
+    ) {
+      return;
+    }
+  }
+
+  // Image is decoded — paint it in one frame, no progressive scan.
+  screenshotPreview.loaderEl.style.display = "none";
+  screenshotPreview.imgEl.style.display = "block";
+  screenshotPreview.popupEl.classList.add("visible");
+
+  const img = screenshotPreview.imgEl;
+  if (img.src !== nextSrc) img.src = nextSrc;
+
+  const total = screenshotPreview.images.length;
+  if (total > 1) {
+    screenshotPreview.counterEl.style.display = "block";
+    screenshotPreview.counterEl.textContent = `${capturedIndex + 1} / ${total}`;
+  } else {
+    screenshotPreview.counterEl.style.display = "none";
+  }
+
+  updateScreenshotPreviewPosition();
+}
+
+function hideScreenshotPreview() {
+  if (!screenshotPreview.popupEl) return;
+  screenshotPreview.popupEl.classList.remove("visible");
+  screenshotPreview.imgEl.removeAttribute("src");
+}
+
+function updateScreenshotPreviewPosition() {
+  const popup = screenshotPreview.popupEl;
+  if (!popup) return;
+  const padding = 16;
+  const offset = 20;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const rect = popup.getBoundingClientRect();
+
+  let x = screenshotPreview.mouseX + offset;
+  let y = screenshotPreview.mouseY + offset;
+
+  if (x + rect.width + padding > vw) {
+    x = screenshotPreview.mouseX - rect.width - offset;
+  }
+  if (y + rect.height + padding > vh) {
+    y = vh - rect.height - padding;
+  }
+  if (x < padding) x = padding;
+  if (y < padding) y = padding;
+
+  popup.style.left = `${x}px`;
+  popup.style.top = `${y}px`;
+}
+
+// Remove the native browser tooltip from all torrent-view anchor elements in
+// the listing table so the Screenshot Preview popup isn't obscured/competed
+// with by the OS tooltip.  Original values are saved and can be restored.
+function suppressTorrentLinkTitles() {
+  document
+    .querySelectorAll('table.torrent-list td a[href^="/view/"]')
+    .forEach((a) => {
+      if (!screenshotPreview.titleStore.has(a)) {
+        screenshotPreview.titleStore.set(a, a.getAttribute("title") ?? "");
+      }
+      a.removeAttribute("title");
+    });
+}
+
+function restoreTorrentLinkTitles() {
+  screenshotPreview.titleStore.forEach((original, el) => {
+    if (original) el.setAttribute("title", original);
+  });
+  screenshotPreview.titleStore.clear();
+}
+
+function setupTitleSuppression() {
+  suppressTorrentLinkTitles();
+
+  // Watch for new rows being added (e.g. pagination, dynamic updates) so they
+  // also have their titles suppressed immediately.
+  const tbody = document.querySelector("table.torrent-list tbody");
+  if (!tbody || screenshotPreview.titleObserver) return;
+
+  screenshotPreview.titleObserver = new MutationObserver(() => {
+    suppressTorrentLinkTitles();
+  });
+  screenshotPreview.titleObserver.observe(tbody, {
+    childList: true,
+    subtree: false,
+  });
+}
+
+function teardownTitleSuppression() {
+  if (screenshotPreview.titleObserver) {
+    screenshotPreview.titleObserver.disconnect();
+    screenshotPreview.titleObserver = null;
+  }
+  restoreTorrentLinkTitles();
+}
+
+async function initializeScreenshotPreview() {
+  const prefs = await loadStoredPreferences();
+  screenshotPreview.enabled = !!prefs.screenshotPreviewEnabled;
+  screenshotPreview.hoverDelayMs = Math.max(
+    0,
+    Math.round((parseFloat(prefs.screenshotPreviewHoverDelay) || 0) * 1000)
+  );
+  screenshotPreview.slideDelayMs = Math.max(
+    100,
+    Math.round((parseFloat(prefs.screenshotPreviewSlideDelay) || 0) * 1000)
+  );
+
+  if (screenshotPreview.enabled) {
+    ensureScreenshotPreviewDelegation();
+    setupTitleSuppression();
+  }
+}
+
 function invertSelection() {
   const checkboxes = document.querySelectorAll(".magnet-checkbox");
   let invertedCount = 0;
@@ -2513,7 +3280,10 @@ async function initializeExtension(isInitialLoad = false) {
   addAnimetoshoComments();
   addAmeNZBToViewPage();
   addNekoBTToViewPage();
+  initializeSeaDex();
+  initializeScreenshotPreview();
   addMagnetButtonToViewPage();
+  addSendButtonToViewPage();
   showChangelog();
   filterDeadTorrents(isInitialLoad);
   observeTableChanges();
@@ -2561,6 +3331,91 @@ async function addMagnetButtonToViewPage() {
 
   // Insert the button after the magnet link
   magnetLink.parentNode.insertBefore(magnetButton, magnetLink.nextSibling);
+}
+
+// Shared helper: creates a send button and wires up the click → qBittorrent flow
+function createSendButton(magnetUrl, extraStyles = {}) {
+  const sendButton = document.createElement("button");
+  sendButton.className = "magnet-button send-torrent-button";
+  sendButton.innerHTML = '<i class="fa fa-cloud-upload"></i> Send';
+  sendButton.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
+  sendButton.style.fontWeight = "500";
+  Object.assign(sendButton.style, extraStyles);
+
+  sendButton.addEventListener("click", async () => {
+    const currentPrefs = await loadStoredPreferences();
+
+    if (!currentPrefs.torrentClientUrl) {
+      showNotification("No torrent client configured. Set it up in the extension popup.", false);
+      return;
+    }
+
+    // Pick credentials for the active client
+    let username = "", password = "";
+    if (currentPrefs.torrentClient === "transmission") {
+      username = currentPrefs.transmissionUsername;
+      password = currentPrefs.transmissionPassword;
+    } else if (currentPrefs.torrentClient === "deluge") {
+      password = currentPrefs.delugePassword;
+    } else {
+      username = currentPrefs.qbtUsername;
+      password = currentPrefs.qbtPassword;
+    }
+
+    sendButton.disabled = true;
+
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          type: "sendTorrent",
+          client: currentPrefs.torrentClient,
+          url: currentPrefs.torrentClientUrl,
+          username,
+          password,
+          magnetUrl,
+        },
+        resolve
+      );
+    });
+
+    sendButton.disabled = false;
+
+    if (!result || !result.ok) {
+      const msg = result?.error === "already_exists"
+        ? "Torrent already exists in your client."
+        : result?.error === "auth_failed"
+        ? "Authentication failed — check your credentials."
+        : result?.error === "auth_required"
+        ? "Torrent client requires authentication."
+        : "Failed to send torrent. Check the client connection.";
+      showNotification(msg, false);
+      return;
+    }
+
+    showNotification("Torrent sent to client!", true);
+  });
+
+  return sendButton;
+}
+
+async function addSendButtonToViewPage() {
+  if (!window.location.pathname.startsWith("/view/")) return;
+
+  const prefs = await loadStoredPreferences();
+  if (!prefs.showSendButtons) return;
+
+  // Avoid adding duplicate button
+  if (document.querySelector(".send-torrent-button")) return;
+
+  const magnetLink = document.querySelector('a[href^="magnet:"]');
+  if (!magnetLink) return;
+
+  const sendButton = createSendButton(magnetLink.href, { marginLeft: "10px" });
+
+  // Insert after the magnet Copy button if present, otherwise after the magnet link
+  const magnetCopyButton = magnetLink.parentNode.querySelector(".magnet-button:not(.send-torrent-button)");
+  const insertAfter = magnetCopyButton || magnetLink;
+  insertAfter.parentNode.insertBefore(sendButton, insertAfter.nextSibling);
 }
 
 async function toggleComments() {
@@ -3183,6 +4038,20 @@ async function handleChangelogPage() {
           <i class="fa fa-github"></i> GitHub
         </a>
       </p>
+    </div>
+    <div class="version-entry">
+      <h2>
+        Version 1.11.0
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.11.0" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added a dedicated "Torrent Client" tab with support for qBittorrent, Transmission, and Deluge - required to use the "Send" button</li>
+        <li>Added a "Send" button to torrent view pages and the main torrent list, sending the torrent directly to your configured client - needs a Torrent Client to be configured first in the extension settings</li>
+        <li>Added a "Display Best Release (Seadex)" toggle in Additional Features to highlight best and alternate releases on torrent list and view pages according to SeaDex (Disabled by default)</li>
+        <li>Added "Screenshot Preview" toggle to the Additional Features section - hovering over a torrent link for the set delay opens a floating image popup that cycles through screenshots from the torrent's description (Disabled by default)</li>
+      </ul>
     </div>
     <div class="version-entry">
       <h2>

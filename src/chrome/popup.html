@@ -6,15 +6,77 @@
   </head>
   <body>
     <div class="nav-container">
-      <button class="nav-button" data-tab="keyword-filter">
-        Keyword Filter
-      </button>
+      <button class="nav-button" data-tab="torrent-client">Torrent Client</button>
+      <button class="nav-button" data-tab="keyword-filter">Filter</button>
       <button class="nav-button" data-tab="monitored-users">Monitoring</button>
       <button class="nav-button active" data-tab="settings">Settings</button>
       <button class="nav-button" data-tab="about">About</button>
     </div>
 
     <div class="content-container">
+      <div id="torrent-client" class="tab-content">
+        <div class="settings-category">
+          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 10px; border-bottom: 0; padding: 0;">
+            <div class="tc-field-group">
+              <label class="tc-label">Client</label>
+              <select id="tcClientSelect" class="tc-select">
+                <option value="qbittorrent">qBittorrent</option>
+                <option value="transmission">Transmission</option>
+                <option value="deluge">Deluge</option>
+              </select>
+            </div>
+
+            <div class="tc-field-group">
+              <label class="tc-label">Torrent Client URL <span style="color:#666;font-weight:400;font-size:11px;">(e.g. http://192.168.1.100:8080)</span></label>
+              <input
+                type="text"
+                id="tcIp"
+                placeholder="http://192.168.1.100:8080"
+                class="tc-input"
+              />
+            </div>
+
+            <div class="tc-field-group">
+              <label class="tc-label">Authentication <span style="color:#666;font-weight:400;font-size:11px;">(optional)</span></label>
+              <div id="tcUsernameWrapper">
+                <input
+                  type="text"
+                  id="tcUsername"
+                  placeholder="Username"
+                  class="tc-input"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="api-key-wrapper" style="margin-top:6px;">
+                <input
+                  type="password"
+                  id="tcPassword"
+                  placeholder="Password"
+                  class="tc-input api-key-input"
+                  style="padding-right:36px;"
+                  autocomplete="new-password"
+                />
+                <button type="button" id="tcPasswordToggle" class="api-key-eye" title="Show/hide password">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="tc-actions">
+              <button type="button" id="tcTestBtn" class="tc-btn tc-btn-test">Test Connection</button>
+              <button type="button" id="tcSaveBtn" class="tc-btn tc-btn-save">Save</button>
+              <span id="tcStatus" class="tc-status"></span>
+            </div>
+
+            <p style="color:#666; font-size:11px; margin:0; line-height:1.5;">
+              ⚠ If your server doesn't require authentication for local networks, leave the credentials fields blank.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div id="keyword-filter" class="tab-content">
         <div class="keyword-info">
           <p class="keyword-explanation">
@@ -249,6 +311,18 @@
           </div>
 
           <div class="setting-item">
+            <span>Show Send to Client Button</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showSendButtonsToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-item">
             <span>Show Monitor Buttons</span>
             <div class="toggle-container">
               <button
@@ -443,6 +517,67 @@
         <!-- Additional Features -->
         <div class="settings-category">
           <h3 class="category-title">Additional Features</h3>
+          <div class="setting-item">
+            <span>Screenshot Preview</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="screenshotPreviewToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+          <p class="setting-feature-description">
+            Hover over a torrent link to preview its screenshot images in a
+            floating popup. Images cycle automatically while you keep hovering.
+          </p>
+
+          <div class="setting-item screenshot-preview-options">
+            <p class="sp-disclaimer" id="screenshotPreviewDisclaimer">
+              ⚠ Each hovered link sends a request to Nyaa to fetch its images.
+              Setting the hover delay to 0 sends a request for every link your
+              mouse passes over. Excessive requests may result in rate limiting.
+              Use at your own risk.
+            </p>
+            <div class="sp-options-grid">
+              <div class="sp-option">
+                <label for="screenshotPreviewHoverDelay" class="sp-label">Hover delay (seconds)</label>
+                <input
+                  type="number"
+                  id="screenshotPreviewHoverDelay"
+                  min="0"
+                  step="0.5"
+                  class="sp-input"
+                  disabled
+                />
+              </div>
+              <div class="sp-option">
+                <label for="screenshotPreviewSlideDelay" class="sp-label">Image change interval (seconds)</label>
+                <input
+                  type="number"
+                  id="screenshotPreviewSlideDelay"
+                  min="0.1"
+                  step="0.5"
+                  class="sp-input"
+                  disabled
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <span>Display Best Release (Seadex)</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showSeaDexToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
           <div class="setting-item">
             <span>Add Changelog Link to Navbar</span>
             <div class="toggle-container">

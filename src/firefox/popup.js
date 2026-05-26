@@ -55,6 +55,21 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 
+// Enable/disable the screenshot preview delay inputs based on the toggle state
+function setScreenshotPreviewInputsEnabled(enabled) {
+  const hoverInput = document.getElementById("screenshotPreviewHoverDelay");
+  const slideInput = document.getElementById("screenshotPreviewSlideDelay");
+  if (hoverInput) hoverInput.disabled = !enabled;
+  if (slideInput) slideInput.disabled = !enabled;
+  updateScreenshotPreviewDisclaimer(enabled);
+}
+
+function updateScreenshotPreviewDisclaimer(featureEnabled) {
+  const disclaimer = document.getElementById("screenshotPreviewDisclaimer");
+  if (!disclaimer) return;
+  disclaimer.classList.toggle("visible", !!featureEnabled);
+}
+
 // Function to update dependent toggles
 function updateDependentToggles(buttonsEnabled) {
   const dependentToggles = [
@@ -95,6 +110,7 @@ browser.storage.sync.get(
     ameNZBRequestDate: "",
     showNekoBTLinks: false,
     showMagnetButtons: true,
+    showSendButtons: true,
     showQuickFilter: true,
     changelogDismissed: false,
     hideDeadTorrents: false,
@@ -107,6 +123,17 @@ browser.storage.sync.get(
     showChangelogNav: true,
     showMonitorButtons: true,
     monitoredKeywords: [],
+    showSeaDex: false,
+    screenshotPreviewEnabled: false,
+    screenshotPreviewHoverDelay: 2,
+    screenshotPreviewSlideDelay: 2,
+    torrentClient: "qbittorrent",
+    torrentClientUrl: "",
+    qbtUsername: "",
+    qbtPassword: "",
+    transmissionUsername: "",
+    transmissionPassword: "",
+    delugePassword: "",
   },
   (items) => {
     document
@@ -157,11 +184,21 @@ browser.storage.sync.get(
     document
       .querySelector('[data-toggle="showMonitorButtonsToggle"]')
       .setAttribute("aria-checked", items.showMonitorButtons);
+    document
+      .querySelector('[data-toggle="showSendButtonsToggle"]')
+      .setAttribute("aria-checked", items.showSendButtons);
+
+    // Load torrent client settings
+    const tc = items.torrentClient || "qbittorrent";
+    document.getElementById("tcClientSelect").value = tc;
+    document.getElementById("tcIp").value = items.torrentClientUrl || "";
+    loadClientAuth(tc, items);
+    applyClientUI(tc);
 
     const ameNZBApiKeyInput = document.getElementById("ameNZBApiKey");
     ameNZBApiKeyInput.value = items.ameNZBApiKey || "";
     const ameNZBToggle = document.querySelector(
-      '[data-toggle="showAmeNZBLinksToggle"]'
+      '[data-toggle="showAmeNZBLinksToggle"]',
     );
     ameNZBToggle.setAttribute("aria-checked", items.showAmeNZBLinks);
     ameNZBToggle.disabled = !items.ameNZBApiKey;
@@ -175,6 +212,23 @@ browser.storage.sync.get(
     document
       .querySelector('[data-toggle="showNekoBTLinksToggle"]')
       .setAttribute("aria-checked", items.showNekoBTLinks);
+    document
+      .querySelector('[data-toggle="showSeaDexToggle"]')
+      .setAttribute("aria-checked", items.showSeaDex);
+
+    document
+      .querySelector('[data-toggle="screenshotPreviewToggle"]')
+      .setAttribute("aria-checked", items.screenshotPreviewEnabled);
+
+    const screenshotHoverInput = document.getElementById(
+      "screenshotPreviewHoverDelay",
+    );
+    const screenshotSlideInput = document.getElementById(
+      "screenshotPreviewSlideDelay",
+    );
+    screenshotHoverInput.value = items.screenshotPreviewHoverDelay;
+    screenshotSlideInput.value = items.screenshotPreviewSlideDelay;
+    setScreenshotPreviewInputsEnabled(items.screenshotPreviewEnabled);
 
     // Initialize dependent toggles state
     updateDependentToggles(items.showButtons);
@@ -185,7 +239,7 @@ browser.storage.sync.get(
     const sizeSelect = document.getElementById("sizeRangeSelect");
     sizeSelect.value = items.fileSizeRange;
     sizeSelect.disabled = !items.fileSizeFilterEnabled;
-  }
+  },
 );
 
 const EYE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
@@ -205,68 +259,82 @@ document.getElementById("ameNZBApiKeyToggle").addEventListener("click", () => {
 });
 
 // ameNZB Test button — validate the API key
-document.getElementById("ameNZBApiKeyTest").addEventListener("click", async () => {
-  const key = document.getElementById("ameNZBApiKey").value.trim();
-  const statusEl = document.getElementById("ameNZBTestStatus");
-  const testBtn = document.getElementById("ameNZBApiKeyTest");
+document
+  .getElementById("ameNZBApiKeyTest")
+  .addEventListener("click", async () => {
+    const key = document.getElementById("ameNZBApiKey").value.trim();
+    const statusEl = document.getElementById("ameNZBTestStatus");
+    const testBtn = document.getElementById("ameNZBApiKeyTest");
 
-  if (!key) {
-    statusEl.textContent = "Enter an API key first.";
+    if (!key) {
+      statusEl.textContent = "Enter an API key first.";
+      statusEl.style.color = "#999";
+      return;
+    }
+
+    testBtn.disabled = true;
+    statusEl.textContent = "Testing…";
     statusEl.style.color = "#999";
-    return;
-  }
 
-  testBtn.disabled = true;
-  statusEl.textContent = "Testing…";
-  statusEl.style.color = "#999";
+    const result = await new Promise((resolve) => {
+      browser.runtime.sendMessage(
+        {
+          type: "fetchUrl",
+          url: `https://amenzb.moe/api?t=search&apikey=${encodeURIComponent(key)}`,
+        },
+        resolve,
+      );
+    });
 
-  const result = await new Promise((resolve) => {
-    browser.runtime.sendMessage(
-      { type: "fetchUrl", url: `https://amenzb.moe/api?t=search&apikey=${encodeURIComponent(key)}` },
-      resolve
-    );
-  });
+    testBtn.disabled = false;
 
-  testBtn.disabled = false;
-
-  if (!result?.ok) {
-    statusEl.textContent = "✗ Request failed.";
-    statusEl.style.color = "#ff4444";
-    return;
-  }
-
-  try {
-    const parser = new DOMParser();
-    const xml = parser.parseFromString(result.text, "text/xml");
-    // Check for Newznab error element
-    const errorEl = xml.querySelector("error");
-    if (errorEl) {
-      const code = errorEl.getAttribute("code");
-      const desc = errorEl.getAttribute("description") || "Unknown error";
-      statusEl.textContent = `✗ ${desc}`;
+    if (!result?.ok) {
+      statusEl.textContent = "✗ Request failed.";
       statusEl.style.color = "#ff4444";
       return;
     }
-    // A valid response has a <channel> with Newznab response element
-    const channel = xml.querySelector("channel");
-    if (channel) {
-      // Only count against the quota when the key was accepted
-      const todayUTC = new Date().toISOString().slice(0, 10);
-      browser.storage.sync.get({ ameNZBRequestCount: 0, ameNZBRequestDate: "" }, (items) => {
-        const count = items.ameNZBRequestDate === todayUTC ? items.ameNZBRequestCount + 1 : 1;
-        browser.storage.sync.set({ ameNZBRequestCount: count, ameNZBRequestDate: todayUTC });
-      });
-      statusEl.textContent = "✓ API key is valid.";
-      statusEl.style.color = "#4caf50";
-    } else {
-      statusEl.textContent = "✗ Unexpected response.";
+
+    try {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(result.text, "text/xml");
+      // Check for Newznab error element
+      const errorEl = xml.querySelector("error");
+      if (errorEl) {
+        const code = errorEl.getAttribute("code");
+        const desc = errorEl.getAttribute("description") || "Unknown error";
+        statusEl.textContent = `✗ ${desc}`;
+        statusEl.style.color = "#ff4444";
+        return;
+      }
+      // A valid response has a <channel> with Newznab response element
+      const channel = xml.querySelector("channel");
+      if (channel) {
+        // Only count against the quota when the key was accepted
+        const todayUTC = new Date().toISOString().slice(0, 10);
+        browser.storage.sync.get(
+          { ameNZBRequestCount: 0, ameNZBRequestDate: "" },
+          (items) => {
+            const count =
+              items.ameNZBRequestDate === todayUTC
+                ? items.ameNZBRequestCount + 1
+                : 1;
+            browser.storage.sync.set({
+              ameNZBRequestCount: count,
+              ameNZBRequestDate: todayUTC,
+            });
+          },
+        );
+        statusEl.textContent = "✓ API key is valid.";
+        statusEl.style.color = "#4caf50";
+      } else {
+        statusEl.textContent = "✗ Unexpected response.";
+        statusEl.style.color = "#ff4444";
+      }
+    } catch {
+      statusEl.textContent = "✗ Could not parse response.";
       statusEl.style.color = "#ff4444";
     }
-  } catch {
-    statusEl.textContent = "✗ Could not parse response.";
-    statusEl.style.color = "#ff4444";
-  }
-});
+  });
 
 // ameNZB Clear button — wipe the API key from input and storage
 document.getElementById("ameNZBApiKeyClear").addEventListener("click", () => {
@@ -276,7 +344,9 @@ document.getElementById("ameNZBApiKeyClear").addEventListener("click", () => {
   document.getElementById("ameNZBApiKeyToggle").innerHTML = EYE_SVG;
   document.getElementById("ameNZBTestStatus").textContent = "";
 
-  const ameNZBToggle = document.querySelector('[data-toggle="showAmeNZBLinksToggle"]');
+  const ameNZBToggle = document.querySelector(
+    '[data-toggle="showAmeNZBLinksToggle"]',
+  );
   ameNZBToggle.disabled = true;
   ameNZBToggle.setAttribute("aria-checked", false);
 
@@ -294,7 +364,7 @@ document.getElementById("ameNZBApiKeyClear").addEventListener("click", () => {
 document.getElementById("ameNZBApiKey").addEventListener("input", (e) => {
   const key = e.target.value.trim();
   const ameNZBToggle = document.querySelector(
-    '[data-toggle="showAmeNZBLinksToggle"]'
+    '[data-toggle="showAmeNZBLinksToggle"]',
   );
   ameNZBToggle.disabled = !key;
   if (!key) {
@@ -330,10 +400,197 @@ browser.storage.onChanged.addListener((changes) => {
           items.ameNZBRequestDate === todayUTC ? items.ameNZBRequestCount : 0;
         const el = document.getElementById("ameNZBRequestCount");
         if (el) el.textContent = `${todayCount.toLocaleString()} / 10,000`;
-      }
+      },
     );
   }
 });
+
+// ── Torrent Client Tab ──────────────────────────────────────────────────────
+
+const CLIENT_LABELS = {
+  qbittorrent: "qBittorrent",
+  transmission: "Transmission",
+  deluge: "Deluge",
+};
+
+// Show/hide the username row and adjust password margin depending on client
+function applyClientUI(client) {
+  const usernameWrapper = document.getElementById("tcUsernameWrapper");
+  if (client === "deluge") {
+    usernameWrapper.style.display = "none";
+    // Remove top margin gap since username is gone
+    usernameWrapper.nextElementSibling.style.marginTop = "0";
+  } else {
+    usernameWrapper.style.display = "";
+    usernameWrapper.nextElementSibling.style.marginTop = "6px";
+  }
+}
+
+// Populate auth fields from a storage items object for the given client
+function loadClientAuth(client, items) {
+  const usernameEl = document.getElementById("tcUsername");
+  const passwordEl = document.getElementById("tcPassword");
+  if (client === "transmission") {
+    usernameEl.value = items.transmissionUsername || "";
+    passwordEl.value = items.transmissionPassword || "";
+  } else if (client === "deluge") {
+    usernameEl.value = "";
+    passwordEl.value = items.delugePassword || "";
+  } else {
+    usernameEl.value = items.qbtUsername || "";
+    passwordEl.value = items.qbtPassword || "";
+  }
+}
+
+// Persist settings for the currently selected client
+function saveTorrentClientSettings() {
+  const client = document.getElementById("tcClientSelect").value;
+  const url = document.getElementById("tcIp").value.trim();
+  const username = document.getElementById("tcUsername").value.trim();
+  const password = document.getElementById("tcPassword").value;
+
+  const settings = { torrentClient: client, torrentClientUrl: url };
+  if (client === "transmission") {
+    settings.transmissionUsername = username;
+    settings.transmissionPassword = password;
+  } else if (client === "deluge") {
+    settings.delugePassword = password;
+  } else {
+    settings.qbtUsername = username;
+    settings.qbtPassword = password;
+  }
+  browser.storage.sync.set(settings);
+}
+
+// Client dropdown change — reload auth fields and adjust UI
+document.getElementById("tcClientSelect").addEventListener("change", (e) => {
+  const client = e.target.value;
+  applyClientUI(client);
+  document.getElementById("tcStatus").textContent = "";
+  browser.storage.sync.get(
+    {
+      qbtUsername: "",
+      qbtPassword: "",
+      transmissionUsername: "",
+      transmissionPassword: "",
+      delugePassword: "",
+    },
+    (items) => loadClientAuth(client, items),
+  );
+});
+
+// Password show/hide toggle
+document.getElementById("tcPasswordToggle").addEventListener("click", () => {
+  const input = document.getElementById("tcPassword");
+  const btn = document.getElementById("tcPasswordToggle");
+  if (input.type === "password") {
+    input.type = "text";
+    btn.innerHTML = EYE_SLASH_SVG;
+  } else {
+    input.type = "password";
+    btn.innerHTML = EYE_SVG;
+  }
+});
+
+// Save button
+document.getElementById("tcSaveBtn").addEventListener("click", () => {
+  saveTorrentClientSettings();
+  const statusEl = document.getElementById("tcStatus");
+  statusEl.textContent = "✓ Saved";
+  statusEl.style.color = "#4caf50";
+  setTimeout(() => {
+    statusEl.textContent = "";
+  }, 2000);
+});
+
+// Test Connection button
+document.getElementById("tcTestBtn").addEventListener("click", async () => {
+  const client = document.getElementById("tcClientSelect").value;
+  const url = document.getElementById("tcIp").value.trim();
+  const username = document.getElementById("tcUsername").value.trim();
+  const password = document.getElementById("tcPassword").value;
+  const statusEl = document.getElementById("tcStatus");
+  const testBtn = document.getElementById("tcTestBtn");
+
+  if (!url) {
+    statusEl.textContent = "Enter a Torrent Client URL first.";
+    statusEl.style.color = "#999";
+    return;
+  }
+
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    statusEl.textContent = "✗ URL must start with http:// or https://";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+
+  // Save settings before requesting permissions — Firefox closes the popup during
+  // the permission prompt, so values must be persisted to survive the round-trip.
+  saveTorrentClientSettings();
+
+  // Request permission only for the specific host the user entered
+  let parsedOrigin;
+  try {
+    const u = new URL(url);
+    parsedOrigin = `${u.origin}/*`;
+  } catch {
+    statusEl.textContent = "✗ Invalid URL";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+
+  const granted = await new Promise((resolve) => {
+    browser.permissions.request({ origins: [parsedOrigin] }, resolve);
+  });
+
+  if (!granted) {
+    statusEl.textContent = "✗ Host permission denied";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+
+  testBtn.disabled = true;
+  statusEl.textContent = "Testing...";
+  statusEl.style.color = "#999";
+
+  const result = await new Promise((resolve) => {
+    browser.runtime.sendMessage(
+      { type: "testConnection", client, url, username, password },
+      resolve,
+    );
+  });
+
+  testBtn.disabled = false;
+
+  if (!result) {
+    statusEl.textContent = "✗ No response from background";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+
+  if (result.ok) {
+    const label = CLIENT_LABELS[client] || client;
+    statusEl.textContent = result.version
+      ? `✓ Connected! (${label} ${result.version})`
+      : `✓ Connected! (${label})`;
+    statusEl.style.color = "#4caf50";
+    saveTorrentClientSettings();
+  } else {
+    switch (result.error) {
+      case "auth_failed":
+        statusEl.textContent = "✗ Authentication failed - wrong credentials";
+        break;
+      case "auth_required":
+        statusEl.textContent = "✗ Server requires authentication";
+        break;
+      default:
+        statusEl.textContent = "✗ Connection failed. Check the URL";
+    }
+    statusEl.style.color = "#ff4444";
+  }
+});
+
+// ── End Torrent Client Tab ───────────────────────────────────────────────────
 
 // Add click handlers for toggle buttons
 document.querySelectorAll(".toggle-button").forEach((button) => {
@@ -361,7 +618,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showButtons",
               value: newState,
             });
-          }
+          },
         );
         updateDependentToggles(newState);
         break;
@@ -375,7 +632,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showATLinks",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "useNewATDomainToggle":
@@ -388,7 +645,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "useNewATDomain",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showATCommentsToggle":
@@ -401,7 +658,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showATComments",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showAmeNZBLinksToggle":
@@ -414,7 +671,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showAmeNZBLinks",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showNekoBTLinksToggle":
@@ -427,7 +684,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showNekoBTLinks",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showMagnetButtonsToggle":
@@ -440,7 +697,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showMagnetButtons",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "changelogToggle":
@@ -460,7 +717,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showQuickFilter",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "hideDeadTorrentsToggle":
@@ -473,7 +730,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "hideDeadTorrents",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "keywordFilterToggle":
@@ -486,7 +743,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "keywordFilterEnabled",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showFilterNotificationsToggle":
@@ -503,7 +760,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "hideComments",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "fileSizeFilterToggle":
@@ -517,7 +774,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "fileSizeFilterEnabled",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showChangelogNavToggle":
@@ -531,7 +788,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showChangelogNav",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showMonitorButtonsToggle":
@@ -545,13 +802,98 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showMonitorButtons",
               value: newState,
             });
-          }
+          },
+        );
+        break;
+      case "showSendButtonsToggle":
+        setting = "showSendButtons";
+        browser.storage.sync.set({ [setting]: newState });
+        browser.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            browser.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showSendButtons",
+              value: newState,
+            });
+          },
+        );
+        break;
+      case "showSeaDexToggle":
+        setting = "showSeaDex";
+        browser.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            browser.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showSeaDex",
+              value: newState,
+            });
+          },
+        );
+        break;
+      case "screenshotPreviewToggle":
+        setting = "screenshotPreviewEnabled";
+        setScreenshotPreviewInputsEnabled(newState);
+        browser.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            browser.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "screenshotPreviewEnabled",
+              value: newState,
+            });
+          },
         );
         break;
     }
     browser.storage.sync.set({ [setting]: newState });
   });
 });
+
+// Screenshot Preview delay inputs — persist values and notify content script
+function attachScreenshotPreviewInputHandler(
+  inputId,
+  settingKey,
+  defaultValue,
+  minValue,
+) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  const commitValue = () => {
+    let value = parseFloat(input.value);
+    if (!isFinite(value) || value < minValue) {
+      value = defaultValue;
+      input.value = value;
+    }
+    browser.storage.sync.set({ [settingKey]: value });
+    browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs[0]) return;
+      browser.tabs.sendMessage(tabs[0].id, {
+        type: "settingChanged",
+        setting: settingKey,
+        value,
+      });
+    });
+  };
+
+  input.addEventListener("change", commitValue);
+  input.addEventListener("blur", commitValue);
+}
+
+attachScreenshotPreviewInputHandler(
+  "screenshotPreviewHoverDelay",
+  "screenshotPreviewHoverDelay",
+  2,
+  0,
+);
+attachScreenshotPreviewInputHandler(
+  "screenshotPreviewSlideDelay",
+  "screenshotPreviewSlideDelay",
+  2,
+  0.1,
+);
 
 // Get version from manifest.json and update the version number in popup
 fetch(browser.runtime.getURL("manifest.json"))
@@ -768,7 +1110,7 @@ function addMonitoredKeyword() {
 function removeMonitoredKeyword(keywordToRemove) {
   browser.storage.sync.get({ monitoredKeywords: [] }, (items) => {
     const monitoredKeywords = items.monitoredKeywords.filter(
-      (k) => k.keyword !== keywordToRemove
+      (k) => k.keyword !== keywordToRemove,
     );
 
     browser.storage.sync.set({ monitoredKeywords }, () => {
@@ -947,7 +1289,7 @@ function displayMonitoredUsers(monitoredUsers) {
 function unmonitorUser(username) {
   browser.storage.sync.get({ monitoredUsers: [] }, (items) => {
     const monitoredUsers = items.monitoredUsers.filter(
-      (user) => user.username !== username
+      (user) => user.username !== username,
     );
     browser.storage.sync.set({ monitoredUsers }, () => {
       displayMonitoredUsers(monitoredUsers);

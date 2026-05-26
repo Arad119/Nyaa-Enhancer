@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <link rel="stylesheet" href="popup.css" />
@@ -6,7 +6,9 @@
   </head>
   <body>
     <div class="nav-container">
-      <button class="nav-button" data-tab="torrent-client">Torrent Client</button>
+      <button class="nav-button" data-tab="torrent-client">
+        Torrent Client
+      </button>
       <button class="nav-button" data-tab="keyword-filter">Filter</button>
       <button class="nav-button" data-tab="monitored-users">Monitoring</button>
       <button class="nav-button active" data-tab="settings">Settings</button>
@@ -16,7 +18,118 @@
     <div class="content-container">
       <div id="torrent-client" class="tab-content">
         <div class="settings-category">
-          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 10px; border-bottom: 0; padding: 0;">
+          <div class="keyword-info" style="margin-bottom: 10px">
+            <div class="accordion">
+              <div class="accordion-header">
+                <h4 style="margin: 0; color: #337ab7; display: inline-block">
+                  How to use Torrent Client
+                </h4>
+                <span class="accordion-icon">+</span>
+              </div>
+              <div class="accordion-content">
+                <div
+                  style="
+                    margin: 10px 0 12px 0;
+                    padding: 10px 12px;
+                    background: #1e2a1e;
+                    border-left: 3px solid #4caf50;
+                    border-radius: 0 4px 4px 0;
+                  "
+                >
+                  <p
+                    style="
+                      margin: 0 0 6px 0;
+                      font-size: 13px;
+                      font-weight: 600;
+                      color: #4caf50;
+                    "
+                  >
+                    🔒 About the permission prompt
+                  </p>
+                  <p
+                    style="
+                      margin: 0;
+                      font-size: 12px;
+                      color: #aaa;
+                      line-height: 1.6;
+                    "
+                  >
+                    The first time you click
+                    <strong style="color: #ddd">Test Connection</strong>, your
+                    browser will ask permission to access your torrent client's
+                    address. This is a browser security requirement - without
+                    it, the extension cannot reach a local or remote URL outside
+                    of Nyaa.
+                  </p>
+                  <p
+                    style="
+                      margin: 6px 0 0 0;
+                      font-size: 12px;
+                      color: #aaa;
+                      line-height: 1.6;
+                    "
+                  >
+                    The permission is granted
+                    <strong style="color: #ddd"
+                      >only for the exact host you entered</strong
+                    >
+                    (e.g. your NAS or PC's IP), and is used
+                    <strong style="color: #ddd"
+                      >solely to communicate with your torrent client</strong
+                    >. Nyaa Enhancer does not collect, transmit, or share any of
+                    your data.
+                  </p>
+                </div>
+                <ol style="margin-top: 10px; padding-left: 20px">
+                  <li>
+                    Select your torrent client from the <strong>Client</strong>
+                    dropdown below (qBittorrent, Transmission, or Deluge)
+                  </li>
+                  <li>
+                    Enter your client's
+                    <strong>URL</strong> (e.g.
+                    <code style="font-size: 11px"
+                      >http://192.168.1.100:8080</code
+                    >)
+                  </li>
+                  <li>
+                    Optionally fill in your <strong>credentials</strong> if your
+                    client requires authentication
+                  </li>
+                  <li>
+                    Click <strong>Test Connection</strong> to verify everything
+                    is working, then <strong>Save</strong>
+                  </li>
+                  <li>
+                    On any Nyaa torrent page, use the
+                    <strong style="color: #337ab7"
+                      ><i class="fa fa-cloud-upload"></i> Send</strong
+                    >
+                    button to send the torrent directly to your client
+                  </li>
+                </ol>
+                <p style="font-style: italic; margin-top: 10px; color: #666">
+                  Make sure
+                  <strong style="color: #337ab7"
+                    >Show Send to Client Button</strong
+                  >
+                  is enabled under
+                  <strong>Settings → Interface Settings</strong>, otherwise the
+                  Send button will not appear on Nyaa pages.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div
+            class="setting-item"
+            style="
+              flex-direction: column;
+              align-items: stretch;
+              gap: 10px;
+              border-bottom: 0;
+              padding: 0;
+            "
+          >
             <div class="tc-field-group">
               <label class="tc-label">Client</label>
               <select id="tcClientSelect" class="tc-select">
@@ -27,7 +140,12 @@
             </div>
 
             <div class="tc-field-group">
-              <label class="tc-label">Torrent Client URL <span style="color:#666;font-weight:400;font-size:11px;">(e.g. http://192.168.1.100:8080)</span></label>
+              <label class="tc-label"
+                >Torrent Client URL
+                <span style="color: #666; font-weight: 400; font-size: 11px"
+                  >(e.g. http://192.168.1.100:8080)</span
+                ></label
+              >
               <input
                 type="text"
                 id="tcIp"
@@ -37,7 +155,12 @@
             </div>
 
             <div class="tc-field-group">
-              <label class="tc-label">Authentication <span style="color:#666;font-weight:400;font-size:11px;">(optional)</span></label>
+              <label class="tc-label"
+                >Authentication
+                <span style="color: #666; font-weight: 400; font-size: 11px"
+                  >(optional)</span
+                ></label
+              >
               <div id="tcUsernameWrapper">
                 <input
                   type="text"
@@ -47,31 +170,54 @@
                   autocomplete="off"
                 />
               </div>
-              <div class="api-key-wrapper" style="margin-top:6px;">
+              <div class="api-key-wrapper" style="margin-top: 6px">
                 <input
                   type="password"
                   id="tcPassword"
                   placeholder="Password"
                   class="tc-input api-key-input"
-                  style="padding-right:36px;"
+                  style="padding-right: 36px"
                   autocomplete="new-password"
                 />
-                <button type="button" id="tcPasswordToggle" class="api-key-eye" title="Show/hide password">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                <button
+                  type="button"
+                  id="tcPasswordToggle"
+                  class="api-key-eye"
+                  title="Show/hide password"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="15"
+                    height="15"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
                   </svg>
                 </button>
               </div>
             </div>
 
             <div class="tc-actions">
-              <button type="button" id="tcTestBtn" class="tc-btn tc-btn-test">Test Connection</button>
-              <button type="button" id="tcSaveBtn" class="tc-btn tc-btn-save">Save</button>
+              <button type="button" id="tcTestBtn" class="tc-btn tc-btn-test">
+                Test Connection
+              </button>
+              <button type="button" id="tcSaveBtn" class="tc-btn tc-btn-save">
+                Save
+              </button>
               <span id="tcStatus" class="tc-status"></span>
             </div>
 
-            <p style="color:#666; font-size:11px; margin:0; line-height:1.5;">
-              ⚠ If your server doesn't require authentication for local networks, leave the credentials fields blank.
+            <p
+              style="color: #666; font-size: 11px; margin: 0; line-height: 1.5"
+            >
+              ⚠ If your server doesn't require authentication for local
+              networks, leave the credentials fields blank.
             </p>
           </div>
         </div>
@@ -313,10 +459,7 @@
           <div class="setting-item">
             <span>Show Send to Client Button</span>
             <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showSendButtonsToggle"
-              >
+              <button class="toggle-button" data-toggle="showSendButtonsToggle">
                 <span class="toggle-indicator"></span>
               </button>
             </div>
@@ -448,9 +591,21 @@
         <!-- ameNZB Settings -->
         <div class="settings-category">
           <h3 class="category-title">ameNZB</h3>
-          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 8px;">
+          <div
+            class="setting-item"
+            style="flex-direction: column; align-items: stretch; gap: 8px"
+          >
             <span>API Key</span>
-            <span style="color: #999; font-size: 12px;">Your API key can be found in <a href="https://amenzb.moe/profile" target="_blank" style="color: #337ab7;">amenzb.moe/profile</a> under API Access.</span>
+            <span style="color: #999; font-size: 12px"
+              >Your API key can be found in
+              <a
+                href="https://amenzb.moe/profile"
+                target="_blank"
+                style="color: #337ab7"
+                >amenzb.moe/profile</a
+              >
+              under API Access.</span
+            >
             <div class="api-key-wrapper">
               <input
                 type="password"
@@ -458,15 +613,43 @@
                 placeholder="Enter your ameNZB API key"
                 class="api-key-input"
               />
-              <button type="button" id="ameNZBApiKeyToggle" class="api-key-eye" title="Show/hide API key">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              <button
+                type="button"
+                id="ameNZBApiKeyToggle"
+                class="api-key-eye"
+                title="Show/hide API key"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="15"
+                  height="15"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
                 </svg>
               </button>
             </div>
             <div class="api-key-actions">
-              <button type="button" id="ameNZBApiKeyTest" class="api-key-action-btn api-key-test-btn">Test</button>
-              <button type="button" id="ameNZBApiKeyClear" class="api-key-action-btn api-key-clear-btn">Clear</button>
+              <button
+                type="button"
+                id="ameNZBApiKeyTest"
+                class="api-key-action-btn api-key-test-btn"
+              >
+                Test
+              </button>
+              <button
+                type="button"
+                id="ameNZBApiKeyClear"
+                class="api-key-action-btn api-key-clear-btn"
+              >
+                Clear
+              </button>
               <span id="ameNZBTestStatus" class="api-key-test-status"></span>
             </div>
           </div>
@@ -485,12 +668,21 @@
           </div>
 
           <div class="setting-item amenzb-quota-row">
-            <span style="color: #999;">API Requests Today</span>
-            <span id="ameNZBRequestCount" style="color: #999; font-size: 13px;">0 / 10,000</span>
+            <span style="color: #999">API Requests Today</span>
+            <span id="ameNZBRequestCount" style="color: #999; font-size: 13px"
+              >0 / 10,000</span
+            >
           </div>
 
-          <div class="setting-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-            <span style="color: #999; font-size: 12px;">⚠ API calls must come from your pinned IP address (set on ameNZB in Account Settings → IP Security). Requests from other IPs are rejected.</span>
+          <div
+            class="setting-item"
+            style="flex-direction: column; align-items: flex-start; gap: 4px"
+          >
+            <span style="color: #999; font-size: 12px"
+              >⚠ API calls must come from your pinned IP address (set on ameNZB
+              in Account Settings → IP Security). Requests from other IPs are
+              rejected.</span
+            >
           </div>
         </div>
 
@@ -500,17 +692,21 @@
           <div class="setting-item">
             <span>Display nekoBT Links</span>
             <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showNekoBTLinksToggle"
-              >
+              <button class="toggle-button" data-toggle="showNekoBTLinksToggle">
                 <span class="toggle-indicator"></span>
               </button>
             </div>
           </div>
 
-          <div class="setting-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-            <span style="color: #999; font-size: 12px;">⚠ Rate limits are enforced but not publicly disclosed. If exceeded, requests will silently fail until the limit resets.</span>
+          <div
+            class="setting-item"
+            style="flex-direction: column; align-items: flex-start; gap: 4px"
+          >
+            <span style="color: #999; font-size: 12px"
+              >⚠ Rate limits are enforced but not publicly disclosed. If
+              exceeded, requests will silently fail until the limit
+              resets.</span
+            >
           </div>
         </div>
 
@@ -542,7 +738,9 @@
             </p>
             <div class="sp-options-grid">
               <div class="sp-option">
-                <label for="screenshotPreviewHoverDelay" class="sp-label">Hover delay (seconds)</label>
+                <label for="screenshotPreviewHoverDelay" class="sp-label"
+                  >Hover delay (seconds)</label
+                >
                 <input
                   type="number"
                   id="screenshotPreviewHoverDelay"
@@ -553,7 +751,9 @@
                 />
               </div>
               <div class="sp-option">
-                <label for="screenshotPreviewSlideDelay" class="sp-label">Image change interval (seconds)</label>
+                <label for="screenshotPreviewSlideDelay" class="sp-label"
+                  >Image change interval (seconds)</label
+                >
                 <input
                   type="number"
                   id="screenshotPreviewSlideDelay"
@@ -569,10 +769,7 @@
           <div class="setting-item">
             <span>Display Best Release (Seadex)</span>
             <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showSeaDexToggle"
-              >
+              <button class="toggle-button" data-toggle="showSeaDexToggle">
                 <span class="toggle-indicator"></span>
               </button>
             </div>

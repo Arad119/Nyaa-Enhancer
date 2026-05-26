@@ -500,9 +500,23 @@ document.getElementById("tcTestBtn").addEventListener("click", async () => {
     return;
   }
 
-  // Request optional host permissions before attempting connection
+  // Save settings before requesting permissions — Chrome closes the popup during
+  // the permission prompt, so values must be persisted to survive the round-trip.
+  saveTorrentClientSettings();
+
+  // Request permission only for the specific host the user entered
+  let parsedOrigin;
+  try {
+    const u = new URL(url);
+    parsedOrigin = `${u.origin}/*`;
+  } catch {
+    statusEl.textContent = "✗ Invalid URL";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+
   const granted = await new Promise((resolve) => {
-    chrome.permissions.request({ origins: ["http://*/*", "https://*/*"] }, resolve);
+    chrome.permissions.request({ origins: [parsedOrigin] }, resolve);
   });
 
   if (!granted) {

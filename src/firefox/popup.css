@@ -1,5 +1,5 @@
 body {
-  width: 500px;
+  width: 540px;
   margin: 0;
   padding: 0;
   background: #1a1a1a;
@@ -22,14 +22,15 @@ body {
   background: transparent;
   border: none;
   color: #999;
-  padding: 10px 20px;
+  padding: 10px 8px;
   cursor: pointer;
   flex: 1;
   border-radius: 4px;
   font-family: inherit;
   font-weight: 500;
-  font-size: 15px;
+  font-size: 13px;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .nav-button:hover {
@@ -480,4 +481,189 @@ body {
   padding: 8px;
   background: #2a2a2a;
   border-radius: 4px;
+}
+
+/* Torrent Client Tab */
+.tc-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tc-label {
+  font-size: 13px;
+  color: #ccc;
+  font-weight: 500;
+}
+
+.tc-input {
+  width: 100%;
+  padding: 7px 10px;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #fff;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 13px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.tc-input:focus {
+  outline: none;
+  border-color: #4caf50;
+}
+
+.tc-input::placeholder {
+  color: #555;
+}
+
+.tc-select {
+  width: 100%;
+  padding: 7px 10px;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #fff;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color 0.2s;
+}
+
+.tc-select:focus {
+  outline: none;
+  border-color: #4caf50;
+}
+
+.tc-select option {
+  background: #2a2a2a;
+  color: #fff;
+}
+
+.tc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tc-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 4px;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.tc-btn-test {
+  background: #337ab7;
+  color: #fff;
+}
+
+.tc-btn-test:hover:not(:disabled) {
+  background: #2a6496;
+}
+
+.tc-btn-test:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tc-btn-save {
+  background: #4caf50;
+  color: #fff;
+}
+
+.tc-btn-save:hover {
+  background: #45a049;
+}
+
+.tc-status {
+  font-size: 12px;
+  font-weight: 500;
+  flex: 1;
+}
+
+/* Screenshot Preview options */
+.setting-feature-description {
+  padding: 0 0 12px;
+  font-size: 11px;
+  color: #888;
+  line-height: 1.5;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.screenshot-preview-options {
+  flex-direction: column;
+  align-items: stretch;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.sp-options-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.sp-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sp-label {
+  font-size: 13px;
+  color: #ccc;
+  flex: 1;
+}
+
+.sp-input {
+  width: 80px;
+  padding: 6px 8px;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #fff;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+  box-sizing: border-box;
+  transition:
+    border-color 0.2s,
+    opacity 0.2s;
+}
+
+.sp-input:focus {
+  outline: none;
+  border-color: #4caf50;
+}
+
+.sp-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sp-input::-webkit-outer-spin-button,
+.sp-input::-webkit-inner-spin-button {
+  opacity: 1;
+}
+
+.sp-disclaimer {
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: #e8a838;
+  line-height: 1.45;
+  display: none;
+}
+
+.sp-disclaimer.visible {
+  display: block;
 }

@@ -3397,11 +3397,13 @@ function createSendButton(magnetUrl, extraStyles = {}) {
       const msg =
         result?.error === "already_exists"
           ? "Torrent already exists in your client."
-          : result?.error === "auth_failed"
-            ? "Authentication failed — check your credentials."
-            : result?.error === "auth_required"
-              ? "Torrent client requires authentication."
-              : "Failed to send torrent. Check the client connection.";
+          : result?.error === "wrong_client"
+            ? "Wrong torrent client selected for this URL. Fix it in the extension popup."
+            : result?.error === "auth_failed"
+              ? "Authentication failed — check your credentials."
+              : result?.error === "auth_required"
+                ? "Torrent client requires authentication."
+                : "Failed to send torrent. Check the client connection.";
       showNotification(msg, false);
       return;
     }

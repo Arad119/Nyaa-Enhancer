@@ -503,8 +503,69 @@ document.getElementById("tcSaveBtn").addEventListener("click", () => {
   }, 2000);
 });
 
-// Test Connection button
-document.getElementById("tcTestBtn").addEventListener("click", async () => {
+// Firefox cannot include a port in match patterns (unlike Chrome's `${origin}/*`).
+// Hostname-only patterns still cover every port on that host (e.g. :8114).
+function torrentOriginsForUrl(url) {
+  const u = new URL(url.trim());
+  return [`${u.protocol}//${u.hostname}/*`];
+}
+
+function showTorrentTestResult(result, client, statusEl) {
+  if (!result) {
+    statusEl.textContent = "✗ No response from background";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+  if (result.ok) {
+    const label = CLIENT_LABELS[client] || client;
+    statusEl.textContent = result.version
+      ? `✓ Connected! (${label} ${result.version})`
+      : `✓ Connected! (${label})`;
+    statusEl.style.color = "#4caf50";
+    saveTorrentClientSettings();
+    return;
+  }
+  switch (result.error) {
+    case "auth_failed":
+      statusEl.textContent = "✗ Authentication failed - wrong credentials";
+      break;
+    case "auth_required":
+      statusEl.textContent = "✗ Server requires authentication";
+      break;
+    case "permission_denied":
+      statusEl.textContent =
+        "✗ Missing network permission. Click Test Connection and allow access.";
+      break;
+    case "wrong_client": {
+      const detected =
+        CLIENT_LABELS[result.detectedClient] || result.detectedClient;
+      const selected = CLIENT_LABELS[client] || client;
+      statusEl.textContent = `✗ This URL is ${detected}, not ${selected}. Change the client dropdown.`;
+      break;
+    }
+    default:
+      statusEl.textContent = result.message
+        ? `✗ Connection failed: ${result.message}`
+        : "✗ Connection failed. Check the URL";
+  }
+  statusEl.style.color = "#ff4444";
+}
+
+function runTorrentConnectionTest(client, url, username, password, statusEl, testBtn) {
+  testBtn.disabled = true;
+  statusEl.textContent = "Testing...";
+  statusEl.style.color = "#999";
+  browser.runtime
+    .sendMessage({ type: "testConnection", client, url, username, password })
+    .then((result) => {
+      testBtn.disabled = false;
+      showTorrentTestResult(result, client, statusEl);
+    });
+}
+
+// Test Connection button — permissions.request must run in the same click turn as the
+// user gesture (no await before it), or Firefox will not show the prompt.
+document.getElementById("tcTestBtn").addEventListener("click", () => {
   const client = document.getElementById("tcClientSelect").value;
   const url = document.getElementById("tcIp").value.trim();
   const username = document.getElementById("tcUsername").value.trim();
@@ -524,70 +585,30 @@ document.getElementById("tcTestBtn").addEventListener("click", async () => {
     return;
   }
 
-  // Save settings before requesting permissions — Firefox closes the popup during
-  // the permission prompt, so values must be persisted to survive the round-trip.
-  saveTorrentClientSettings();
-
-  // Request permission only for the specific host the user entered
-  let parsedOrigin;
   try {
-    const u = new URL(url);
-    parsedOrigin = `${u.origin}/*`;
+    new URL(url);
   } catch {
     statusEl.textContent = "✗ Invalid URL";
     statusEl.style.color = "#ff4444";
     return;
   }
 
-  const granted = await new Promise((resolve) => {
-    browser.permissions.request({ origins: [parsedOrigin] }, resolve);
-  });
+  // Save settings before requesting permissions — Firefox closes the popup during
+  // the permission prompt, so values must be persisted to survive the round-trip.
+  saveTorrentClientSettings();
 
-  if (!granted) {
-    statusEl.textContent = "✗ Host permission denied";
-    statusEl.style.color = "#ff4444";
-    return;
-  }
-
-  testBtn.disabled = true;
-  statusEl.textContent = "Testing...";
+  const origins = torrentOriginsForUrl(url);
+  statusEl.textContent = `Requesting access for ${new URL(url).origin}... Close the popup (if it doesnt automatically close) and accept the permission request.`;
   statusEl.style.color = "#999";
 
-  const result = await new Promise((resolve) => {
-    browser.runtime.sendMessage(
-      { type: "testConnection", client, url, username, password },
-      resolve,
-    );
-  });
-
-  testBtn.disabled = false;
-
-  if (!result) {
-    statusEl.textContent = "✗ No response from background";
-    statusEl.style.color = "#ff4444";
-    return;
-  }
-
-  if (result.ok) {
-    const label = CLIENT_LABELS[client] || client;
-    statusEl.textContent = result.version
-      ? `✓ Connected! (${label} ${result.version})`
-      : `✓ Connected! (${label})`;
-    statusEl.style.color = "#4caf50";
-    saveTorrentClientSettings();
-  } else {
-    switch (result.error) {
-      case "auth_failed":
-        statusEl.textContent = "✗ Authentication failed - wrong credentials";
-        break;
-      case "auth_required":
-        statusEl.textContent = "✗ Server requires authentication";
-        break;
-      default:
-        statusEl.textContent = "✗ Connection failed. Check the URL";
+  browser.permissions.request({ origins }).then((granted) => {
+    if (!granted) {
+      statusEl.textContent = "✗ Host permission denied";
+      statusEl.style.color = "#ff4444";
+      return;
     }
-    statusEl.style.color = "#ff4444";
-  }
+    runTorrentConnectionTest(client, url, username, password, statusEl, testBtn);
+  });
 });
 
 // ── End Torrent Client Tab ───────────────────────────────────────────────────

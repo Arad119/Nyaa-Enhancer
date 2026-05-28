@@ -61,7 +61,7 @@ function loadStoredPreferences() {
       },
       (items) => {
         resolve(items);
-      }
+      },
     );
   });
 }
@@ -150,7 +150,7 @@ async function addCopyButton() {
   document.addEventListener("change", (e) => {
     if (e.target.classList.contains("magnet-checkbox")) {
       const checkedBoxes = document.querySelectorAll(
-        ".magnet-checkbox:checked"
+        ".magnet-checkbox:checked",
       ).length;
       selectionCounter.textContent = `${checkedBoxes} selected`;
     }
@@ -229,7 +229,7 @@ async function addCheckboxColumn() {
     magnetHeader.title = "Magnet"; // Add title for identification
     const checkboxHeader = headerRow.querySelector(".magnet-checkbox-column");
     const atHeader = Array.from(
-      headerRow.querySelectorAll("th.text-center")
+      headerRow.querySelectorAll("th.text-center"),
     ).find((header) => header.textContent === "AT");
 
     if (atHeader) {
@@ -382,7 +382,7 @@ async function addCheckboxColumn() {
 
         if (e.shiftKey) {
           const checkboxes = Array.from(
-            document.querySelectorAll(".magnet-checkbox")
+            document.querySelectorAll(".magnet-checkbox"),
           );
           const start = checkboxes.indexOf(this);
           const end = checkboxes.indexOf(lastChecked);
@@ -463,7 +463,7 @@ function copySelectedMagnets() {
       .then(() => {
         showNotification(
           `${selectedMagnets.length} Magnet links copied to clipboard!`,
-          true
+          true,
         );
       })
       .catch((err) => {
@@ -500,7 +500,7 @@ function copyAllMagnets() {
       .then(() => {
         showNotification(
           `Copied ${allMagnets.length} magnet links to clipboard!`,
-          true
+          true,
         );
       })
       .catch((err) => {
@@ -516,7 +516,7 @@ function copyAllMagnets() {
 // Shows how many torrents are currently selected
 function updateSelectionCounter(selectionCounter) {
   const checkedBoxes = document.querySelectorAll(
-    ".magnet-checkbox:checked"
+    ".magnet-checkbox:checked",
   ).length;
   selectionCounter.textContent = `${checkedBoxes} selected`;
 }
@@ -739,7 +739,7 @@ async function downloadIndividualTorrents(torrents) {
   // Show progress notification
   progressNotification.textContent = `Progress: 0/${torrents.length} files`;
 
-  // Download files sequentially to avoid overwhelming the browser
+  // Download files sequentially to avoid overwhelming the chrome
   for (const torrent of torrents) {
     try {
       // Fetch the torrent file
@@ -886,7 +886,7 @@ async function handleSettingChange(setting, value) {
     case "showMonitorButtons":
       // Update keyword monitor button on homepage
       const keywordMonitorBtn = document.querySelector(
-        ".keyword-monitor-button"
+        ".keyword-monitor-button",
       );
       if (keywordMonitorBtn) {
         keywordMonitorBtn.style.display = value ? "inline-block" : "none";
@@ -912,7 +912,7 @@ async function handleSettingChange(setting, value) {
 
         // Remove checkbox header and cells
         const checkboxHeader = document.querySelector(
-          ".magnet-checkbox-column"
+          ".magnet-checkbox-column",
         );
         if (checkboxHeader) {
           checkboxHeader.remove();
@@ -960,10 +960,10 @@ async function handleSettingChange(setting, value) {
 
           // Find the correct position to insert the magnet header
           const checkboxHeader = headerRow.querySelector(
-            ".magnet-checkbox-column"
+            ".magnet-checkbox-column",
           );
           const atHeader = Array.from(
-            headerRow.querySelectorAll("th.text-center")
+            headerRow.querySelectorAll("th.text-center"),
           ).find((header) => header.textContent === "AT");
 
           if (atHeader) {
@@ -1052,7 +1052,7 @@ async function handleSettingChange(setting, value) {
 
         // Remove Animetosho row from view page if it exists
         const animeRow = Array.from(document.querySelectorAll(".row")).find(
-          (row) => row.textContent.includes("Animetosho:")
+          (row) => row.textContent.includes("Animetosho:"),
         );
         if (animeRow) {
           const infoHashKbd = animeRow.querySelector("kbd");
@@ -1078,10 +1078,10 @@ async function handleSettingChange(setting, value) {
 
           // Always insert AT before Magnet and Checkbox
           const magnetHeader = Array.from(
-            headerRow.querySelectorAll("th.text-center")
+            headerRow.querySelectorAll("th.text-center"),
           ).find((header) => header.textContent === "Magnet");
           const checkboxHeader = headerRow.querySelector(
-            ".magnet-checkbox-column"
+            ".magnet-checkbox-column",
           );
 
           if (magnetHeader) {
@@ -1194,7 +1194,7 @@ async function handleSettingChange(setting, value) {
         const containsKeyword =
           prefs.keywordFilterEnabled &&
           prefs.keywords.some((keyword) =>
-            title?.toLowerCase().includes(keyword.toLowerCase())
+            title?.toLowerCase().includes(keyword.toLowerCase()),
           );
 
         // Only update display if needed
@@ -1236,7 +1236,7 @@ async function handleSettingChange(setting, value) {
         // Find and remove the changelog nav item
         const navList = document.querySelector(".nav.navbar-nav");
         const changelogItem = Array.from(
-          navList?.querySelectorAll("li") || []
+          navList?.querySelectorAll("li") || [],
         ).find((li) => li.textContent.trim() === "Changelog");
         if (changelogItem) {
           changelogItem.remove();
@@ -1249,7 +1249,7 @@ async function handleSettingChange(setting, value) {
     case "useNewATDomain":
       if (window.location.pathname.startsWith("/view/")) {
         const atRow = Array.from(document.querySelectorAll(".row")).find(
-          (row) => row.textContent.includes("Animetosho:")
+          (row) => row.textContent.includes("Animetosho:"),
         );
         if (atRow) {
           const atAnchor = atRow.querySelector("a");
@@ -1268,10 +1268,7 @@ async function handleSettingChange(setting, value) {
       } else {
         document.querySelectorAll(".at-column a").forEach((link) => {
           const newDomain = value ? "animetosho.xyz" : "animetosho.org";
-          link.href = link.href.replace(
-            /animetosho\.(org|xyz)/,
-            newDomain
-          );
+          link.href = link.href.replace(/animetosho\.(org|xyz)/, newDomain);
         });
       }
       break;
@@ -1321,13 +1318,13 @@ async function handleSettingChange(setting, value) {
     case "screenshotPreviewHoverDelay":
       screenshotPreview.hoverDelayMs = Math.max(
         0,
-        Math.round((parseFloat(value) || 0) * 1000)
+        Math.round((parseFloat(value) || 0) * 1000),
       );
       break;
     case "screenshotPreviewSlideDelay":
       screenshotPreview.slideDelayMs = Math.max(
         100,
-        Math.round((parseFloat(value) || 0) * 1000)
+        Math.round((parseFloat(value) || 0) * 1000),
       );
       break;
     case "showSendButtons":
@@ -1345,7 +1342,9 @@ async function handleSettingChange(setting, value) {
             if (th.title === "Send") th.remove();
           });
           // Remove all Send cells
-          document.querySelectorAll(".send-column").forEach((cell) => cell.remove());
+          document
+            .querySelectorAll(".send-column")
+            .forEach((cell) => cell.remove());
         } else {
           // Re-add Send column via addCheckboxColumn (it guards against duplicates)
           addCheckboxColumn();
@@ -1366,10 +1365,10 @@ async function addAnimetoshoToViewPage() {
   // Check if it's an English-translated anime
   const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
   const isAnime = Array.from(categoryLinks).some(
-    (link) => link.textContent === "Anime"
+    (link) => link.textContent === "Anime",
   );
   const isEnglish = Array.from(categoryLinks).some(
-    (link) => link.textContent === "English-translated"
+    (link) => link.textContent === "English-translated",
   );
 
   if (!isAnime || !isEnglish) return;
@@ -1381,7 +1380,7 @@ async function addAnimetoshoToViewPage() {
 
   // Find the info hash row
   const infoHashRow = Array.from(document.querySelectorAll(".row")).find(
-    (row) => row.textContent.includes("Info hash:")
+    (row) => row.textContent.includes("Info hash:"),
   );
 
   if (!infoHashRow) return;
@@ -1389,7 +1388,7 @@ async function addAnimetoshoToViewPage() {
   // Get the info hash content, removing the offset class
   const infoHashContent = infoHashRow.innerHTML.replace(
     "col-md-offset-6 col-md-1",
-    "col-md-1"
+    "col-md-1",
   );
 
   // Create the new row structure
@@ -1418,10 +1417,10 @@ async function addAnimetoshoComments() {
 
   const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
   const isAnime = Array.from(categoryLinks).some(
-    (link) => link.textContent === "Anime"
+    (link) => link.textContent === "Anime",
   );
   const isEnglish = Array.from(categoryLinks).some(
-    (link) => link.textContent === "English-translated"
+    (link) => link.textContent === "English-translated",
   );
 
   if (!isAnime || !isEnglish) return;
@@ -1473,7 +1472,7 @@ async function addAnimetoshoComments() {
     if (toshoAvatarsStyle) {
       toshoCommentsContainer.insertAdjacentElement(
         "beforebegin",
-        toshoAvatarsStyle.cloneNode(true)
+        toshoAvatarsStyle.cloneNode(true),
       );
     }
 
@@ -1512,8 +1511,7 @@ async function addAnimetoshoComments() {
 
       function makeCommentElement(toshoComment) {
         const userEl = toshoComment.getElementsByClassName("comment_user")[0];
-        const commentInfo =
-          userEl?.children[0]?.innerHTML?.split(" — ") || [];
+        const commentInfo = userEl?.children[0]?.innerHTML?.split(" — ") || [];
         const time = commentInfo[0] || "";
         const user = commentInfo[1] || "Unknown";
         const commentBody =
@@ -1586,7 +1584,9 @@ function removeAmeNZBRow() {
     const infoHash = kbd.textContent;
 
     // If a standalone nekoBT row exists, re-integrate it into the info hash slot
-    const nekoBTRow = document.querySelector(".nekobt-row:not([data-integrated])");
+    const nekoBTRow = document.querySelector(
+      ".nekobt-row:not([data-integrated])",
+    );
     if (nekoBTRow) {
       const nekoBTHref = nekoBTRow.querySelector("a")?.href || "";
       nekoBTRow.remove();
@@ -1634,12 +1634,11 @@ async function addAmeNZBToViewPage() {
 
     const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
     const isAnime = Array.from(categoryLinks).some(
-      (link) => link.textContent === "Anime"
+      (link) => link.textContent === "Anime",
     );
     const isSupported = Array.from(categoryLinks).some(
       (link) =>
-        link.textContent === "English-translated" ||
-        link.textContent === "Raw"
+        link.textContent === "English-translated" || link.textContent === "Raw",
     );
 
     if (!isAnime || !isSupported) return;
@@ -1674,7 +1673,7 @@ async function addAmeNZBToViewPage() {
     // Otherwise (Raw or AT disabled) integrate ameNZB into the info hash row
     // so the layout mirrors what the AT row does on English-translated pages.
     const atRow = Array.from(document.querySelectorAll(".row")).find((row) =>
-      row.textContent.includes("Animetosho:")
+      row.textContent.includes("Animetosho:"),
     );
 
     if (atRow) {
@@ -1692,7 +1691,9 @@ async function addAmeNZBToViewPage() {
     } else {
       // Replace the offset info hash row with ameNZB on the left + info hash on the right.
       // If nekoBT is already integrated there, evict it to a standalone row first.
-      const integratedNekoBT = document.querySelector(".nekobt-row[data-integrated]");
+      const integratedNekoBT = document.querySelector(
+        ".nekobt-row[data-integrated]",
+      );
       if (integratedNekoBT) {
         const nekoBTHref = integratedNekoBT.querySelector("a")?.href || "";
         const newAmeNZBRow = document.createElement("div");
@@ -1724,7 +1725,7 @@ async function addAmeNZBToViewPage() {
         }
       } else {
         const infoHashRow = Array.from(document.querySelectorAll(".row")).find(
-          (row) => row.textContent.includes("Info hash:")
+          (row) => row.textContent.includes("Info hash:"),
         );
         if (!infoHashRow) return;
 
@@ -1762,9 +1763,9 @@ function incrementAmeNZBRequestCount() {
             : 1;
         chrome.storage.sync.set(
           { ameNZBRequestCount: count, ameNZBRequestDate: todayUTC },
-          resolve
+          resolve,
         );
-      }
+      },
     );
   });
 }
@@ -1805,12 +1806,11 @@ async function addNekoBTToViewPage() {
 
     const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
     const isAnime = Array.from(categoryLinks).some(
-      (link) => link.textContent === "Anime"
+      (link) => link.textContent === "Anime",
     );
     const isSupported = Array.from(categoryLinks).some(
       (link) =>
-        link.textContent === "English-translated" ||
-        link.textContent === "Raw"
+        link.textContent === "English-translated" || link.textContent === "Raw",
     );
 
     if (!isAnime || !isSupported) return;
@@ -1845,7 +1845,7 @@ async function addNekoBTToViewPage() {
     const anchorRow =
       document.querySelector(".amenzb-row") ||
       Array.from(document.querySelectorAll(".row")).find((row) =>
-        row.textContent.includes("Animetosho:")
+        row.textContent.includes("Animetosho:"),
       );
 
     if (anchorRow) {
@@ -1863,7 +1863,7 @@ async function addNekoBTToViewPage() {
     } else {
       // Replace the offset info hash row with nekoBT on the left + info hash on the right
       const infoHashRow = Array.from(document.querySelectorAll(".row")).find(
-        (row) => row.textContent.includes("Info hash:")
+        (row) => row.textContent.includes("Info hash:"),
       );
       if (!infoHashRow) return;
 
@@ -1936,9 +1936,7 @@ async function applySeaDexToListPage() {
 
   rows.forEach((row) => {
     const magnetLink = row.querySelector('a[href^="magnet:"]');
-    const infoHash = magnetLink
-      ? getInfoHashFromMagnet(magnetLink.href)
-      : "";
+    const infoHash = magnetLink ? getInfoHashFromMagnet(magnetLink.href) : "";
     infoHashList.push({ element: row, infoHash });
   });
 
@@ -1971,10 +1969,10 @@ async function applySeaDexToListPage() {
   if (!json.items?.length) return;
 
   const bestHashes = new Set(
-    json.items.filter((t) => t.isBest).map((t) => t.infoHash.toLowerCase())
+    json.items.filter((t) => t.isBest).map((t) => t.infoHash.toLowerCase()),
   );
   const altHashes = new Set(
-    json.items.filter((t) => !t.isBest).map((t) => t.infoHash.toLowerCase())
+    json.items.filter((t) => !t.isBest).map((t) => t.infoHash.toLowerCase()),
   );
 
   for (const { element, infoHash } of validEntries) {
@@ -1990,55 +1988,59 @@ async function applySeaDexToViewPage() {
 
   seaDexViewFetchInProgress = true;
   try {
-  const infoHashKbd = document.querySelector("kbd");
-  if (!infoHashKbd) return;
-  const infoHash = infoHashKbd.textContent.trim().toLowerCase();
-  if (!infoHash) return;
+    const infoHashKbd = document.querySelector("kbd");
+    if (!infoHashKbd) return;
+    const infoHash = infoHashKbd.textContent.trim().toLowerCase();
+    if (!infoHash) return;
 
-  const apiUrl =
-    `https://releases.moe/api/collections/entries/records` +
-    `?filter=${encodeURIComponent(`trs.infoHash?="${infoHash}"`)}&expand=trs&skipTotal=true`;
+    const apiUrl =
+      `https://releases.moe/api/collections/entries/records` +
+      `?filter=${encodeURIComponent(`trs.infoHash?="${infoHash}"`)}&expand=trs&skipTotal=true`;
 
-  const result = await seaDexFetch(apiUrl);
-  if (!result?.ok) return;
+    const result = await seaDexFetch(apiUrl);
+    if (!result?.ok) return;
 
-  let json;
-  try {
-    json = JSON.parse(result.text);
-  } catch {
-    return;
-  }
-
-  if (!json.items?.length) return;
-
-  // Determine best/alt from the expanded trs array
-  const matchingTr = json.items[0].expand?.trs?.find(
-    (t) => t.infoHash?.toLowerCase() === infoHash
-  );
-  const isBest = matchingTr?.isBest ?? false;
-
-  // Apply highlight class to the main panel
-  const panel = document.querySelector(".panel");
-  if (panel) {
-    panel.classList.add(isBest ? "seadex-best" : "seadex-best-alt");
-  }
-
-  // Add "Go to SeaDex" button(s) near the magnet link
-  const magnetLink = document.querySelector('a[href^="magnet:"]');
-  if (magnetLink) {
-    for (const entry of json.items) {
-      const seaDexBtn = document.createElement("button");
-      seaDexBtn.className = "magnet-button seadex-link";
-      seaDexBtn.textContent = "Go to SeaDex";
-      seaDexBtn.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
-      seaDexBtn.style.fontWeight = "500";
-      seaDexBtn.style.marginLeft = "10px";
-      seaDexBtn.addEventListener("click", () => {
-        window.open(`https://releases.moe/${entry.alID}`, "_blank", "noopener,noreferrer");
-      });
-      magnetLink.parentNode.insertBefore(seaDexBtn, magnetLink.nextSibling);
+    let json;
+    try {
+      json = JSON.parse(result.text);
+    } catch {
+      return;
     }
-  }
+
+    if (!json.items?.length) return;
+
+    // Determine best/alt from the expanded trs array
+    const matchingTr = json.items[0].expand?.trs?.find(
+      (t) => t.infoHash?.toLowerCase() === infoHash,
+    );
+    const isBest = matchingTr?.isBest ?? false;
+
+    // Apply highlight class to the main panel
+    const panel = document.querySelector(".panel");
+    if (panel) {
+      panel.classList.add(isBest ? "seadex-best" : "seadex-best-alt");
+    }
+
+    // Add "Go to SeaDex" button(s) near the magnet link
+    const magnetLink = document.querySelector('a[href^="magnet:"]');
+    if (magnetLink) {
+      for (const entry of json.items) {
+        const seaDexBtn = document.createElement("button");
+        seaDexBtn.className = "magnet-button seadex-link";
+        seaDexBtn.textContent = "Go to SeaDex";
+        seaDexBtn.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
+        seaDexBtn.style.fontWeight = "500";
+        seaDexBtn.style.marginLeft = "10px";
+        seaDexBtn.addEventListener("click", () => {
+          window.open(
+            `https://releases.moe/${entry.alID}`,
+            "_blank",
+            "noopener,noreferrer",
+          );
+        });
+        magnetLink.parentNode.insertBefore(seaDexBtn, magnetLink.nextSibling);
+      }
+    }
   } finally {
     seaDexViewFetchInProgress = false;
   }
@@ -2070,7 +2072,7 @@ const screenshotPreview = {
   imgEl: null,
   loaderEl: null,
   counterEl: null,
-  imageCache: new Map(),     // viewUrl -> string[]  (result of page parse)
+  imageCache: new Map(), // viewUrl -> string[]  (result of page parse)
   preloadedImages: new Map(), // imageUrl -> HTMLImageElement (preloaded pixel data)
   inflightFetches: new Map(), // viewUrl -> Promise<string[]>
   mouseX: 0,
@@ -2078,9 +2080,9 @@ const screenshotPreview = {
   images: [],
   imageIndex: 0,
   delegationInitialized: false,
-  titleStore: new Map(),   // anchor element -> original title string
-  titleObserver: null,     // MutationObserver watching for new table rows
-  prefetchTimer: null,     // fires at hoverDelayMs/2 to start background fetch
+  titleStore: new Map(), // anchor element -> original title string
+  titleObserver: null, // MutationObserver watching for new table rows
+  prefetchTimer: null, // fires at hoverDelayMs/2 to start background fetch
 };
 
 const SCREENSHOT_IMG_REGEX = /\.(png|jpe?g|webp|gif|bmp|avif)(\?|#|$)/i;
@@ -2098,7 +2100,7 @@ function ensureScreenshotPreviewDelegation() {
         updateScreenshotPreviewPosition();
       }
     },
-    true
+    true,
   );
 }
 
@@ -2208,9 +2210,12 @@ async function startScreenshotPreview(anchor) {
   // Confirm the mouse is actually still over the anchor at timer-fire time.
   const underCursor = document.elementFromPoint(
     screenshotPreview.mouseX,
-    screenshotPreview.mouseY
+    screenshotPreview.mouseY,
   );
-  if (!underCursor || (underCursor !== anchor && !anchor.contains(underCursor))) {
+  if (
+    !underCursor ||
+    (underCursor !== anchor && !anchor.contains(underCursor))
+  ) {
     cancelScreenshotPreview();
     return;
   }
@@ -2257,7 +2262,11 @@ async function startScreenshotPreview(anchor) {
   ) {
     const scheduleNextSlide = () => {
       screenshotPreview.slideTimer = setTimeout(async () => {
-        if (!screenshotPreview.currentAnchor || !screenshotPreview.images.length) return;
+        if (
+          !screenshotPreview.currentAnchor ||
+          !screenshotPreview.images.length
+        )
+          return;
         screenshotPreview.imageIndex =
           (screenshotPreview.imageIndex + 1) % screenshotPreview.images.length;
         await showScreenshotPreviewImage();
@@ -2536,11 +2545,11 @@ async function initializeScreenshotPreview() {
   screenshotPreview.enabled = !!prefs.screenshotPreviewEnabled;
   screenshotPreview.hoverDelayMs = Math.max(
     0,
-    Math.round((parseFloat(prefs.screenshotPreviewHoverDelay) || 0) * 1000)
+    Math.round((parseFloat(prefs.screenshotPreviewHoverDelay) || 0) * 1000),
   );
   screenshotPreview.slideDelayMs = Math.max(
     100,
-    Math.round((parseFloat(prefs.screenshotPreviewSlideDelay) || 0) * 1000)
+    Math.round((parseFloat(prefs.screenshotPreviewSlideDelay) || 0) * 1000),
   );
 
   if (screenshotPreview.enabled) {
@@ -2566,14 +2575,14 @@ function invertSelection() {
   const selectionCounter = document.querySelector(".magnet-selection-counter");
   if (selectionCounter) {
     const checkedBoxes = document.querySelectorAll(
-      ".magnet-checkbox:checked"
+      ".magnet-checkbox:checked",
     ).length;
     selectionCounter.textContent = `${checkedBoxes} selected`;
   }
 
   showNotification(
     `Selection inverted (${invertedCount} items selected)`,
-    true
+    true,
   );
 }
 
@@ -2605,7 +2614,7 @@ function filterByLast30Days() {
 
   showNotification(
     `Showing ${visibleCount} torrents from the last 30 days (${hiddenCount} hidden)`,
-    true
+    true,
   );
 }
 
@@ -3002,7 +3011,7 @@ function showQuickFilterPopup() {
     if (!hasAnyFilters) {
       showNotification(
         "No filter options selected. Please select at least one option to search.",
-        false
+        false,
       );
       return;
     }
@@ -3041,7 +3050,7 @@ function showQuickFilterPopup() {
       () => {
         popup.remove();
       },
-      { once: true }
+      { once: true },
     );
 
     overlay.addEventListener(
@@ -3049,7 +3058,7 @@ function showQuickFilterPopup() {
       () => {
         overlay.remove();
       },
-      { once: true }
+      { once: true },
     );
   };
 
@@ -3105,7 +3114,7 @@ async function filterDeadTorrents(isInitialLoad = false) {
           const showByKeyword =
             !prefs.keywordFilterEnabled ||
             !prefs.keywords.some((keyword) =>
-              title?.toLowerCase().includes(keyword.toLowerCase())
+              title?.toLowerCase().includes(keyword.toLowerCase()),
             );
           const showBySize =
             !prefs.fileSizeFilterEnabled ||
@@ -3122,7 +3131,7 @@ async function filterDeadTorrents(isInitialLoad = false) {
   if (hiddenCount > 0 && prefs.showFilterNotifications && isInitialLoad) {
     showNotification(
       `Hidden ${hiddenCount} dead torrent${hiddenCount === 1 ? "" : "s"}`,
-      true
+      true,
     );
   }
 }
@@ -3198,7 +3207,7 @@ async function filterByKeywords(isInitialLoad = false) {
     const sizeInBytes = sizeCell ? convertToBytes(sizeCell.textContent) : 0;
 
     const containsKeyword = prefs.keywords.some((keyword) =>
-      title.toLowerCase().includes(keyword.toLowerCase())
+      title.toLowerCase().includes(keyword.toLowerCase()),
     );
     const isDead = seeders === 0 && leechers === 0 && prefs.hideDeadTorrents;
     const wrongSize =
@@ -3220,7 +3229,7 @@ async function filterByKeywords(isInitialLoad = false) {
       `Hidden ${hiddenCount} torrent${
         hiddenCount === 1 ? "" : "s"
       } matching keywords`,
-      true
+      true,
     );
   }
 }
@@ -3346,12 +3355,16 @@ function createSendButton(magnetUrl, extraStyles = {}) {
     const currentPrefs = await loadStoredPreferences();
 
     if (!currentPrefs.torrentClientUrl) {
-      showNotification("No torrent client configured. Set it up in the extension popup.", false);
+      showNotification(
+        "No torrent client configured. Set it up in the extension popup.",
+        false,
+      );
       return;
     }
 
     // Pick credentials for the active client
-    let username = "", password = "";
+    let username = "",
+      password = "";
     if (currentPrefs.torrentClient === "transmission") {
       username = currentPrefs.transmissionUsername;
       password = currentPrefs.transmissionPassword;
@@ -3374,20 +3387,23 @@ function createSendButton(magnetUrl, extraStyles = {}) {
           password,
           magnetUrl,
         },
-        resolve
+        resolve,
       );
     });
 
     sendButton.disabled = false;
 
     if (!result || !result.ok) {
-      const msg = result?.error === "already_exists"
-        ? "Torrent already exists in your client."
-        : result?.error === "auth_failed"
-        ? "Authentication failed — check your credentials."
-        : result?.error === "auth_required"
-        ? "Torrent client requires authentication."
-        : "Failed to send torrent. Check the client connection.";
+      const msg =
+        result?.error === "already_exists"
+          ? "Torrent already exists in your client."
+          : result?.error === "wrong_client"
+            ? "Wrong torrent client selected for this URL. Fix it in the extension popup."
+            : result?.error === "auth_failed"
+              ? "Authentication failed — check your credentials."
+              : result?.error === "auth_required"
+                ? "Torrent client requires authentication."
+                : "Failed to send torrent. Check the client connection.";
       showNotification(msg, false);
       return;
     }
@@ -3413,7 +3429,9 @@ async function addSendButtonToViewPage() {
   const sendButton = createSendButton(magnetLink.href, { marginLeft: "10px" });
 
   // Insert after the magnet Copy button if present, otherwise after the magnet link
-  const magnetCopyButton = magnetLink.parentNode.querySelector(".magnet-button:not(.send-torrent-button)");
+  const magnetCopyButton = magnetLink.parentNode.querySelector(
+    ".magnet-button:not(.send-torrent-button)",
+  );
   const insertAfter = magnetCopyButton || magnetLink;
   insertAfter.parentNode.insertBefore(sendButton, insertAfter.nextSibling);
 }
@@ -3499,7 +3517,7 @@ async function filterByFileSize() {
         const showByKeyword =
           !prefs.keywordFilterEnabled ||
           !prefs.keywords.some((keyword) =>
-            title?.toLowerCase().includes(keyword.toLowerCase())
+            title?.toLowerCase().includes(keyword.toLowerCase()),
           );
 
         if (showByDead && showByKeyword) {
@@ -3528,7 +3546,7 @@ async function filterByFileSize() {
     const containsKeyword =
       prefs.keywordFilterEnabled &&
       prefs.keywords.some((keyword) =>
-        title?.toLowerCase().includes(keyword.toLowerCase())
+        title?.toLowerCase().includes(keyword.toLowerCase()),
       );
 
     if (wrongSize || isDead || containsKeyword) {
@@ -3546,7 +3564,7 @@ async function filterByFileSize() {
       `Hidden ${hiddenCount} torrent${
         hiddenCount === 1 ? "" : "s"
       } by file size`,
-      true
+      true,
     );
   }
 }
@@ -3756,7 +3774,7 @@ function showKeywordMonitorPopup() {
       () => {
         popup.remove();
       },
-      { once: true }
+      { once: true },
     );
 
     overlay.addEventListener(
@@ -3764,7 +3782,7 @@ function showKeywordMonitorPopup() {
       () => {
         overlay.remove();
       },
-      { once: true }
+      { once: true },
     );
   };
 
@@ -3966,13 +3984,13 @@ function showKeywordSelectPopup() {
         `Selected ${matchCount} torrent${
           matchCount === 1 ? "" : "s"
         } matching "${keyword}"`,
-        true
+        true,
       );
       // Update selection counter if it exists
       const counter = document.querySelector(".magnet-selection-counter");
       if (counter) {
         const totalChecked = document.querySelectorAll(
-          ".magnet-checkbox:checked"
+          ".magnet-checkbox:checked",
         ).length;
         counter.textContent = `${totalChecked} selected`;
       }
@@ -3995,7 +4013,7 @@ function showKeywordSelectPopup() {
       () => {
         popup.remove();
       },
-      { once: true }
+      { once: true },
     );
 
     overlay.addEventListener(
@@ -4003,7 +4021,7 @@ function showKeywordSelectPopup() {
       () => {
         overlay.remove();
       },
-      { once: true }
+      { once: true },
     );
   };
 
@@ -4299,7 +4317,7 @@ async function addChangelogNavItem() {
   // Find the navigation list that contains "RSS"
   const navList = document.querySelector(".nav.navbar-nav");
   const rssItem = Array.from(navList?.querySelectorAll("li") || []).find(
-    (li) => li.textContent.trim() === "RSS"
+    (li) => li.textContent.trim() === "RSS",
   );
 
   if (navList && rssItem) {
@@ -4346,7 +4364,7 @@ async function addMonitorButton() {
 
   // Check if user is already monitored
   const isMonitored = prefs.monitoredUsers.some(
-    (user) => user.username === username
+    (user) => user.username === username,
   );
 
   // Create the "Monitor" button
@@ -4374,7 +4392,7 @@ async function addMonitorButton() {
   monitorButton.addEventListener("click", async () => {
     const currentPrefs = await loadStoredPreferences();
     const userIndex = currentPrefs.monitoredUsers.findIndex(
-      (user) => user.username === username
+      (user) => user.username === username,
     );
 
     if (userIndex === -1) {
@@ -4413,7 +4431,7 @@ async function getLatestTorrentIdForKeyword(keyword) {
   try {
     // Create search URL for this keyword
     const searchUrl = `https://nyaa.si/?f=0&c=0_0&q=${encodeURIComponent(
-      keyword
+      keyword,
     )}`;
 
     // Fetch the search results page
@@ -4456,7 +4474,7 @@ async function addKeywordMonitoring(keyword, torrentId) {
 
   // Check if this keyword is already being monitored
   const existingIndex = prefs.monitoredKeywords.findIndex(
-    (item) => item.keyword === keyword
+    (item) => item.keyword === keyword,
   );
 
   if (existingIndex !== -1) {
@@ -4466,7 +4484,7 @@ async function addKeywordMonitoring(keyword, torrentId) {
   } else {
     // Create search URL for this keyword
     const searchUrl = `https://nyaa.si/?f=0&c=0_0&q=${encodeURIComponent(
-      keyword
+      keyword,
     )}`;
 
     // Add new entry
@@ -4541,7 +4559,7 @@ async function checkMonitoredUsers() {
     pendingUpdates,
     updatedUsers,
     keywordPendingUpdates,
-    updatedKeywords
+    updatedKeywords,
   );
 }
 
@@ -4812,7 +4830,7 @@ async function checkKeywordUpdates(monitoredKeywords) {
     } catch (error) {
       console.error(
         `Error checking updates for keyword "${item.keyword}":`,
-        error
+        error,
       );
     }
   }
@@ -4827,7 +4845,7 @@ function updateSidebarContent(
   pendingUpdates,
   updatedUsers,
   keywordUpdates = [],
-  updatedKeywords = []
+  updatedKeywords = [],
 ) {
   const contentWrapper = sidebar.querySelector(".sidebar-content");
   const tabIndicator = sidebar.querySelector(".sidebar-tab");
@@ -4903,8 +4921,8 @@ function updateSidebarContent(
         document.createTextNode(
           ` has uploaded ${update.newTorrents} new torrent${
             update.newTorrents > 1 ? "s" : ""
-          }`
-        )
+          }`,
+        ),
       );
 
       notificationList.appendChild(listItem);
@@ -5070,7 +5088,7 @@ function updateSidebarContent(
         [],
         dismissedUsers,
         [],
-        dismissedKeywords
+        dismissedKeywords,
       );
       tabIndicator.style.animation = "none";
 

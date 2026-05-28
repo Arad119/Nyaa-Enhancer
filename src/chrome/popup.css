@@ -484,6 +484,33 @@ body {
 }
 
 /* Torrent Client Tab */
+.tc-qbt-csrf-disclaimer {
+  margin: 0;
+  padding: 10px 12px;
+  background: #2a2418;
+  border-left: 3px solid #e6a817;
+  border-radius: 0 4px 4px 0;
+}
+
+.tc-qbt-csrf-disclaimer-title {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6a817;
+}
+
+.tc-qbt-csrf-disclaimer-text {
+  margin: 0;
+  font-size: 12px;
+  color: #aaa;
+  line-height: 1.6;
+}
+
+.tc-qbt-csrf-disclaimer-text strong {
+  color: #ddd;
+  font-weight: 600;
+}
+
 .tc-field-group {
   display: flex;
   flex-direction: column;
@@ -636,7 +663,9 @@ body {
   font-weight: 500;
   text-align: right;
   box-sizing: border-box;
-  transition: border-color 0.2s, opacity 0.2s;
+  transition:
+    border-color 0.2s,
+    opacity 0.2s;
 }
 
 .sp-input:focus {

@@ -198,7 +198,7 @@ chrome.storage.sync.get(
     const ameNZBApiKeyInput = document.getElementById("ameNZBApiKey");
     ameNZBApiKeyInput.value = items.ameNZBApiKey || "";
     const ameNZBToggle = document.querySelector(
-      '[data-toggle="showAmeNZBLinksToggle"]'
+      '[data-toggle="showAmeNZBLinksToggle"]',
     );
     ameNZBToggle.setAttribute("aria-checked", items.showAmeNZBLinks);
     ameNZBToggle.disabled = !items.ameNZBApiKey;
@@ -221,10 +221,10 @@ chrome.storage.sync.get(
       .setAttribute("aria-checked", items.screenshotPreviewEnabled);
 
     const screenshotHoverInput = document.getElementById(
-      "screenshotPreviewHoverDelay"
+      "screenshotPreviewHoverDelay",
     );
     const screenshotSlideInput = document.getElementById(
-      "screenshotPreviewSlideDelay"
+      "screenshotPreviewSlideDelay",
     );
     screenshotHoverInput.value = items.screenshotPreviewHoverDelay;
     screenshotSlideInput.value = items.screenshotPreviewSlideDelay;
@@ -239,7 +239,7 @@ chrome.storage.sync.get(
     const sizeSelect = document.getElementById("sizeRangeSelect");
     sizeSelect.value = items.fileSizeRange;
     sizeSelect.disabled = !items.fileSizeFilterEnabled;
-  }
+  },
 );
 
 const EYE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
@@ -259,68 +259,82 @@ document.getElementById("ameNZBApiKeyToggle").addEventListener("click", () => {
 });
 
 // ameNZB Test button — validate the API key
-document.getElementById("ameNZBApiKeyTest").addEventListener("click", async () => {
-  const key = document.getElementById("ameNZBApiKey").value.trim();
-  const statusEl = document.getElementById("ameNZBTestStatus");
-  const testBtn = document.getElementById("ameNZBApiKeyTest");
+document
+  .getElementById("ameNZBApiKeyTest")
+  .addEventListener("click", async () => {
+    const key = document.getElementById("ameNZBApiKey").value.trim();
+    const statusEl = document.getElementById("ameNZBTestStatus");
+    const testBtn = document.getElementById("ameNZBApiKeyTest");
 
-  if (!key) {
-    statusEl.textContent = "Enter an API key first.";
+    if (!key) {
+      statusEl.textContent = "Enter an API key first.";
+      statusEl.style.color = "#999";
+      return;
+    }
+
+    testBtn.disabled = true;
+    statusEl.textContent = "Testing…";
     statusEl.style.color = "#999";
-    return;
-  }
 
-  testBtn.disabled = true;
-  statusEl.textContent = "Testing…";
-  statusEl.style.color = "#999";
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          type: "fetchUrl",
+          url: `https://amenzb.moe/api?t=search&apikey=${encodeURIComponent(key)}`,
+        },
+        resolve,
+      );
+    });
 
-  const result = await new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      { type: "fetchUrl", url: `https://amenzb.moe/api?t=search&apikey=${encodeURIComponent(key)}` },
-      resolve
-    );
-  });
+    testBtn.disabled = false;
 
-  testBtn.disabled = false;
-
-  if (!result?.ok) {
-    statusEl.textContent = "✗ Request failed.";
-    statusEl.style.color = "#ff4444";
-    return;
-  }
-
-  try {
-    const parser = new DOMParser();
-    const xml = parser.parseFromString(result.text, "text/xml");
-    // Check for Newznab error element
-    const errorEl = xml.querySelector("error");
-    if (errorEl) {
-      const code = errorEl.getAttribute("code");
-      const desc = errorEl.getAttribute("description") || "Unknown error";
-      statusEl.textContent = `✗ ${desc}`;
+    if (!result?.ok) {
+      statusEl.textContent = "✗ Request failed.";
       statusEl.style.color = "#ff4444";
       return;
     }
-    // A valid response has a <channel> with Newznab response element
-    const channel = xml.querySelector("channel");
-    if (channel) {
-      // Only count against the quota when the key was accepted
-      const todayUTC = new Date().toISOString().slice(0, 10);
-      chrome.storage.sync.get({ ameNZBRequestCount: 0, ameNZBRequestDate: "" }, (items) => {
-        const count = items.ameNZBRequestDate === todayUTC ? items.ameNZBRequestCount + 1 : 1;
-        chrome.storage.sync.set({ ameNZBRequestCount: count, ameNZBRequestDate: todayUTC });
-      });
-      statusEl.textContent = "✓ API key is valid.";
-      statusEl.style.color = "#4caf50";
-    } else {
-      statusEl.textContent = "✗ Unexpected response.";
+
+    try {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(result.text, "text/xml");
+      // Check for Newznab error element
+      const errorEl = xml.querySelector("error");
+      if (errorEl) {
+        const code = errorEl.getAttribute("code");
+        const desc = errorEl.getAttribute("description") || "Unknown error";
+        statusEl.textContent = `✗ ${desc}`;
+        statusEl.style.color = "#ff4444";
+        return;
+      }
+      // A valid response has a <channel> with Newznab response element
+      const channel = xml.querySelector("channel");
+      if (channel) {
+        // Only count against the quota when the key was accepted
+        const todayUTC = new Date().toISOString().slice(0, 10);
+        chrome.storage.sync.get(
+          { ameNZBRequestCount: 0, ameNZBRequestDate: "" },
+          (items) => {
+            const count =
+              items.ameNZBRequestDate === todayUTC
+                ? items.ameNZBRequestCount + 1
+                : 1;
+            chrome.storage.sync.set({
+              ameNZBRequestCount: count,
+              ameNZBRequestDate: todayUTC,
+            });
+          },
+        );
+        statusEl.textContent = "✓ API key is valid.";
+        statusEl.style.color = "#4caf50";
+      } else {
+        statusEl.textContent = "✗ Unexpected response.";
+        statusEl.style.color = "#ff4444";
+      }
+    } catch {
+      statusEl.textContent = "✗ Could not parse response.";
       statusEl.style.color = "#ff4444";
     }
-  } catch {
-    statusEl.textContent = "✗ Could not parse response.";
-    statusEl.style.color = "#ff4444";
-  }
-});
+  });
 
 // ameNZB Clear button — wipe the API key from input and storage
 document.getElementById("ameNZBApiKeyClear").addEventListener("click", () => {
@@ -330,7 +344,9 @@ document.getElementById("ameNZBApiKeyClear").addEventListener("click", () => {
   document.getElementById("ameNZBApiKeyToggle").innerHTML = EYE_SVG;
   document.getElementById("ameNZBTestStatus").textContent = "";
 
-  const ameNZBToggle = document.querySelector('[data-toggle="showAmeNZBLinksToggle"]');
+  const ameNZBToggle = document.querySelector(
+    '[data-toggle="showAmeNZBLinksToggle"]',
+  );
   ameNZBToggle.disabled = true;
   ameNZBToggle.setAttribute("aria-checked", false);
 
@@ -348,7 +364,7 @@ document.getElementById("ameNZBApiKeyClear").addEventListener("click", () => {
 document.getElementById("ameNZBApiKey").addEventListener("input", (e) => {
   const key = e.target.value.trim();
   const ameNZBToggle = document.querySelector(
-    '[data-toggle="showAmeNZBLinksToggle"]'
+    '[data-toggle="showAmeNZBLinksToggle"]',
   );
   ameNZBToggle.disabled = !key;
   if (!key) {
@@ -384,7 +400,7 @@ chrome.storage.onChanged.addListener((changes) => {
           items.ameNZBRequestDate === todayUTC ? items.ameNZBRequestCount : 0;
         const el = document.getElementById("ameNZBRequestCount");
         if (el) el.textContent = `${todayCount.toLocaleString()} / 10,000`;
-      }
+      },
     );
   }
 });
@@ -400,6 +416,11 @@ const CLIENT_LABELS = {
 // Show/hide the username row and adjust password margin depending on client
 function applyClientUI(client) {
   const usernameWrapper = document.getElementById("tcUsernameWrapper");
+  const csrfDisclaimer = document.getElementById("tcQbtCsrfDisclaimer");
+  if (csrfDisclaimer) {
+    csrfDisclaimer.style.display =
+      client === "qbittorrent" ? "block" : "none";
+  }
   if (client === "deluge") {
     usernameWrapper.style.display = "none";
     // Remove top margin gap since username is gone
@@ -452,8 +473,14 @@ document.getElementById("tcClientSelect").addEventListener("change", (e) => {
   applyClientUI(client);
   document.getElementById("tcStatus").textContent = "";
   chrome.storage.sync.get(
-    { qbtUsername: "", qbtPassword: "", transmissionUsername: "", transmissionPassword: "", delugePassword: "" },
-    (items) => loadClientAuth(client, items)
+    {
+      qbtUsername: "",
+      qbtPassword: "",
+      transmissionUsername: "",
+      transmissionPassword: "",
+      delugePassword: "",
+    },
+    (items) => loadClientAuth(client, items),
   );
 });
 
@@ -476,11 +503,74 @@ document.getElementById("tcSaveBtn").addEventListener("click", () => {
   const statusEl = document.getElementById("tcStatus");
   statusEl.textContent = "✓ Saved";
   statusEl.style.color = "#4caf50";
-  setTimeout(() => { statusEl.textContent = ""; }, 2000);
+  setTimeout(() => {
+    statusEl.textContent = "";
+  }, 2000);
 });
 
-// Test Connection button
-document.getElementById("tcTestBtn").addEventListener("click", async () => {
+// Chrome cannot include a port in match patterns (unlike Chrome's `${origin}/*`).
+// Hostname-only patterns still cover every port on that host (e.g. :8114).
+function torrentOriginsForUrl(url) {
+  const u = new URL(url.trim());
+  return [`${u.protocol}//${u.hostname}/*`];
+}
+
+function showTorrentTestResult(result, client, statusEl) {
+  if (!result) {
+    statusEl.textContent = "✗ No response from background";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+  if (result.ok) {
+    const label = CLIENT_LABELS[client] || client;
+    statusEl.textContent = result.version
+      ? `✓ Connected! (${label} ${result.version})`
+      : `✓ Connected! (${label})`;
+    statusEl.style.color = "#4caf50";
+    saveTorrentClientSettings();
+    return;
+  }
+  switch (result.error) {
+    case "auth_failed":
+      statusEl.textContent = "✗ Authentication failed - wrong credentials";
+      break;
+    case "auth_required":
+      statusEl.textContent = "✗ Server requires authentication";
+      break;
+    case "permission_denied":
+      statusEl.textContent =
+        "✗ Missing network permission. Click Test Connection and allow access.";
+      break;
+    case "wrong_client": {
+      const detected =
+        CLIENT_LABELS[result.detectedClient] || result.detectedClient;
+      const selected = CLIENT_LABELS[client] || client;
+      statusEl.textContent = `✗ This URL is ${detected}, not ${selected}. Change the client dropdown.`;
+      break;
+    }
+    default:
+      statusEl.textContent = result.message
+        ? `✗ Connection failed: ${result.message}`
+        : "✗ Connection failed. Check the URL";
+  }
+  statusEl.style.color = "#ff4444";
+}
+
+function runTorrentConnectionTest(client, url, username, password, statusEl, testBtn) {
+  testBtn.disabled = true;
+  statusEl.textContent = "Testing...";
+  statusEl.style.color = "#999";
+  chrome.runtime
+    .sendMessage({ type: "testConnection", client, url, username, password })
+    .then((result) => {
+      testBtn.disabled = false;
+      showTorrentTestResult(result, client, statusEl);
+    });
+}
+
+// Test Connection button — permissions.request must run in the same click turn as the
+// user gesture (no await before it), or Chrome will not show the prompt.
+document.getElementById("tcTestBtn").addEventListener("click", () => {
   const client = document.getElementById("tcClientSelect").value;
   const url = document.getElementById("tcIp").value.trim();
   const username = document.getElementById("tcUsername").value.trim();
@@ -500,67 +590,30 @@ document.getElementById("tcTestBtn").addEventListener("click", async () => {
     return;
   }
 
-  // Save settings before requesting permissions — Chrome closes the popup during
-  // the permission prompt, so values must be persisted to survive the round-trip.
-  saveTorrentClientSettings();
-
-  // Request permission only for the specific host the user entered
-  let parsedOrigin;
   try {
-    const u = new URL(url);
-    parsedOrigin = `${u.origin}/*`;
+    new URL(url);
   } catch {
     statusEl.textContent = "✗ Invalid URL";
     statusEl.style.color = "#ff4444";
     return;
   }
 
-  const granted = await new Promise((resolve) => {
-    chrome.permissions.request({ origins: [parsedOrigin] }, resolve);
-  });
+  // Save settings before requesting permissions — Chrome closes the popup during
+  // the permission prompt, so values must be persisted to survive the round-trip.
+  saveTorrentClientSettings();
 
-  if (!granted) {
-    statusEl.textContent = "✗ Host permission denied";
-    statusEl.style.color = "#ff4444";
-    return;
-  }
-
-  testBtn.disabled = true;
-  statusEl.textContent = "Testing...";
+  const origins = torrentOriginsForUrl(url);
+  statusEl.textContent = `Requesting access for ${new URL(url).origin}... Close the popup (if it doesnt automatically close) and accept the permission request.`;
   statusEl.style.color = "#999";
 
-  const result = await new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: "testConnection", client, url, username, password }, resolve);
-  });
-
-  testBtn.disabled = false;
-
-  if (!result) {
-    statusEl.textContent = "✗ No response from background";
-    statusEl.style.color = "#ff4444";
-    return;
-  }
-
-  if (result.ok) {
-    const label = CLIENT_LABELS[client] || client;
-    statusEl.textContent = result.version
-      ? `✓ Connected! (${label} ${result.version})`
-      : `✓ Connected! (${label})`;
-    statusEl.style.color = "#4caf50";
-    saveTorrentClientSettings();
-  } else {
-    switch (result.error) {
-      case "auth_failed":
-        statusEl.textContent = "✗ Authentication failed - wrong credentials";
-        break;
-      case "auth_required":
-        statusEl.textContent = "✗ Server requires authentication";
-        break;
-      default:
-        statusEl.textContent = "✗ Connection failed. Check the URL";
+  chrome.permissions.request({ origins }).then((granted) => {
+    if (!granted) {
+      statusEl.textContent = "✗ Host permission denied";
+      statusEl.style.color = "#ff4444";
+      return;
     }
-    statusEl.style.color = "#ff4444";
-  }
+    runTorrentConnectionTest(client, url, username, password, statusEl, testBtn);
+  });
 });
 
 // ── End Torrent Client Tab ───────────────────────────────────────────────────
@@ -591,7 +644,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showButtons",
               value: newState,
             });
-          }
+          },
         );
         updateDependentToggles(newState);
         break;
@@ -605,7 +658,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showATLinks",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "useNewATDomainToggle":
@@ -618,7 +671,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "useNewATDomain",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showATCommentsToggle":
@@ -631,7 +684,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showATComments",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showAmeNZBLinksToggle":
@@ -644,7 +697,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showAmeNZBLinks",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showNekoBTLinksToggle":
@@ -657,7 +710,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showNekoBTLinks",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showMagnetButtonsToggle":
@@ -670,7 +723,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showMagnetButtons",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "changelogToggle":
@@ -690,7 +743,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showQuickFilter",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "hideDeadTorrentsToggle":
@@ -703,7 +756,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "hideDeadTorrents",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "keywordFilterToggle":
@@ -716,7 +769,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "keywordFilterEnabled",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showFilterNotificationsToggle":
@@ -733,7 +786,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "hideComments",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "fileSizeFilterToggle":
@@ -747,7 +800,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "fileSizeFilterEnabled",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showChangelogNavToggle":
@@ -761,7 +814,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showChangelogNav",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showMonitorButtonsToggle":
@@ -775,7 +828,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showMonitorButtons",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showSendButtonsToggle":
@@ -789,7 +842,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showSendButtons",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "showSeaDexToggle":
@@ -802,7 +855,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "showSeaDex",
               value: newState,
             });
-          }
+          },
         );
         break;
       case "screenshotPreviewToggle":
@@ -816,7 +869,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
               setting: "screenshotPreviewEnabled",
               value: newState,
             });
-          }
+          },
         );
         break;
     }
@@ -825,7 +878,12 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
 });
 
 // Screenshot Preview delay inputs — persist values and notify content script
-function attachScreenshotPreviewInputHandler(inputId, settingKey, defaultValue, minValue) {
+function attachScreenshotPreviewInputHandler(
+  inputId,
+  settingKey,
+  defaultValue,
+  minValue,
+) {
   const input = document.getElementById(inputId);
   if (!input) return;
 
@@ -854,13 +912,13 @@ attachScreenshotPreviewInputHandler(
   "screenshotPreviewHoverDelay",
   "screenshotPreviewHoverDelay",
   2,
-  0
+  0,
 );
 attachScreenshotPreviewInputHandler(
   "screenshotPreviewSlideDelay",
   "screenshotPreviewSlideDelay",
   2,
-  0.1
+  0.1,
 );
 
 // Get version from manifest.json and update the version number in popup
@@ -1078,7 +1136,7 @@ function addMonitoredKeyword() {
 function removeMonitoredKeyword(keywordToRemove) {
   chrome.storage.sync.get({ monitoredKeywords: [] }, (items) => {
     const monitoredKeywords = items.monitoredKeywords.filter(
-      (k) => k.keyword !== keywordToRemove
+      (k) => k.keyword !== keywordToRemove,
     );
 
     chrome.storage.sync.set({ monitoredKeywords }, () => {
@@ -1257,7 +1315,7 @@ function displayMonitoredUsers(monitoredUsers) {
 function unmonitorUser(username) {
   chrome.storage.sync.get({ monitoredUsers: [] }, (items) => {
     const monitoredUsers = items.monitoredUsers.filter(
-      (user) => user.username !== username
+      (user) => user.username !== username,
     );
     chrome.storage.sync.set({ monitoredUsers }, () => {
       displayMonitoredUsers(monitoredUsers);

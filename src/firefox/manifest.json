@@ -9,6 +9,9 @@
   },
   "permissions": ["clipboardWrite", "storage", "activeTab"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
   "host_permissions": [
     "*://*.nyaa.si/*",
     "*://*.nya.iss.one/*",

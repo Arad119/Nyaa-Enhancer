@@ -97,6 +97,13 @@
                     client requires authentication
                   </li>
                   <li>
+                    For <strong>qBittorrent</strong>: in the WebUI go to
+                    <strong>Options → Web UI</strong> and
+                    <strong>uncheck</strong>
+                    <em>Enable Cross-Site Request Forgery (CSRF) protection</em>
+                    (see note below when qBittorrent is selected)
+                  </li>
+                  <li>
                     Click <strong>Test Connection</strong> to verify everything
                     is working, then <strong>Save</strong>
                   </li>
@@ -137,6 +144,21 @@
                 <option value="transmission">Transmission</option>
                 <option value="deluge">Deluge</option>
               </select>
+            </div>
+
+            <div
+              id="tcQbtCsrfDisclaimer"
+              class="tc-qbt-csrf-disclaimer"
+              role="note"
+            >
+              <p class="tc-qbt-csrf-disclaimer-title">qBittorrent requirement</p>
+              <p class="tc-qbt-csrf-disclaimer-text">
+                In your qBittorrent WebUI, open
+                <strong>Options → Web UI</strong> and
+                <strong>disable</strong> (uncheck)
+                <strong>Enable Cross-Site Request Forgery (CSRF) protection</strong>.
+                If this stays enabled, Sending a torrent to qBittorrent will fail.
+              </p>
             </div>
 
             <div class="tc-field-group">

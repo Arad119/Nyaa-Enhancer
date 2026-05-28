@@ -34,7 +34,9 @@
   padding: 15px 25px;
   color: white;
   border-radius: 4px;
-  transition: opacity 0.3s, transform 0.3s;
+  transition:
+    opacity 0.3s,
+    transform 0.3s;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   opacity: 0;
   transform: translateX(100%);
@@ -75,7 +77,9 @@
   z-index: 10000;
   animation: slideIn 0.3s ease;
   opacity: 1;
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 
 .changelog-container.hiding {
@@ -258,7 +262,9 @@ body.dark .version-entry {
   color: white;
   text-decoration: none;
   border-radius: 4px;
-  transition: background-color 0.2s, transform 0.2s;
+  transition:
+    background-color 0.2s,
+    transform 0.2s;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -329,7 +335,9 @@ body.dark .changelog-repo {
   opacity: 0;
   visibility: hidden;
   transform: scale(0.96);
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
   max-width: min(640px, 60vw);
   max-height: min(420px, 70vh);
   font-family: "Segoe UI", Tahoma, sans-serif;

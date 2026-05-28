@@ -133,7 +133,7 @@ To install the extension in your browser, follow these steps.
 <img src="https://extensionworkshop.com/assets/img/documentation/publish/get-the-addon-178x60px.dad84b42.png" alt="Firefox Add-Ons Store" height="50px" >
 </a>
 
-**Edge Add-Ons Store (pending update, currently at 1.9.1):**  
+**Edge Add-Ons Store (up-to-date at 1.11.0):**  
 <a href="https://microsoftedge.microsoft.com/addons/detail/nyaa-enhancer/cpkcppifogblfgbggdeljjnibjfcdakf" target="_blank">
 <img src="https://developer.microsoft.com/store/badges/images/English_get-it-from-MS.png" alt="Edge Add-Ons Store" height="50px" >
 </a>

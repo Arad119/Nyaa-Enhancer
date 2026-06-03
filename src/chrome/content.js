@@ -18,10 +18,17 @@ function loadStoredPreferences() {
         // - keywordFilterEnabled: whether keyword filtering is enabled
         // - showFilterNotifications: whether to show filter notifications
         // - hideComments: whether to hide comments on view pages
+        // - improvedFileList: whether to show file counts on view page file lists
         // - fileSizeFilterEnabled: whether to enable file size filtering
         // - fileSizeRange: the range for file size filtering
+        // - completedDownloadsFilterEnabled: home page completed downloads filter
+        // - completedDownloadsFilterOperator: gt, eq, or lt
+        // - completedDownloadsFilterValue: threshold for completed downloads filter
         // - useNewATDomain: whether to use animetosho.xyz instead of animetosho.org
         // - showATComments: whether to show AnimeTosho comments on view pages
+        // - showATScreenshotsSection: whether to show AnimeTosho screenshots tab on view pages
+        // - showATFileInfoSection: whether to show AnimeTosho FileInfo tab on view pages
+        // - showATAttachmentsSection: whether to show AnimeTosho downloads tab on view pages
         // - ameNZBApiKey: the user's ameNZB API key
         // - showAmeNZBLinks: whether to show ameNZB links on supported view pages
         useDisplayName: true,
@@ -30,9 +37,17 @@ function loadStoredPreferences() {
         showATLinks: true,
         useNewATDomain: true,
         showATComments: false,
+        showATScreenshotsSection: true,
+        showATFileInfoSection: true,
+        showATAttachmentsSection: true,
         ameNZBApiKey: "",
         showAmeNZBLinks: false,
+        showAmeNZBSection: false,
         showNekoBTLinks: false,
+        showNekoBTSection: false,
+        showNekoBTFullLangNames: true,
+        showTsukihimeLinks: false,
+        showTsukihimeSection: false,
         showSeaDex: false,
         screenshotPreviewEnabled: false,
         screenshotPreviewHoverDelay: 3,
@@ -46,8 +61,12 @@ function loadStoredPreferences() {
         keywordFilterEnabled: false,
         showFilterNotifications: true,
         hideComments: false,
+        improvedFileList: true,
         fileSizeFilterEnabled: false,
         fileSizeRange: "less_than_1gb",
+        completedDownloadsFilterEnabled: false,
+        completedDownloadsFilterOperator: "gt",
+        completedDownloadsFilterValue: 0,
         showChangelogNav: true,
         monitoredUsers: [],
         monitoredKeywords: [],
@@ -194,6 +213,61 @@ async function addCopyButton() {
   container.parentNode.insertBefore(buttonContainer, container);
 }
 
+function getInfoHashFromMagnet(href) {
+  if (!href) return "";
+  const hexMatch = href.match(/urn:btih:([a-f0-9]{40})/i);
+  if (hexMatch) return hexMatch[1].toLowerCase();
+  const match = href.match(/urn:btih:([^&]+)/i);
+  return match ? match[1].toLowerCase() : "";
+}
+
+function getTorrentInfoHashFromRow(row) {
+  const magnetLink = row.querySelector('a[href^="magnet:"]');
+  return magnetLink ? getInfoHashFromMagnet(magnetLink.href) : "";
+}
+
+const ANIMETOSHO_LIST_CATEGORY_TITLES = new Set([
+  "Anime - English-translated",
+  "Anime - Non-English-translated",
+  "Anime - Raw",
+]);
+
+function isAnimetoshoListCategoryRow(row) {
+  const categoryLink = row.querySelector("td:first-child a");
+  return ANIMETOSHO_LIST_CATEGORY_TITLES.has(
+    categoryLink?.getAttribute("title") || "",
+  );
+}
+
+const ANIMETOSHO_VIEW_SUBCATEGORY_LABELS = new Set([
+  "English-translated",
+  "Non-English-translated",
+  "Raw",
+]);
+
+function isSupportedAnimeViewPageCategory() {
+  const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
+  const isAnime = Array.from(categoryLinks).some(
+    (link) => link.textContent.trim() === "Anime",
+  );
+  const hasSubcategory = Array.from(categoryLinks).some((link) =>
+    ANIMETOSHO_VIEW_SUBCATEGORY_LABELS.has(link.textContent.trim()),
+  );
+  return isAnime && hasSubcategory;
+}
+
+function insertAtCellBeforeMagnetOrCheckbox(row, atCell) {
+  const magnetCell = row.querySelector(".magnet-column");
+  const checkboxCell = row.querySelector(".magnet-checkbox")?.closest("td");
+  if (magnetCell) {
+    row.insertBefore(atCell, magnetCell);
+  } else if (checkboxCell) {
+    row.insertBefore(atCell, checkboxCell);
+  } else {
+    row.appendChild(atCell);
+  }
+}
+
 // Function to add a checkbox column to the torrent table
 // This allows users to select individual torrents for batch operations
 async function addCheckboxColumn() {
@@ -280,28 +354,8 @@ async function addCheckboxColumn() {
       const atCell = document.createElement("td");
       atCell.className = "text-center at-column";
 
-      const categoryLink = row.querySelector("td:first-child a");
-      const isAnimeEnglish =
-        categoryLink?.getAttribute("title") === "Anime - English-translated";
-
-      if (isAnimeEnglish) {
-        const titleLink = row.querySelector('td a[href^="/view/"]');
-        if (titleLink) {
-          const nyaaId = titleLink.href.split("/").pop();
-          const atDomain = prefs.useNewATDomain
-            ? "animetosho.xyz"
-            : "animetosho.org";
-          const atLink = document.createElement("a");
-          atLink.href = `https://${atDomain}/view/n${nyaaId}`;
-          atLink.target = "_blank";
-          atLink.innerHTML = '<i class="fa fa-external-link"></i>';
-          atLink.style.color = "#337ab7";
-          atCell.appendChild(atLink);
-        }
-      }
-
-      const checkboxCell = row.querySelector(".magnet-checkbox")?.closest("td");
-      row.insertBefore(atCell, checkboxCell);
+      populateAnimetoshoListCell(row, atCell, prefs.useNewATDomain);
+      insertAtCellBeforeMagnetOrCheckbox(row, atCell);
     }
 
     // Add magnet cell if enabled and doesn't exist
@@ -555,6 +609,42 @@ function getTitleFromRow(row) {
   const titleLink = links[links.length - 1]; // Get the last view link (the actual title)
 
   return titleLink?.title || titleLink?.textContent || null;
+}
+
+function isNyaaHomePage() {
+  const path = window.location.pathname;
+  return path === "/" || path === "";
+}
+
+function getCompletedDownloadsFromRow(row) {
+  const cell = row.querySelector("td:nth-of-type(8)");
+  if (!cell) return 0;
+  return parseInt(cell.textContent.trim(), 10) || 0;
+}
+
+function matchesCompletedDownloadsFilter(count, operator, threshold) {
+  switch (operator) {
+    case "eq":
+      return count === threshold;
+    case "lt":
+      return count < threshold;
+    case "gt":
+    default:
+      return count > threshold;
+  }
+}
+
+function failsCompletedDownloadsFilter(prefs, count) {
+  if (!isNyaaHomePage() || !prefs.completedDownloadsFilterEnabled) {
+    return false;
+  }
+  const threshold = Number(prefs.completedDownloadsFilterValue);
+  if (!Number.isFinite(threshold)) return false;
+  return !matchesCompletedDownloadsFilter(
+    count,
+    prefs.completedDownloadsFilterOperator,
+    threshold,
+  );
 }
 
 // Function to download selected torrent files
@@ -829,10 +919,14 @@ async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added a dedicated "Torrent Client" tab with support for qBittorrent, Transmission, and Deluge - required to use the "Send" button<br>
-        • Added a "Send" button to torrent view pages and the main torrent list, sending the torrent directly to your configured client - needs a Torrent Client to be configured first in the extension settings<br>
-        • Added a "Display Best Release (Seadex)" toggle in Additional Features to highlight best and alternate releases on torrent list and view pages according to SeaDex (Disabled by default)<br>
-        • Added "Screenshot Preview" toggle to the Additional Features section - hovering over a torrent link for the set delay opens a floating image popup that cycles through screenshots from the torrent's description (Disabled by default)
+        • Added tabbed panels on torrent view pages - Description plus optional ameNZB, nekoBT, Tsukihime, and AnimeTosho tabs<br>
+        • Added "Improved File List" toggle to show total and per-folder file counts on view pages (Enabled by default)<br>
+        • Added "Completed downloads" as a filter option<br>
+        • Improved AnimeTosho list and view links - resolved by using info hash for English-translated, Non-English-translated, and Raw anime<br>
+        • Added "Show Screenshots Section", "Show FileInfo Section", and "Show Downloads Section" toggles from AnimeTosho data<br>
+        • Added "Display ameNZB Section" toggle for release details in the description tabs - requires an ameNZB API key (Disabled by default)<br>
+        • Added "Display nekoBT Section" toggle for release metadata in the description tabs, plus "Full Language Names" for audio/subtitle labels (Disabled by default)<br>
+        • Added a Tsukihime settings section with "Display Tsukihime Links" and "Display Tsukihime Section" toggles for view-page links and tabbed metadata, synopsis, genres, files, and per-file MediaInfo (Disabled by default)
       </div>
       <div class="changelog-actions">
         <button class="changelog-button okay">Okay</button>
@@ -1095,45 +1189,13 @@ async function handleSettingChange(setting, value) {
 
         // Add AT cells
         const atPrefs = await loadStoredPreferences();
-        const atDomain = atPrefs.useNewATDomain
-          ? "animetosho.xyz"
-          : "animetosho.org";
         const rows = document.querySelectorAll("table.torrent-list tbody tr");
         rows.forEach((row) => {
           const atCell = document.createElement("td");
           atCell.className = "text-center at-column";
 
-          const categoryLink = row.querySelector("td:first-child a");
-          const isAnimeEnglish =
-            categoryLink?.getAttribute("title") ===
-            "Anime - English-translated";
-
-          if (isAnimeEnglish) {
-            const titleLink = row.querySelector('td a[href^="/view/"]');
-            if (titleLink) {
-              const nyaaId = titleLink.href.split("/").pop();
-              const atLink = document.createElement("a");
-              atLink.href = `https://${atDomain}/view/n${nyaaId}`;
-              atLink.target = "_blank";
-              atLink.innerHTML = '<i class="fa fa-external-link"></i>';
-              atLink.style.color = "#337ab7";
-              atCell.appendChild(atLink);
-            }
-          }
-
-          // Always insert AT cell before Magnet and Checkbox
-          const magnetCell = row.querySelector(".magnet-column");
-          const checkboxCell = row
-            .querySelector(".magnet-checkbox")
-            ?.closest("td");
-
-          if (magnetCell) {
-            row.insertBefore(atCell, magnetCell);
-          } else if (checkboxCell) {
-            row.insertBefore(atCell, checkboxCell);
-          } else {
-            row.appendChild(atCell);
-          }
+          populateAnimetoshoListCell(row, atCell, atPrefs.useNewATDomain);
+          insertAtCellBeforeMagnetOrCheckbox(row, atCell);
         });
 
         // Add Animetosho link to view page
@@ -1191,6 +1253,10 @@ async function handleSettingChange(setting, value) {
         const wrongSize =
           prefs.fileSizeFilterEnabled &&
           !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+        const wrongDownloads = failsCompletedDownloadsFilter(
+          prefs,
+          getCompletedDownloadsFromRow(row),
+        );
         const containsKeyword =
           prefs.keywordFilterEnabled &&
           prefs.keywords.some((keyword) =>
@@ -1198,7 +1264,8 @@ async function handleSettingChange(setting, value) {
           );
 
         // Only update display if needed
-        const shouldHide = isDead || wrongSize || containsKeyword;
+        const shouldHide =
+          isDead || wrongSize || wrongDownloads || containsKeyword;
         if (shouldHide) {
           row.style.display = "none";
         } else {
@@ -1225,11 +1292,21 @@ async function handleSettingChange(setting, value) {
         }
       }
       break;
+    case "improvedFileList":
+      if (window.location.pathname.startsWith("/view/")) {
+        applyImprovedFileList(value);
+      }
+      break;
     case "fileSizeFilterEnabled":
       filterByFileSize();
       break;
     case "fileSizeRange":
       filterByFileSize();
+      break;
+    case "completedDownloadsFilterEnabled":
+    case "completedDownloadsFilterOperator":
+    case "completedDownloadsFilterValue":
+      filterByCompletedDownloads();
       break;
     case "showChangelogNav":
       if (!value) {
@@ -1247,29 +1324,19 @@ async function handleSettingChange(setting, value) {
       }
       break;
     case "useNewATDomain":
+      animetoshoViewLinkCache.clear();
+      animetoshoTorrentDataCache.clear();
+      resetAnimetoshoEpisodeSelection();
       if (window.location.pathname.startsWith("/view/")) {
-        const atRow = Array.from(document.querySelectorAll(".row")).find(
-          (row) => row.textContent.includes("Animetosho:"),
-        );
-        if (atRow) {
-          const atAnchor = atRow.querySelector("a");
-          if (atAnchor) {
-            const torrentId = window.location.pathname.split("/").pop();
-            const newDomain = value ? "animetosho.xyz" : "animetosho.org";
-            atAnchor.href = `https://${newDomain}/view/n${torrentId}`;
-            atAnchor.textContent = `https://${newDomain}/view/n${torrentId}`;
-          }
-        }
+        refreshAnimetoshoViewPageLink();
         const toshoPanel = document.getElementById("tosho-comments");
         if (toshoPanel) {
           toshoPanel.remove();
           addAnimetoshoComments();
         }
+        updateAnimetoshoEpisodeFeatures();
       } else {
-        document.querySelectorAll(".at-column a").forEach((link) => {
-          const newDomain = value ? "animetosho.xyz" : "animetosho.org";
-          link.href = link.href.replace(/animetosho\.(org|xyz)/, newDomain);
-        });
+        refreshAnimetoshoListLinks();
       }
       break;
     case "showATComments":
@@ -1279,6 +1346,11 @@ async function handleSettingChange(setting, value) {
         document.getElementById("tosho-comments")?.remove();
       }
       break;
+    case "showATScreenshotsSection":
+    case "showATFileInfoSection":
+    case "showATAttachmentsSection":
+      updateAnimetoshoEpisodeFeatures();
+      break;
     case "showAmeNZBLinks":
       if (value) {
         addAmeNZBToViewPage();
@@ -1286,10 +1358,14 @@ async function handleSettingChange(setting, value) {
         removeAmeNZBRow();
       }
       break;
+    case "showAmeNZBSection":
+      updateAmeNZBDescriptionSection();
+      break;
     case "ameNZBApiKey":
-      // Re-run if links are enabled so the link refreshes with the new key
+      clearAmeNZBSearchCache();
       removeAmeNZBRow();
       addAmeNZBToViewPage();
+      updateAmeNZBDescriptionSection();
       break;
     case "showNekoBTLinks":
       if (value) {
@@ -1297,6 +1373,20 @@ async function handleSettingChange(setting, value) {
       } else {
         removeNekoBTRow();
       }
+      break;
+    case "showNekoBTSection":
+    case "showNekoBTFullLangNames":
+      updateNekoBTDescriptionSection();
+      break;
+    case "showTsukihimeLinks":
+      if (value) {
+        addTsukihimeToViewPage();
+      } else {
+        removeTsukihimeRow();
+      }
+      break;
+    case "showTsukihimeSection":
+      updateTsukihimeDescriptionSection();
       break;
     case "showSeaDex":
       if (value) {
@@ -1354,6 +1444,164 @@ async function handleSettingChange(setting, value) {
   }
 }
 
+const animetoshoViewLinkCache = new Map();
+
+function getAnimetoshoDomain(useNewATDomain) {
+  return useNewATDomain ? "animetosho.xyz" : "animetosho.org";
+}
+
+function normalizeAnimetoshoViewUrl(url, atDomain) {
+  if (!url) return null;
+  return url.replace(/animetosho\.(org|xyz)/, atDomain);
+}
+
+function parseAnimetoshoOrgViewLink(json, atDomain) {
+  if (!json || json.error) return null;
+
+  let viewSuffix = null;
+  if (json.nyaa_id) viewSuffix = `n${json.nyaa_id}`;
+  else if (json.anidex_id) viewSuffix = `d${json.anidex_id}`;
+  else if (json.tosho_id) viewSuffix = `${json.tosho_id}`;
+  else if (json.nekobt_id) viewSuffix = `k${json.nekobt_id}`;
+
+  if (!viewSuffix) return null;
+  return `https://${atDomain}/view/${viewSuffix}`;
+}
+
+function parseAnimetoshoXyzViewLink(json, atDomain) {
+  if (!json?.ok || !json.data?.length) return null;
+  const viewUrl = json.data[0].urls?.view;
+  if (!viewUrl) return null;
+  return normalizeAnimetoshoViewUrl(viewUrl, atDomain);
+}
+
+async function resolveAnimetoshoViewLink(infoHash, useNewATDomain) {
+  const hash = infoHash?.trim().toLowerCase();
+  if (!hash) return null;
+
+  const cacheKey = `${useNewATDomain ? "xyz" : "org"}:${hash}`;
+  let entry = animetoshoViewLinkCache.get(cacheKey);
+  if (entry?.resolved) return entry.link;
+  if (entry?.promise) {
+    await entry.promise;
+    return animetoshoViewLinkCache.get(cacheKey)?.link ?? null;
+  }
+
+  const atDomain = getAnimetoshoDomain(useNewATDomain);
+  entry = { link: null, resolved: false, promise: null };
+  animetoshoViewLinkCache.set(cacheKey, entry);
+
+  entry.promise = (async () => {
+    try {
+      const apiUrl = useNewATDomain
+        ? `https://feed.animetosho.xyz/json/v1/search?q=${encodeURIComponent(hash)}&limit=1`
+        : `https://feed.animetosho.org/json?show=torrent&btih=${encodeURIComponent(hash)}`;
+      const result = await fetchUrlViaBackground(apiUrl);
+      if (result?.ok) {
+        try {
+          const json = JSON.parse(result.text);
+          entry.link = useNewATDomain
+            ? parseAnimetoshoXyzViewLink(json, atDomain)
+            : parseAnimetoshoOrgViewLink(json, atDomain);
+        } catch {
+          /* ignore parse errors */
+        }
+      }
+    } finally {
+      entry.resolved = true;
+      entry.promise = null;
+    }
+  })();
+
+  await entry.promise;
+  return entry.link;
+}
+
+function createAnimetoshoListAnchor(infoHash, useNewATDomain) {
+  const atLink = document.createElement("a");
+  atLink.target = "_blank";
+  atLink.innerHTML = '<i class="fa fa-external-link"></i>';
+  atLink.style.color = "#337ab7";
+  atLink.style.visibility = "hidden";
+  resolveAnimetoshoViewLink(infoHash, useNewATDomain).then((viewUrl) => {
+    if (viewUrl) {
+      atLink.href = viewUrl;
+      atLink.style.visibility = "";
+    }
+  });
+  return atLink;
+}
+
+function populateAnimetoshoListCell(row, atCell, useNewATDomain) {
+  if (!isAnimetoshoListCategoryRow(row)) return;
+  const infoHash = getTorrentInfoHashFromRow(row);
+  if (!infoHash) return;
+  if (atCell.querySelector("a")) return;
+  atCell.appendChild(createAnimetoshoListAnchor(infoHash, useNewATDomain));
+}
+
+async function patchAnimetoshoListLinksForNewRows() {
+  const prefs = await loadStoredPreferences();
+  if (!prefs.showATLinks) return;
+  if (!document.querySelector('table.torrent-list thead th[title="AT"]')) {
+    return;
+  }
+
+  document.querySelectorAll("table.torrent-list tbody tr").forEach((row) => {
+    if (row.querySelector(".at-column")) return;
+    const atCell = document.createElement("td");
+    atCell.className = "text-center at-column";
+    populateAnimetoshoListCell(row, atCell, prefs.useNewATDomain);
+    insertAtCellBeforeMagnetOrCheckbox(row, atCell);
+  });
+}
+
+async function refreshAnimetoshoViewPageLink() {
+  const atRow = Array.from(document.querySelectorAll(".row")).find((row) =>
+    row.textContent.includes("Animetosho:"),
+  );
+  if (!atRow) return;
+
+  const atAnchor = atRow.querySelector("a");
+  if (!atAnchor) return;
+
+  const infoHash = document.querySelector("kbd")?.textContent?.trim();
+  if (!infoHash) return;
+
+  const prefs = await loadStoredPreferences();
+  const viewUrl = await resolveAnimetoshoViewLink(
+    infoHash,
+    prefs.useNewATDomain,
+  );
+  if (viewUrl) {
+    atAnchor.href = viewUrl;
+    atAnchor.textContent = viewUrl;
+    atAnchor.style.color = "";
+    atAnchor.style.pointerEvents = "";
+  } else {
+    atAnchor.removeAttribute("href");
+    atAnchor.textContent = "Not found on AnimeTosho";
+    atAnchor.style.color = "#999";
+    atAnchor.style.pointerEvents = "none";
+  }
+}
+
+async function refreshAnimetoshoListLinks() {
+  const prefs = await loadStoredPreferences();
+  document.querySelectorAll(".at-column a").forEach((link) => {
+    const row = link.closest("tr");
+    const infoHash = row ? getTorrentInfoHashFromRow(row) : "";
+    if (!infoHash) return;
+    link.style.visibility = "hidden";
+    resolveAnimetoshoViewLink(infoHash, prefs.useNewATDomain).then((viewUrl) => {
+      if (viewUrl) {
+        link.href = viewUrl;
+        link.style.visibility = "";
+      }
+    });
+  });
+}
+
 // Function to add Animetosho link to torrent view pages
 async function addAnimetoshoToViewPage() {
   // Check if we're on a view page and AT links are enabled
@@ -1362,21 +1610,7 @@ async function addAnimetoshoToViewPage() {
   const prefs = await loadStoredPreferences();
   if (!prefs.showATLinks) return;
 
-  // Check if it's an English-translated anime
-  const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
-  const isAnime = Array.from(categoryLinks).some(
-    (link) => link.textContent === "Anime",
-  );
-  const isEnglish = Array.from(categoryLinks).some(
-    (link) => link.textContent === "English-translated",
-  );
-
-  if (!isAnime || !isEnglish) return;
-
-  // Get the torrent ID from the URL
-  const torrentId = window.location.pathname.split("/").pop();
-
-  const atDomain = prefs.useNewATDomain ? "animetosho.xyz" : "animetosho.org";
+  if (!isSupportedAnimeViewPageCategory()) return;
 
   // Find the info hash row
   const infoHashRow = Array.from(document.querySelectorAll(".row")).find(
@@ -1384,6 +1618,9 @@ async function addAnimetoshoToViewPage() {
   );
 
   if (!infoHashRow) return;
+
+  const infoHash = infoHashRow.querySelector("kbd")?.textContent?.trim();
+  if (!infoHash) return;
 
   // Get the info hash content, removing the offset class
   const infoHashContent = infoHashRow.innerHTML.replace(
@@ -1397,15 +1634,27 @@ async function addAnimetoshoToViewPage() {
   newRow.innerHTML = `
     <div class="col-md-1">Animetosho:</div>
     <div class="col-md-5">
-      <a rel="noopener noreferrer nofollow" href="https://${atDomain}/view/n${torrentId}">
-        https://${atDomain}/view/n${torrentId}
-      </a>
+      <a rel="noopener noreferrer nofollow">Loading…</a>
     </div>
     ${infoHashContent}
   `;
 
   // Replace the old row with the new one
   infoHashRow.replaceWith(newRow);
+
+  const atAnchor = newRow.querySelector("a");
+  const viewUrl = await resolveAnimetoshoViewLink(
+    infoHash,
+    prefs.useNewATDomain,
+  );
+  if (viewUrl) {
+    atAnchor.href = viewUrl;
+    atAnchor.textContent = viewUrl;
+  } else {
+    atAnchor.textContent = "Not found on AnimeTosho";
+    atAnchor.style.color = "#999";
+    atAnchor.style.pointerEvents = "none";
+  }
 }
 
 // Function to add AnimeTosho comments to supported view pages
@@ -1415,21 +1664,15 @@ async function addAnimetoshoComments() {
   const prefs = await loadStoredPreferences();
   if (!prefs.showATComments) return;
 
-  const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
-  const isAnime = Array.from(categoryLinks).some(
-    (link) => link.textContent === "Anime",
-  );
-  const isEnglish = Array.from(categoryLinks).some(
-    (link) => link.textContent === "English-translated",
-  );
-
-  if (!isAnime || !isEnglish) return;
+  if (!isSupportedAnimeViewPageCategory()) return;
 
   if (document.getElementById("tosho-comments")) return;
 
-  const nyaaId = window.location.pathname.split("/")[2];
-  const atDomain = prefs.useNewATDomain ? "animetosho.xyz" : "animetosho.org";
-  const toshoUrl = `https://${atDomain}/view/n${nyaaId}`;
+  const infoHash = document.querySelector("kbd")?.textContent?.trim();
+  const toshoUrl = infoHash
+    ? await resolveAnimetoshoViewLink(infoHash, prefs.useNewATDomain)
+    : null;
+  if (!toshoUrl) return;
 
   const containers = document.getElementsByClassName("container");
   const nyaaContainer = containers[containers.length - 1];
@@ -1573,6 +1816,1678 @@ async function addAnimetoshoComments() {
   }
 }
 
+// ── AnimeTosho episode features (screenshots, FileInfo, attachments) ────────
+
+let atEpisodeFetchId = 0;
+let atBatchViewHtml = null;
+let atXyzViewPageHtml = null;
+
+const animetoshoTorrentDataCache = new Map();
+
+const AT_EPISODE_FILE_ICON = "fa fa-file";
+// Nyaa uses Font Awesome 4.7; fa-file-circle-check is FA6-only and renders blank.
+const AT_EPISODE_FILE_ICON_SELECTED = "fa fa-check-circle";
+
+function queryTorrentFileListIcon(li) {
+  return li.querySelector("i.fa-file, i.fa-check-circle");
+}
+
+function setTorrentFileListIcon(li, selected) {
+  const icon = queryTorrentFileListIcon(li);
+  if (icon) {
+    icon.className = selected
+      ? AT_EPISODE_FILE_ICON_SELECTED
+      : AT_EPISODE_FILE_ICON;
+  }
+}
+
+const atEpisodeSelection = {
+  torrentKey: null,
+  epId: null,
+  epFilename: null,
+  countVidFiles: 0,
+};
+
+function resetAnimetoshoEpisodeSelection() {
+  atEpisodeSelection.torrentKey = null;
+  atEpisodeSelection.epId = null;
+  atEpisodeSelection.epFilename = null;
+  atEpisodeSelection.countVidFiles = 0;
+  atBatchViewHtml = null;
+  atXyzViewPageHtml = null;
+}
+
+function isAnimetoshoSupportedViewPage() {
+  return isSupportedAnimeViewPageCategory();
+}
+
+function removeLegacyAnimetoshoScreenshotsLayout() {
+  document.getElementById("nyaa-enhancer-at-screenshots")?.remove();
+  const row = document.querySelector(".nyaa-enhancer-description-row");
+  if (!row) return;
+  const descPanel = row.querySelector(".panel.panel-default");
+  if (descPanel) {
+    row.parentNode.insertBefore(descPanel, row);
+  }
+  row.remove();
+}
+
+function removeAnimetoshoEpisodeFeatures() {
+  atEpisodeFetchId++;
+  removeLegacyAnimetoshoScreenshotsLayout();
+  resetAnimetoshoEpisodeSelection();
+  clearAnimetoshoFileListEpisodeHandlers();
+
+  const panel = document.querySelector(".nyaa-enhancer-description-panel");
+  if (!panel) return;
+
+  for (const section of ["atscreenshots", "atfileinfo", "atattachments"]) {
+    panel.querySelector(`[data-section="${section}"]`)?.remove();
+  }
+  panel
+    .querySelectorAll(
+      "#at-screenshots-panel, #at-fileinfo-panel, #at-attachments-panel",
+    )
+    .forEach((el) => el.remove());
+  switchDescriptionPanelTab(panel, "description");
+}
+
+function ensureDescriptionTab(panel, section, label, insertAfterSection) {
+  let tab = panel.querySelector(`[data-section="${section}"]`);
+  if (tab) return tab;
+
+  const tabsHeader = panel.querySelector(".nyaa-enhancer-description-tabs");
+  if (!tabsHeader) return null;
+
+  tab = document.createElement("button");
+  tab.type = "button";
+  tab.className = "nyaa-enhancer-desc-tab";
+  tab.setAttribute("role", "tab");
+  tab.setAttribute("aria-selected", "false");
+  tab.dataset.section = section;
+  tab.textContent = label;
+  tab.addEventListener("click", () =>
+    switchDescriptionPanelTab(panel, section),
+  );
+
+  const afterTab = panel.querySelector(
+    `[data-section="${insertAfterSection}"]`,
+  );
+  if (afterTab?.nextSibling) {
+    tabsHeader.insertBefore(tab, afterTab.nextSibling);
+  } else {
+    tabsHeader.appendChild(tab);
+  }
+  return tab;
+}
+
+const AT_EPISODE_TAB_BODIES = {
+  atscreenshots: {
+    bodyId: "at-screenshots-panel",
+    bodyClass: "nyaa-enhancer-at-screenshots-body",
+  },
+  atfileinfo: {
+    bodyId: "at-fileinfo-panel",
+    bodyClass: "nyaa-enhancer-at-fileinfo-body",
+  },
+  atattachments: {
+    bodyId: "at-attachments-panel",
+    bodyClass: "nyaa-enhancer-at-attachments-body",
+  },
+};
+
+function getOrCreateDescriptionPanelBody(panel, section) {
+  const config = AT_EPISODE_TAB_BODIES[section];
+  if (!config) return null;
+
+  let body = panel.querySelector(`#${config.bodyId}`);
+  if (body) return body;
+
+  body = document.createElement("div");
+  body.id = config.bodyId;
+  body.className = `panel-body ${config.bodyClass}`;
+  body.hidden = true;
+  panel.appendChild(body);
+  return body;
+}
+
+function pickAnimetoshoVideoFiles(files) {
+  const videoFiles = [];
+  if (!Array.isArray(files)) return videoFiles;
+
+  const sorted = [...files].sort((a, b) =>
+    String(a.filename).localeCompare(String(b.filename)),
+  );
+
+  for (const file of sorted) {
+    const filename = String(file.filename || "").toLowerCase();
+    if (
+      !filename.endsWith(".mkv") &&
+      !filename.endsWith(".mp4") &&
+      !filename.endsWith(".ts")
+    ) {
+      continue;
+    }
+    if (
+      (filename.startsWith("extra") ||
+        filename.startsWith("bonus") ||
+        filename.startsWith("special") ||
+        filename.startsWith("creditless")) &&
+      filename.includes("/")
+    ) {
+      continue;
+    }
+    videoFiles.push({
+      id: String(file.id),
+      filename: String(file.filename).split("/").pop(),
+    });
+  }
+  return videoFiles;
+}
+
+function isAnimetoshoXyzFileEpisodeId(episodeId) {
+  return String(episodeId || "").startsWith("/file/");
+}
+
+function pickAnimetoshoXyzVideoFilesFromDoc(doc) {
+  const entries = [];
+  doc.querySelectorAll(".view_list_entry .link a[href^='/file/']").forEach((a) => {
+    const href = a.getAttribute("href");
+    const fullName = a.textContent.trim();
+    if (!href || !fullName) return;
+
+    const filename = fullName.split("/").pop();
+    const lower = filename.toLowerCase();
+    if (
+      !lower.endsWith(".mkv") &&
+      !lower.endsWith(".mp4") &&
+      !lower.endsWith(".ts")
+    ) {
+      return;
+    }
+
+    const lowerPath = fullName.toLowerCase();
+    if (
+      (lowerPath.startsWith("extra") ||
+        lowerPath.startsWith("bonus") ||
+        lowerPath.startsWith("special") ||
+        lowerPath.startsWith("creditless")) &&
+      fullName.includes("/")
+    ) {
+      return;
+    }
+
+    entries.push({ href, filename });
+  });
+
+  entries.sort((a, b) => a.filename.localeCompare(b.filename));
+  return entries.map(({ href, filename }) => ({
+    id: href,
+    filename,
+  }));
+}
+
+function parseAnimetoshoXyzViewPage(html) {
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const videoFiles = pickAnimetoshoXyzVideoFilesFromDoc(doc);
+    const singleFileLink = doc.querySelector('a[href*="file_info="]');
+    let singleFileInfoLink = null;
+
+    if (singleFileLink) {
+      const href = singleFileLink.getAttribute("href");
+      const fullName = singleFileLink.textContent.trim();
+      if (href && fullName) {
+        singleFileInfoLink = {
+          href,
+          filename: fullName.split("/").pop(),
+        };
+      }
+    }
+
+    return { videoFiles, singleFileInfoLink };
+  } catch {
+    return { videoFiles: [], singleFileInfoLink: null };
+  }
+}
+
+function getAnimetoshoRecordVideoFiles(record) {
+  if (record.useNewATDomain) {
+    return record.xyzPageData?.videoFiles || [];
+  }
+  return record.videoFiles || [];
+}
+
+async function getAnimetoshoTorrentRecord(infoHash, useNewATDomain) {
+  const hash = infoHash?.trim().toLowerCase();
+  if (!hash) return null;
+
+  const cacheKey = `${useNewATDomain ? "xyz" : "org"}:${hash}`;
+  let entry = animetoshoTorrentDataCache.get(cacheKey);
+  if (entry?.resolved) return entry.data;
+  if (entry?.promise) {
+    await entry.promise;
+    return animetoshoTorrentDataCache.get(cacheKey)?.data ?? null;
+  }
+
+  const atDomain = getAnimetoshoDomain(useNewATDomain);
+  entry = { data: null, resolved: false, promise: null };
+  animetoshoTorrentDataCache.set(cacheKey, entry);
+
+  entry.promise = (async () => {
+    try {
+      const apiUrl = useNewATDomain
+        ? `https://feed.animetosho.xyz/json/v1/search?q=${encodeURIComponent(hash)}&limit=1`
+        : `https://feed.animetosho.org/json?show=torrent&btih=${encodeURIComponent(hash)}`;
+      const result = await fetchUrlViaBackground(apiUrl);
+      if (!result?.ok) return;
+
+      const json = JSON.parse(result.text);
+      if (useNewATDomain) {
+        const item = json?.data?.[0];
+        if (!item) return;
+        let viewId = item.id != null ? String(item.id) : null;
+        let viewUrl = item.urls?.view || "";
+        if (!viewId && viewUrl) {
+          const match = viewUrl.match(/\/view\/(\d+)/);
+          viewId = match ? match[1] : null;
+        }
+        if (!viewUrl && viewId) {
+          viewUrl = `https://${atDomain}/view/${viewId}`;
+        }
+        viewUrl = normalizeAnimetoshoViewUrl(viewUrl, atDomain);
+        if (!viewUrl || !viewId) return;
+
+        entry.data = {
+          infoHash: hash,
+          useNewATDomain: true,
+          viewUrl,
+          xyzViewId: viewId,
+          videoFiles: [],
+        };
+      } else if (!json?.error) {
+        const viewUrl = parseAnimetoshoOrgViewLink(json, atDomain);
+        if (!viewUrl) return;
+        entry.data = {
+          infoHash: hash,
+          useNewATDomain: false,
+          viewUrl,
+          xyzViewId: null,
+          videoFiles: pickAnimetoshoVideoFiles(json.files),
+          torrentJson: json,
+        };
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      entry.resolved = true;
+      entry.promise = null;
+    }
+  })();
+
+  await entry.promise;
+  return entry.data;
+}
+
+function initAnimetoshoEpisodeSelection(record) {
+  const torrentKey = `${record.infoHash}:${record.useNewATDomain ? "xyz" : "org"}`;
+  if (atEpisodeSelection.torrentKey === torrentKey) return;
+
+  resetAnimetoshoEpisodeSelection();
+  atEpisodeSelection.torrentKey = torrentKey;
+
+  if (record.useNewATDomain) {
+    const { videoFiles, singleFileInfoLink } = record.xyzPageData || {
+      videoFiles: [],
+      singleFileInfoLink: null,
+    };
+
+    if (videoFiles.length > 1) {
+      atEpisodeSelection.countVidFiles = videoFiles.length;
+      atEpisodeSelection.epId = videoFiles[0].id;
+      atEpisodeSelection.epFilename = videoFiles[0].filename;
+      return;
+    }
+
+    if (videoFiles.length === 1) {
+      atEpisodeSelection.countVidFiles = 1;
+      atEpisodeSelection.epId = videoFiles[0].id;
+      atEpisodeSelection.epFilename = videoFiles[0].filename;
+      return;
+    }
+
+    atEpisodeSelection.epId = record.xyzViewId;
+    atEpisodeSelection.countVidFiles = 1;
+    atEpisodeSelection.epFilename = singleFileInfoLink?.filename || null;
+    return;
+  }
+
+  atEpisodeSelection.countVidFiles = record.videoFiles.length;
+  if (record.videoFiles.length > 0) {
+    atEpisodeSelection.epId = record.videoFiles[0].id;
+    atEpisodeSelection.epFilename = record.videoFiles[0].filename;
+  }
+}
+
+async function fetchAnimetoshoEpisodeViewHtml(episodeId, useNewATDomain) {
+  const url = useNewATDomain
+    ? isAnimetoshoXyzFileEpisodeId(episodeId)
+      ? `https://animetosho.xyz${episodeId}`
+      : `https://animetosho.xyz/view/${episodeId}`
+    : `https://animetosho.org/file/${episodeId}`;
+  const result = await fetchUrlViaBackground(url);
+  return result?.ok ? result.text : null;
+}
+
+async function fetchAnimetoshoEpisodeFileinfo(
+  episodeId,
+  useNewATDomain,
+  episodeViewHtml,
+) {
+  if (!episodeViewHtml) return { fileInfo: null, filename: null };
+
+  if (!useNewATDomain) {
+    return {
+      fileInfo: extractATFileinfoFromHtml(episodeViewHtml),
+      filename: atEpisodeSelection.epFilename,
+    };
+  }
+
+  if (isAnimetoshoXyzFileEpisodeId(episodeId)) {
+    return {
+      fileInfo: extractATFileinfoFromHtml(episodeViewHtml),
+      filename: atEpisodeSelection.epFilename,
+    };
+  }
+
+  const doc = new DOMParser().parseFromString(episodeViewHtml, "text/html");
+  const fileInfoLink = doc.querySelector('a[href*="file_info="]');
+  const filename =
+    fileInfoLink?.textContent?.trim().split("/").pop() ||
+    atEpisodeSelection.epFilename;
+  const fileInfoHref = fileInfoLink?.getAttribute("href");
+  if (!fileInfoHref) {
+    return { fileInfo: null, filename };
+  }
+
+  const fileInfoUrl = fileInfoHref.startsWith("http")
+    ? fileInfoHref
+    : `https://animetosho.xyz${fileInfoHref}`;
+  const result = await fetchUrlViaBackground(fileInfoUrl);
+  if (!result?.ok) {
+    return { fileInfo: null, filename };
+  }
+
+  return {
+    fileInfo: extractATFileinfoFromHtml(result.text),
+    filename,
+  };
+}
+
+function createEmptyATAttachmentGroups() {
+  return { file: [], subtitles: [], audio: [], video: [] };
+}
+
+function resolveATAttachmentGroupUrls(groups, useNewATDomain) {
+  if (!useNewATDomain) return groups;
+  const resolveList = (items) =>
+    items.map((item) => ({
+      ...item,
+      link: item.link.startsWith("http")
+        ? item.link
+        : `https://animetosho.xyz${item.link}`,
+    }));
+  return {
+    file: resolveList(groups.file),
+    subtitles: resolveList(groups.subtitles),
+    audio: resolveList(groups.audio),
+    video: resolveList(groups.video),
+  };
+}
+
+function hasATAttachmentGroups(groups) {
+  return (
+    groups.file.length > 0 ||
+    groups.subtitles.length > 0 ||
+    groups.audio.length > 0 ||
+    groups.video.length > 0
+  );
+}
+
+function collectATDownloadLinksFromCell(td, downloads, seen) {
+  let currentHost = null;
+
+  const visit = (node) => {
+    if (!node) return;
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent || "";
+      const hostMatch = text.match(/([^:,]+):\s*$/);
+      if (hostMatch) {
+        currentHost = hostMatch[1].trim();
+        return;
+      }
+      const inlineHostMatch = text.match(/^\s*([^:,]+):\s+/);
+      if (inlineHostMatch) {
+        currentHost = inlineHostMatch[1].trim();
+      }
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    if (node.nodeName === "BR") {
+      return;
+    }
+
+    if (node.nodeName === "A") {
+      const part = normalizeATAttachmentLabel(node.textContent);
+      const label =
+        currentHost && part && !/^part\d+$/i.test(part)
+          ? part
+          : currentHost
+            ? `${currentHost} · ${part}`
+            : part;
+      pushATAttachmentLink(
+        downloads,
+        node.getAttribute("href"),
+        label,
+        seen,
+      );
+      return;
+    }
+
+    if (node.classList?.contains("dlxlink")) {
+      const anchor = node.querySelector("a[href]");
+      if (anchor) {
+        const part = normalizeATAttachmentLabel(anchor.textContent);
+        const label = currentHost ? `${currentHost} · ${part}` : part;
+        pushATAttachmentLink(
+          downloads,
+          anchor.getAttribute("href"),
+          label,
+          seen,
+        );
+      }
+      return;
+    }
+
+    node.childNodes.forEach(visit);
+  };
+
+  td.childNodes.forEach(visit);
+}
+
+function extractATDownloadLinksFromHtml(html) {
+  if (!html) return [];
+
+  try {
+    const downloads = [];
+    const seen = new Set();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+
+    for (const row of doc.querySelectorAll("tr")) {
+      const th = row.querySelector("th");
+      const td = row.querySelector("td");
+      if (!th || !td) continue;
+
+      const header = normalizeATAttachmentLabel(th.textContent);
+      if (!/^Download$/i.test(header)) continue;
+
+      collectATDownloadLinksFromCell(td, downloads, seen);
+      break;
+    }
+
+    return downloads;
+  } catch (error) {
+    console.error("Error parsing AnimeTosho download links:", error);
+    return [];
+  }
+}
+
+function findBatchViewListEntry(doc, epId, epFilename) {
+  const normalizedEpId = String(epId || "");
+  const normalizedFilename = String(epFilename || "");
+
+  for (const entry of doc.querySelectorAll(".view_list_entry")) {
+    const fileLink = entry.querySelector(".link a[href]");
+    if (!fileLink) continue;
+
+    const href = fileLink.getAttribute("href") || "";
+    const filename = fileLink.textContent.trim().split("/").pop();
+
+    if (normalizedEpId && (href === normalizedEpId || href.endsWith(normalizedEpId))) {
+      return entry;
+    }
+    if (
+      normalizedEpId &&
+      !isAnimetoshoXyzFileEpisodeId(normalizedEpId) &&
+      (href.includes(`/file/${normalizedEpId}`) ||
+        href.endsWith(`.${normalizedEpId}`))
+    ) {
+      return entry;
+    }
+    if (normalizedFilename && filename === normalizedFilename) {
+      return entry;
+    }
+  }
+
+  return null;
+}
+
+function extractATDownloadLinksFromBatchEntry(
+  batchHtml,
+  epId,
+  epFilename,
+) {
+  if (!batchHtml) return [];
+
+  try {
+    const doc = new DOMParser().parseFromString(batchHtml, "text/html");
+    const entry = findBatchViewListEntry(doc, epId, epFilename);
+    if (!entry) return [];
+
+    const linksCell = entry.querySelector(".links");
+    if (!linksCell) return [];
+
+    const downloads = [];
+    const seen = new Set();
+    collectATDownloadLinksFromCell(linksCell, downloads, seen);
+    return downloads;
+  } catch (error) {
+    console.error("Error parsing AnimeTosho batch file downloads:", error);
+    return [];
+  }
+}
+
+function resolveATFileDownloadLinks(
+  episodeViewHtml,
+  batchViewHtml,
+  epId,
+  epFilename,
+) {
+  let file = extractATDownloadLinksFromHtml(episodeViewHtml);
+  if (file.length) return file;
+
+  if (batchViewHtml) {
+    file = extractATDownloadLinksFromBatchEntry(
+      batchViewHtml,
+      epId,
+      epFilename,
+    );
+    if (file.length) return file;
+
+    file = extractATDownloadLinksFromHtml(batchViewHtml);
+  }
+
+  return file;
+}
+
+function mergeAnimetoshoSubtitleAttachments(
+  batchViewHtml,
+  episodeViewHtml,
+  countVidFiles,
+  useNewATDomain,
+  epId,
+  epFilename,
+) {
+  const groups = extractATAttachmentsFromHtml(episodeViewHtml);
+  groups.file = resolveATFileDownloadLinks(
+    episodeViewHtml,
+    batchViewHtml,
+    epId,
+    epFilename,
+  );
+
+  if (countVidFiles > 1 && batchViewHtml) {
+    const batchGroups = extractATAttachmentsFromHtml(batchViewHtml);
+    if (
+      batchGroups.subtitles.length === 1 &&
+      batchGroups.subtitles[0].text === "All Attachments"
+    ) {
+      batchGroups.subtitles[0].text = "All Attachments (Batch)";
+    }
+    groups.subtitles = [...batchGroups.subtitles, ...groups.subtitles.slice(1)];
+  }
+
+  return resolveATAttachmentGroupUrls(groups, useNewATDomain);
+}
+
+function extractATFileinfoFromHtml(html) {
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    let el = doc.getElementById("file_addinfo");
+    if (!el) {
+      el = doc.getElementById("additional_info_text");
+    }
+    if (!el) return null;
+
+    let raw = el.innerHTML.replace(/<br\s*\/?>/gi, "\n");
+    const txt = document.createElement("textarea");
+    txt.innerHTML = raw;
+    raw = txt.value;
+    return raw.trim() || null;
+  } catch (error) {
+    console.error("Error parsing AnimeTosho FileInfo:", error);
+    return null;
+  }
+}
+
+function openATFileinfoTab(fileInfo, filename) {
+  const fileTitle = (filename || "FileInfo").replace(/</g, "&lt;");
+  const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${fileTitle}</title>
+<style>
+body { background-color: #121212; color: #ffffff; font-family: Arial, sans-serif; padding: 0; margin: 0; }
+pre { white-space: pre-wrap; word-wrap: break-word; padding: 20px; margin: 0; font-size: 13px; border: 0; }
+</style>
+</head>
+<body><pre>${fileInfo.replace(/</g, "&lt;")}</pre></body>
+</html>`;
+  const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+function renderATFileinfoBody(body, fileInfo, filename) {
+  body.replaceChildren();
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "nyaa-enhancer-at-fileinfo-toolbar";
+
+  const openBtn = document.createElement("button");
+  openBtn.type = "button";
+  openBtn.className = "nyaa-enhancer-at-fileinfo-btn";
+  openBtn.textContent = "Open in New Tab";
+  openBtn.addEventListener("click", () =>
+    openATFileinfoTab(fileInfo, filename),
+  );
+  toolbar.appendChild(openBtn);
+
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "nyaa-enhancer-at-fileinfo-btn";
+  copyBtn.textContent = "Copy to Clipboard";
+  copyBtn.addEventListener("click", () => {
+    navigator.clipboard
+      .writeText(fileInfo)
+      .then(() => showNotification("FileInfo copied to clipboard!", true))
+      .catch(() => showNotification("Failed to copy FileInfo", false));
+  });
+  toolbar.appendChild(copyBtn);
+
+  body.appendChild(toolbar);
+
+  const pre = document.createElement("pre");
+  pre.className = "nyaa-enhancer-at-fileinfo-pre";
+  pre.textContent = fileInfo;
+  body.appendChild(pre);
+}
+
+function appendATAttachmentLinks(container, links, options = {}) {
+  const separator =
+    options.separator ??
+    (links.some((item) => item.text.includes(" · ")) ? ", " : " | ");
+
+  links.forEach((item, index) => {
+    const anchor = document.createElement("a");
+    anchor.href = item.link;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.textContent = item.text;
+    container.appendChild(anchor);
+
+    if (index < links.length - 1) {
+      container.appendChild(
+        document.createTextNode(
+          item.text.includes("All Attachments") ? " | " : separator,
+        ),
+      );
+    }
+  });
+}
+
+function renderATAttachmentGroupRow(label, links, options = {}) {
+  const row = document.createElement("div");
+  row.className = "nyaa-enhancer-at-attachment-row";
+
+  const rowLabel = document.createElement("div");
+  rowLabel.className = "nyaa-enhancer-at-attachment-row-label";
+  rowLabel.textContent = label;
+
+  const linkList = document.createElement("div");
+  linkList.className = "nyaa-enhancer-at-attachment-links";
+  appendATAttachmentLinks(linkList, links, options);
+
+  row.append(rowLabel, linkList);
+  return row;
+}
+
+function renderATAttachmentsBody(body, groups) {
+  body.replaceChildren();
+
+  const container = document.createElement("div");
+  container.className = "nyaa-enhancer-at-attachments-list";
+
+  if (groups.file.length) {
+    container.appendChild(
+      renderATAttachmentGroupRow("Video File", groups.file, {
+        separator: groups.file.some((item) => item.text.includes(" · "))
+          ? ", "
+          : " | ",
+      }),
+    );
+  }
+  if (groups.subtitles.length) {
+    container.appendChild(
+      renderATAttachmentGroupRow("Subtitles", groups.subtitles),
+    );
+  }
+  if (groups.audio.length) {
+    container.appendChild(renderATAttachmentGroupRow("Audio", groups.audio));
+  }
+  if (groups.video.length) {
+    container.appendChild(renderATAttachmentGroupRow("Video", groups.video));
+  }
+
+  body.appendChild(container);
+}
+
+let atFileListClickHandler = null;
+
+function clearAnimetoshoFileListEpisodeHandlers() {
+  if (!atFileListClickHandler) return;
+  const fileList = document.querySelector(".torrent-file-list");
+  fileList?.removeEventListener("click", atFileListClickHandler);
+  atFileListClickHandler = null;
+
+  document.querySelectorAll(".nyaa-enhancer-at-episode-file").forEach((li) => {
+    li.classList.remove("nyaa-enhancer-at-episode-file");
+    li.style.cursor = "";
+    li.removeAttribute("data-at-episode-id");
+    li.removeAttribute("data-at-episode-filename");
+    setTorrentFileListIcon(li, false);
+    li.style.backgroundColor = "";
+  });
+}
+
+function setupAnimetoshoFileListEpisodeSelection(record) {
+  clearAnimetoshoFileListEpisodeHandlers();
+
+  const videoFiles = getAnimetoshoRecordVideoFiles(record);
+  if (videoFiles.length <= 1) return;
+
+  const fileList = document.querySelector(".torrent-file-list");
+  if (!fileList) return;
+
+  const filenameToItem = new Map();
+  fileList.querySelectorAll("li").forEach((item) => {
+    const icon = queryTorrentFileListIcon(item);
+    if (!icon) return;
+    const fileSizeSpan = item.querySelector("span.file-size");
+    let extracted = item.textContent.trim();
+    if (fileSizeSpan) {
+      extracted = extracted.replace(fileSizeSpan.textContent, "").trim();
+    }
+    filenameToItem.set(extracted, item);
+  });
+
+  for (const file of videoFiles) {
+    const item = filenameToItem.get(file.filename);
+    if (!item) continue;
+
+    item.classList.add("nyaa-enhancer-at-episode-file");
+    item.style.cursor = "pointer";
+    item.dataset.atEpisodeId = file.id;
+    item.dataset.atEpisodeFilename = file.filename;
+
+    if (file.id === atEpisodeSelection.epId) {
+      setTorrentFileListIcon(item, true);
+    }
+  }
+
+  atFileListClickHandler = (e) => {
+    const item = e.target.closest("li.nyaa-enhancer-at-episode-file");
+    if (!item || !fileList.contains(item)) return;
+
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const restoreScroll = () => window.scrollTo(scrollX, scrollY);
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const fileId = item.dataset.atEpisodeId;
+    const filename = item.dataset.atEpisodeFilename;
+    if (!fileId) return;
+
+    atEpisodeSelection.epId = fileId;
+    atEpisodeSelection.epFilename = filename;
+
+    fileList.querySelectorAll("li.nyaa-enhancer-at-episode-file").forEach((li) => {
+      setTorrentFileListIcon(li, false);
+      li.style.backgroundColor = "";
+    });
+
+    setTorrentFileListIcon(item, true);
+    restoreScroll();
+    requestAnimationFrame(restoreScroll);
+
+    loadStoredPreferences().then((prefs) =>
+      refreshAnimetoshoEpisodeFeatures(prefs, {
+        fromEpisodePick: true,
+        scrollX,
+        scrollY,
+      }),
+    );
+  };
+
+  fileList.addEventListener("click", atFileListClickHandler);
+}
+
+function setAnimetoshoTabStatus(body, message) {
+  body.replaceChildren();
+  const status = document.createElement("p");
+  status.className = "nyaa-enhancer-at-episode-status";
+  status.textContent = message;
+  body.appendChild(status);
+}
+
+function collectATScreenshotsFromRoot(root) {
+  const screenshots = [];
+
+  root.querySelectorAll("a.screenthumb").forEach((a) => {
+    const href = a.getAttribute("href");
+    if (!href) return;
+    const img = a.querySelector("img");
+    const src = img?.getAttribute("src") || href;
+
+    const storageUrl = href.includes("/sframes/")
+      ? href
+          .replace(/.*\/sframes\//, "https://storage.animetosho.org/sframes/")
+          .replace(/&amp;/g, "&")
+      : href;
+    const thumbnailUrl = src.includes("/sframes/")
+      ? src
+          .replace(/.*\/sframes\//, "https://storage.animetosho.org/sframes/")
+          .replace(/&amp;/g, "&")
+      : src;
+
+    screenshots.push({
+      url: storageUrl,
+      thumbnail: thumbnailUrl,
+      title: a.getAttribute("title") || img?.getAttribute("alt") || "",
+    });
+  });
+
+  return screenshots;
+}
+
+function extractATScreenshotsFromHtml(html) {
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+
+    for (const row of doc.querySelectorAll("tr")) {
+      const th = row.querySelector("th");
+      if (
+        th &&
+        /^Screenshots$/i.test(normalizeATAttachmentLabel(th.textContent))
+      ) {
+        const td = row.querySelector("td");
+        return td ? collectATScreenshotsFromRoot(td) : [];
+      }
+    }
+
+    return collectATScreenshotsFromRoot(doc);
+  } catch (error) {
+    console.error("Error parsing AnimeTosho screenshots:", error);
+    return [];
+  }
+}
+
+function normalizeATAttachmentLabel(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function pushATAttachmentLink(attachments, href, text, seen) {
+  const label = normalizeATAttachmentLabel(text);
+  const link = href?.trim();
+  if (!link || !label) return;
+  const key = `${link}\0${label}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  attachments.push({ text: label, link });
+}
+
+function collectATAttachmentLinksFromRoot(root, attachments, seen) {
+  if (!root) return;
+  root.querySelectorAll("a[href]").forEach((anchor) => {
+    pushATAttachmentLink(
+      attachments,
+      anchor.getAttribute("href"),
+      anchor.textContent,
+      seen,
+    );
+  });
+}
+
+function collectATAttachmentLinksFromHtml(html, attachments, seen) {
+  const doc = new DOMParser().parseFromString(
+    `<div id="nyaa-enhancer-at-parse">${html}</div>`,
+    "text/html",
+  );
+  collectATAttachmentLinksFromRoot(
+    doc.getElementById("nyaa-enhancer-at-parse"),
+    attachments,
+    seen,
+  );
+}
+
+function collectATExtractionsFromCell(td, audio, video, seen) {
+  let section = null;
+
+  const visit = (node) => {
+    if (!node) return;
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      if (/\bAudio:\s*/i.test(text)) section = "audio";
+      if (/\bVideo:\s*/i.test(text)) section = "video";
+      return;
+    }
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.nodeName === "A") {
+        const target =
+          section === "video" ? video : section === "audio" ? audio : audio;
+        pushATAttachmentLink(
+          target,
+          node.getAttribute("href"),
+          node.textContent,
+          seen,
+        );
+        return;
+      }
+      node.childNodes.forEach(visit);
+    }
+  };
+
+  td.childNodes.forEach(visit);
+}
+
+function extractATAttachmentsFromHtml(html) {
+  try {
+    const groups = createEmptyATAttachmentGroups();
+    const seen = new Set();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    let foundSubtitlesRow = false;
+
+    for (const row of doc.querySelectorAll("tr")) {
+      const th = row.querySelector("th");
+      const td = row.querySelector("td");
+      if (!th || !td) continue;
+
+      const header = normalizeATAttachmentLabel(th.textContent);
+      if (!header) continue;
+
+      if (/^Subtitles$/i.test(header)) {
+        foundSubtitlesRow = true;
+        collectATAttachmentLinksFromRoot(td, groups.subtitles, seen);
+        continue;
+      }
+
+      if (/^Extractions$/i.test(header)) {
+        const cellHtml = td.innerHTML;
+        const subtitlesIdx = cellHtml.search(/Subtitles:\s*/i);
+
+        if (subtitlesIdx >= 0 && !foundSubtitlesRow) {
+          collectATAttachmentLinksFromHtml(
+            cellHtml.slice(subtitlesIdx),
+            groups.subtitles,
+            seen,
+          );
+        }
+
+        const extractionsPart =
+          subtitlesIdx >= 0 ? cellHtml.slice(0, subtitlesIdx) : cellHtml;
+        const extractionsDoc = new DOMParser().parseFromString(
+          `<div id="nyaa-enhancer-at-parse">${extractionsPart}</div>`,
+          "text/html",
+        );
+        const extractionsRoot = extractionsDoc.getElementById(
+          "nyaa-enhancer-at-parse",
+        );
+        if (extractionsRoot) {
+          collectATExtractionsFromCell(
+            extractionsRoot,
+            groups.audio,
+            groups.video,
+            seen,
+          );
+        }
+      }
+    }
+
+    return groups;
+  } catch (error) {
+    console.error("Error parsing AnimeTosho attachments:", error);
+    return createEmptyATAttachmentGroups();
+  }
+}
+
+function getATScreenshotDisplayUrl(url) {
+  if (!url) return url;
+  if (url.includes("/sframes/") || url.includes("storage.animetosho.org")) {
+    return url.replace(/\.png$/i, ".jpg");
+  }
+  return url;
+}
+
+function getATScreenshotImageUrl(url, trackNum) {
+  try {
+    const imgUrlObj = new URL(url);
+    if (trackNum) {
+      imgUrlObj.searchParams.set("s", trackNum);
+    } else {
+      imgUrlObj.searchParams.delete("s");
+    }
+    return imgUrlObj.toString();
+  } catch {
+    return url;
+  }
+}
+
+async function fetchAnimetoshoScreenshotHtml(
+  record,
+  epId,
+  useNewATDomain,
+  episodeViewHtml,
+) {
+  if (
+    useNewATDomain &&
+    atEpisodeSelection.countVidFiles > 1 &&
+    isAnimetoshoXyzFileEpisodeId(epId)
+  ) {
+    if (
+      episodeViewHtml &&
+      String(epId) !== String(record.xyzViewId)
+    ) {
+      return episodeViewHtml;
+    }
+    return fetchAnimetoshoEpisodeViewHtml(epId, useNewATDomain);
+  }
+  return episodeViewHtml;
+}
+
+function openATScreenshotModal(screenshots, initialIndex, trackNum) {
+  document.getElementById("nyaa-enhancer-screenshot-modal")?.remove();
+
+  let currentIndex = initialIndex;
+  const modalOverlay = document.createElement("div");
+  modalOverlay.id = "nyaa-enhancer-screenshot-modal";
+  modalOverlay.className = "nyaa-enhancer-screenshot-modal";
+  modalOverlay.setAttribute("role", "dialog");
+  modalOverlay.setAttribute("aria-modal", "true");
+  modalOverlay.setAttribute("aria-label", "Screenshot viewer");
+
+  const originalScrollY = window.scrollY;
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${originalScrollY}px`;
+  document.body.style.width = "100%";
+
+  const shell = document.createElement("div");
+  shell.className = "nyaa-enhancer-screenshot-viewer";
+
+  const header = document.createElement("header");
+  header.className = "nyaa-enhancer-screenshot-viewer-header";
+
+  const titleBadge = document.createElement("div");
+  titleBadge.className = "nyaa-enhancer-screenshot-viewer-title";
+
+  const headerEnd = document.createElement("div");
+  headerEnd.className = "nyaa-enhancer-screenshot-viewer-header-end";
+
+  const counter = document.createElement("span");
+  counter.className = "nyaa-enhancer-screenshot-viewer-counter";
+
+  const actions = document.createElement("div");
+  actions.className = "nyaa-enhancer-screenshot-viewer-actions";
+
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.className = "nyaa-enhancer-screenshot-viewer-btn";
+  openButton.innerHTML =
+    '<i class="fa fa-external-link" aria-hidden="true"></i><span>Open</span>';
+  openButton.title = "Open in New Tab";
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className =
+    "nyaa-enhancer-screenshot-viewer-btn nyaa-enhancer-screenshot-viewer-btn-icon";
+  closeButton.innerHTML = '<i class="fa fa-times" aria-hidden="true"></i>';
+  closeButton.title = "Close";
+  closeButton.setAttribute("aria-label", "Close");
+
+  const stage = document.createElement("div");
+  stage.className = "nyaa-enhancer-screenshot-viewer-stage";
+
+  const loader = document.createElement("div");
+  loader.className = "nyaa-enhancer-screenshot-viewer-loader";
+  loader.setAttribute("aria-hidden", "true");
+
+  const modalImage = document.createElement("img");
+  modalImage.className = "nyaa-enhancer-screenshot-viewer-img";
+
+  let prevButton;
+  let nextButton;
+  const thumbButtons = [];
+
+  if (screenshots.length > 1) {
+    prevButton = document.createElement("button");
+    prevButton.type = "button";
+    prevButton.className =
+      "nyaa-enhancer-screenshot-viewer-nav nyaa-enhancer-screenshot-viewer-nav-prev";
+    prevButton.innerHTML = '<i class="fa fa-chevron-left" aria-hidden="true"></i>';
+    prevButton.setAttribute("aria-label", "Previous screenshot");
+
+    nextButton = document.createElement("button");
+    nextButton.type = "button";
+    nextButton.className =
+      "nyaa-enhancer-screenshot-viewer-nav nyaa-enhancer-screenshot-viewer-nav-next";
+    nextButton.innerHTML = '<i class="fa fa-chevron-right" aria-hidden="true"></i>';
+    nextButton.setAttribute("aria-label", "Next screenshot");
+  }
+
+  function closeModal() {
+    document.removeEventListener("keydown", onKeyDown);
+    modalOverlay.remove();
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.width = "";
+    window.scrollTo(0, originalScrollY);
+  }
+
+  function goToIndex(index) {
+    currentIndex = index;
+    updateModal();
+  }
+
+  function goRelative(delta) {
+    goToIndex(
+      (currentIndex + delta + screenshots.length) % screenshots.length,
+    );
+  }
+
+  function updateModal() {
+    const screenshot = screenshots[currentIndex];
+    const fullUrl = getATScreenshotImageUrl(
+      getATScreenshotDisplayUrl(screenshot.url),
+      trackNum,
+    );
+    const labelText = screenshot.title || `Screenshot ${currentIndex + 1}`;
+
+    titleBadge.textContent = labelText;
+    counter.textContent = `${currentIndex + 1} / ${screenshots.length}`;
+    counter.hidden = screenshots.length <= 1;
+    modalImage.alt = labelText;
+
+    loader.hidden = false;
+    modalImage.classList.remove("is-loaded");
+    modalImage.onload = () => {
+      loader.hidden = true;
+      modalImage.classList.add("is-loaded");
+    };
+    modalImage.onerror = () => {
+      loader.hidden = true;
+    };
+    modalImage.src = fullUrl;
+    openButton.onclick = () =>
+      window.open(fullUrl, "_blank", "noopener,noreferrer");
+
+    thumbButtons.forEach((btn, i) => {
+      const active = i === currentIndex;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-current", active ? "true" : "false");
+      if (active) {
+        btn.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center",
+        });
+      }
+    });
+  }
+
+  function onKeyDown(e) {
+    if (e.key === "Escape") {
+      closeModal();
+    } else if (e.key === "ArrowLeft" && screenshots.length > 1) {
+      e.preventDefault();
+      goRelative(-1);
+    } else if (e.key === "ArrowRight" && screenshots.length > 1) {
+      e.preventDefault();
+      goRelative(1);
+    }
+  }
+
+  closeButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeModal();
+  });
+  modalOverlay.addEventListener("click", (e) => {
+    if (e.target === modalOverlay) closeModal();
+  });
+  shell.addEventListener("click", (e) => e.stopPropagation());
+
+  if (prevButton) {
+    prevButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      goRelative(-1);
+    });
+  }
+  if (nextButton) {
+    nextButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      goRelative(1);
+    });
+  }
+
+  actions.append(openButton, closeButton);
+  headerEnd.append(counter, actions);
+  header.append(titleBadge, headerEnd);
+
+  stage.append(loader, modalImage);
+  if (prevButton) stage.appendChild(prevButton);
+  if (nextButton) stage.appendChild(nextButton);
+
+  shell.append(header, stage);
+
+  if (screenshots.length > 1) {
+    const filmstrip = document.createElement("div");
+    filmstrip.className = "nyaa-enhancer-screenshot-viewer-filmstrip";
+    const filmstripInner = document.createElement("div");
+    filmstripInner.className = "nyaa-enhancer-screenshot-viewer-filmstrip-inner";
+
+    screenshots.forEach((shot, i) => {
+      const thumbBtn = document.createElement("button");
+      thumbBtn.type = "button";
+      thumbBtn.className = "nyaa-enhancer-screenshot-viewer-thumb";
+      thumbBtn.setAttribute(
+        "aria-label",
+        shot.title || `Screenshot ${i + 1}`,
+      );
+
+      const thumbImg = document.createElement("img");
+      thumbImg.loading = "lazy";
+      thumbImg.alt = "";
+      thumbImg.src = getATScreenshotImageUrl(
+        getATScreenshotDisplayUrl(shot.url),
+        trackNum,
+      );
+      thumbBtn.appendChild(thumbImg);
+      thumbBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        goToIndex(i);
+      });
+      thumbButtons.push(thumbBtn);
+      filmstripInner.appendChild(thumbBtn);
+    });
+
+    filmstrip.appendChild(filmstripInner);
+    shell.appendChild(filmstrip);
+  }
+
+  document.addEventListener("keydown", onKeyDown);
+  modalOverlay.appendChild(shell);
+  document.body.appendChild(modalOverlay);
+  updateModal();
+}
+
+function renderATScreenshotsGrid(body, screenshots, subtitles, isXyz) {
+  body.replaceChildren();
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "nyaa-enhancer-at-screenshots-toolbar";
+
+  const trackSelect = document.createElement("select");
+  trackSelect.className = "nyaa-enhancer-at-track-select";
+  const noTrackOption = document.createElement("option");
+  noTrackOption.value = "";
+  noTrackOption.textContent = "No Subtitle Track";
+  trackSelect.appendChild(noTrackOption);
+
+  if (!isXyz) {
+    subtitles.forEach(({ text, link }) => {
+      const trackMatch = link.match(/_track(\d+)/);
+      if (trackMatch && !text.includes("All Attachments")) {
+        const option = document.createElement("option");
+        option.value = trackMatch[1];
+        option.textContent = `Track ${trackMatch[1]} - ${text}`;
+        trackSelect.appendChild(option);
+      }
+    });
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "nyaa-enhancer-at-screenshot-grid";
+
+  function updateGrid(trackNum) {
+    grid.replaceChildren();
+    screenshots.forEach((shot) => {
+      const thumb = document.createElement("div");
+      thumb.className = "nyaa-enhancer-at-screenshot-thumb";
+      thumb.style.paddingBottom = "56.25%";
+
+      const overlay = document.createElement("div");
+      overlay.className = "nyaa-enhancer-at-screenshot-overlay";
+      overlay.textContent = shot.title;
+
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.alt = shot.title;
+      img.src = getATScreenshotImageUrl(
+        getATScreenshotDisplayUrl(shot.url),
+        trackNum,
+      );
+      img.onload = () => {
+        if (img.naturalWidth > 0) {
+          thumb.style.paddingBottom = `${(img.naturalHeight / img.naturalWidth) * 100}%`;
+        }
+      };
+
+      thumb.append(img, overlay);
+      thumb.addEventListener("click", () => {
+        const index = screenshots.findIndex((s) => s.url === shot.url);
+        openATScreenshotModal(screenshots, index >= 0 ? index : 0, trackNum);
+      });
+      grid.appendChild(thumb);
+    });
+  }
+
+  trackSelect.addEventListener("change", () => updateGrid(trackSelect.value));
+  if (!isXyz && trackSelect.options.length > 1) {
+    trackSelect.selectedIndex = 1;
+  }
+  updateGrid(trackSelect.value);
+
+  if (!isXyz && trackSelect.options.length > 1) {
+    toolbar.appendChild(trackSelect);
+    body.appendChild(toolbar);
+  }
+  body.appendChild(grid);
+}
+
+function animetoshoEpisodeFeaturesEnabled(prefs) {
+  return (
+    prefs.showATScreenshotsSection ||
+    prefs.showATFileInfoSection ||
+    prefs.showATAttachmentsSection
+  );
+}
+
+async function refreshAnimetoshoEpisodeFeatures(prefs, options = {}) {
+  const { fromEpisodePick = false } = options;
+  const scrollX = options.scrollX ?? window.scrollX;
+  const scrollY = options.scrollY ?? window.scrollY;
+  const restoreScroll = () => window.scrollTo(scrollX, scrollY);
+
+  const fetchId = ++atEpisodeFetchId;
+  const panel = document.querySelector(".nyaa-enhancer-description-panel");
+  if (!panel) return;
+
+  try {
+  const wantScreenshots = !!prefs.showATScreenshotsSection;
+  const wantFileinfo = !!prefs.showATFileInfoSection;
+  const wantAttachments = !!prefs.showATAttachmentsSection;
+
+  if (!wantScreenshots) {
+    panel.querySelector('[data-section="atscreenshots"]')?.remove();
+    panel.querySelector("#at-screenshots-panel")?.remove();
+  }
+  if (!wantFileinfo) {
+    panel.querySelector('[data-section="atfileinfo"]')?.remove();
+    panel.querySelector("#at-fileinfo-panel")?.remove();
+  }
+  if (!wantAttachments) {
+    panel.querySelector('[data-section="atattachments"]')?.remove();
+    panel.querySelector("#at-attachments-panel")?.remove();
+  }
+
+  const insertAfterForFileinfo = wantScreenshots ? "atscreenshots" : "description";
+  let insertAfterForAttachments = "description";
+  if (wantFileinfo) insertAfterForAttachments = "atfileinfo";
+  else if (wantScreenshots) insertAfterForAttachments = "atscreenshots";
+
+  const screenshotBody = wantScreenshots
+    ? (ensureDescriptionTab(panel, "atscreenshots", "Screenshots", "description"),
+      getOrCreateDescriptionPanelBody(panel, "atscreenshots"))
+    : null;
+  const fileinfoBody = wantFileinfo
+    ? (ensureDescriptionTab(
+        panel,
+        "atfileinfo",
+        "FileInfo",
+        insertAfterForFileinfo,
+      ),
+      getOrCreateDescriptionPanelBody(panel, "atfileinfo"))
+    : null;
+  const attachmentsBody = wantAttachments
+    ? (ensureDescriptionTab(
+        panel,
+        "atattachments",
+        "Downloads",
+        insertAfterForAttachments,
+      ),
+      getOrCreateDescriptionPanelBody(panel, "atattachments"))
+    : null;
+
+  const loadingMessage = "Loading from AnimeTosho…";
+  if (!fromEpisodePick) {
+    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, loadingMessage);
+    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, loadingMessage);
+    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, loadingMessage);
+  }
+
+  if (!isAnimetoshoSupportedViewPage()) {
+    const msg =
+      "AnimeTosho episode data is only available for anime (English-translated, Non-English-translated, or Raw).";
+    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
+    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
+    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
+    return;
+  }
+
+  const infoHash = document.querySelector("kbd")?.textContent?.trim();
+  if (!infoHash) {
+    const msg = "Info hash not found.";
+    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
+    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
+    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
+    return;
+  }
+
+  const record = await getAnimetoshoTorrentRecord(
+    infoHash,
+    prefs.useNewATDomain,
+  );
+  if (fetchId !== atEpisodeFetchId) return;
+
+  if (!record?.viewUrl) {
+    const msg = "Not found on AnimeTosho.";
+    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
+    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
+    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
+    return;
+  }
+
+  if (record.useNewATDomain && !record.xyzPageData) {
+    const viewResult = await fetchUrlViaBackground(record.viewUrl);
+    if (fetchId !== atEpisodeFetchId) return;
+    if (viewResult?.ok) {
+      atXyzViewPageHtml = viewResult.text;
+      atBatchViewHtml = viewResult.text;
+      record.xyzPageData = parseAnimetoshoXyzViewPage(viewResult.text);
+    }
+  }
+
+  initAnimetoshoEpisodeSelection(record);
+  if (fetchId !== atEpisodeFetchId) return;
+
+  if (!atEpisodeSelection.epId) {
+    const msg = "No episode file found on AnimeTosho.";
+    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
+    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
+    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
+    return;
+  }
+
+  if (atEpisodeSelection.countVidFiles > 1 && !atBatchViewHtml) {
+    const batchResult = await fetchUrlViaBackground(record.viewUrl);
+    if (fetchId !== atEpisodeFetchId) return;
+    atBatchViewHtml = batchResult?.ok ? batchResult.text : null;
+    if (record.useNewATDomain && batchResult?.ok) {
+      atXyzViewPageHtml = batchResult.text;
+      if (!record.xyzPageData) {
+        record.xyzPageData = parseAnimetoshoXyzViewPage(batchResult.text);
+      }
+    }
+  }
+
+  let episodeViewHtml;
+  if (
+    record.useNewATDomain &&
+    String(atEpisodeSelection.epId) === String(record.xyzViewId) &&
+    atXyzViewPageHtml
+  ) {
+    episodeViewHtml = atXyzViewPageHtml;
+  } else {
+    episodeViewHtml = await fetchAnimetoshoEpisodeViewHtml(
+      atEpisodeSelection.epId,
+      record.useNewATDomain,
+    );
+  }
+  if (fetchId !== atEpisodeFetchId) return;
+
+  if (!episodeViewHtml) {
+    const msg = "Failed to load episode data from AnimeTosho.";
+    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
+    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
+    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
+    return;
+  }
+
+  const latestPrefs = await loadStoredPreferences();
+  if (
+    fetchId !== atEpisodeFetchId ||
+    !animetoshoEpisodeFeaturesEnabled(latestPrefs)
+  ) {
+    return;
+  }
+
+  if (wantFileinfo && fileinfoBody) {
+    const { fileInfo, filename } = await fetchAnimetoshoEpisodeFileinfo(
+      atEpisodeSelection.epId,
+      record.useNewATDomain,
+      episodeViewHtml,
+    );
+    if (fetchId !== atEpisodeFetchId) return;
+
+    if (fileInfo) {
+      renderATFileinfoBody(
+        fileinfoBody,
+        fileInfo,
+        filename || atEpisodeSelection.epFilename,
+      );
+    } else {
+      setAnimetoshoTabStatus(
+        fileinfoBody,
+        "No FileInfo on AnimeTosho for this episode.",
+      );
+    }
+  }
+
+  const attachmentGroups = mergeAnimetoshoSubtitleAttachments(
+    atBatchViewHtml,
+    episodeViewHtml,
+    atEpisodeSelection.countVidFiles,
+    record.useNewATDomain,
+    atEpisodeSelection.epId,
+    atEpisodeSelection.epFilename,
+  );
+
+  if (wantAttachments && attachmentsBody) {
+    if (hasATAttachmentGroups(attachmentGroups)) {
+      renderATAttachmentsBody(attachmentsBody, attachmentGroups);
+    } else {
+      setAnimetoshoTabStatus(
+        attachmentsBody,
+        "No downloads on AnimeTosho for this episode.",
+      );
+    }
+  }
+
+  if (wantScreenshots && screenshotBody) {
+    const screenshotHtml = await fetchAnimetoshoScreenshotHtml(
+      record,
+      atEpisodeSelection.epId,
+      record.useNewATDomain,
+      episodeViewHtml,
+    );
+    if (fetchId !== atEpisodeFetchId) return;
+
+    const screenshots = extractATScreenshotsFromHtml(screenshotHtml);
+    if (!screenshots.length) {
+      setAnimetoshoTabStatus(
+        screenshotBody,
+        "No screenshots on AnimeTosho for this episode.",
+      );
+    } else {
+      const screenshotSubtitles = record.useNewATDomain
+        ? []
+        : attachmentGroups.subtitles;
+      renderATScreenshotsGrid(
+        screenshotBody,
+        screenshots,
+        screenshotSubtitles,
+        record.useNewATDomain,
+      );
+    }
+  }
+
+  setupAnimetoshoFileListEpisodeSelection(record);
+  } finally {
+    if (fromEpisodePick) {
+      restoreScroll();
+      requestAnimationFrame(restoreScroll);
+    }
+  }
+}
+
+async function updateAnimetoshoEpisodeFeatures() {
+  if (!window.location.pathname.startsWith("/view/")) {
+    removeAnimetoshoEpisodeFeatures();
+    return;
+  }
+
+  const prefs = await loadStoredPreferences();
+  if (!animetoshoEpisodeFeaturesEnabled(prefs)) {
+    removeAnimetoshoEpisodeFeatures();
+    return;
+  }
+
+  if (!document.querySelector(".nyaa-enhancer-description-panel")) {
+    return;
+  }
+
+  await refreshAnimetoshoEpisodeFeatures(prefs);
+}
+
 // Remove the ameNZB row, restoring the original info hash row if it was integrated
 function removeAmeNZBRow() {
   const ameNZBRow = document.querySelector(".amenzb-row");
@@ -1613,13 +3528,187 @@ function removeAmeNZBRow() {
       `;
       ameNZBRow.replaceWith(restoredRow);
     }
+    repositionTsukihimeRowAfterNekoBT();
   } else {
     ameNZBRow.remove();
+    repositionTsukihimeRowAfterNekoBT();
   }
 }
 
-// Lock to prevent concurrent ameNZB fetch calls
+// Lock to prevent concurrent ameNZB row DOM updates
 let ameNZBFetchInProgress = false;
+let amenzbSectionFetchId = 0;
+
+const ameNZBSearchCache = {
+  infoHash: null,
+  promise: null,
+  item: null,
+  fetched: false,
+};
+
+function clearAmeNZBSearchCache() {
+  ameNZBSearchCache.infoHash = null;
+  ameNZBSearchCache.promise = null;
+  ameNZBSearchCache.item = null;
+  ameNZBSearchCache.fetched = false;
+}
+
+function isAmeNZBSupportedViewPage() {
+  return isSupportedAnimeViewPageCategory();
+}
+
+function getAmeNZBAttr(item, name) {
+  for (const el of item.querySelectorAll("attr")) {
+    if (el.getAttribute("name") === name) return el.getAttribute("value");
+  }
+  for (const el of item.getElementsByTagName("*")) {
+    if (el.localName === "attr" && el.getAttribute("name") === name) {
+      return el.getAttribute("value");
+    }
+  }
+  return null;
+}
+
+function cleanAmeNZBTitle(title) {
+  return title.trim().replace(/\s*\{[^}]*\}\s*$/g, "").trim();
+}
+
+function formatAmeNZBPubDate(pubDate) {
+  return pubDate.trim().replace(/\s+[+-]\d{4}$/, "").trim();
+}
+
+function parseAmeNZBSearchXml(xmlText) {
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+  const item = xmlDoc.querySelector("item");
+  if (!item) return null;
+
+  const title = item.querySelector("title")?.textContent?.trim() || "";
+  const comments = item.querySelector("comments")?.textContent?.trim() || "";
+  const pubDate = item.querySelector("pubDate")?.textContent?.trim() || "";
+
+  return {
+    title,
+    cleanTitle: cleanAmeNZBTitle(title),
+    comments,
+    pubDate,
+    size: getAmeNZBAttr(item, "size"),
+    grabs: getAmeNZBAttr(item, "grabs"),
+    files: getAmeNZBAttr(item, "files"),
+    resolution: getAmeNZBAttr(item, "resolution"),
+    source: getAmeNZBAttr(item, "source"),
+    language: getAmeNZBAttr(item, "language"),
+    subs: getAmeNZBAttr(item, "subs"),
+    season: getAmeNZBAttr(item, "season"),
+    episode: getAmeNZBAttr(item, "episode"),
+  };
+}
+
+async function fetchAmeNZBSearch(infoHash, apiKey) {
+  if (!apiKey || !infoHash) {
+    return { item: null, link: null };
+  }
+
+  if (
+    ameNZBSearchCache.infoHash === infoHash &&
+    ameNZBSearchCache.fetched &&
+    !ameNZBSearchCache.promise
+  ) {
+    return {
+      item: ameNZBSearchCache.item,
+      link: ameNZBSearchCache.item?.comments || null,
+    };
+  }
+
+  if (ameNZBSearchCache.infoHash === infoHash && ameNZBSearchCache.promise) {
+    await ameNZBSearchCache.promise;
+    return {
+      item: ameNZBSearchCache.item,
+      link: ameNZBSearchCache.item?.comments || null,
+    };
+  }
+
+  ameNZBSearchCache.infoHash = infoHash;
+  ameNZBSearchCache.item = null;
+  ameNZBSearchCache.fetched = false;
+
+  ameNZBSearchCache.promise = (async () => {
+    try {
+      const apiUrl = `https://amenzb.moe/api?t=search&apikey=${encodeURIComponent(apiKey)}&info_hash=${encodeURIComponent(infoHash)}`;
+      const result = await fetchUrlViaBackground(apiUrl);
+      if (result) await incrementAmeNZBRequestCount();
+      if (result?.ok) {
+        ameNZBSearchCache.item = parseAmeNZBSearchXml(result.text);
+      }
+      ameNZBSearchCache.fetched = true;
+    } finally {
+      ameNZBSearchCache.promise = null;
+    }
+  })();
+
+  await ameNZBSearchCache.promise;
+  return {
+    item: ameNZBSearchCache.item,
+    link: ameNZBSearchCache.item?.comments || null,
+  };
+}
+
+function renderAmeNZBPanelContent(item) {
+  let meta = "";
+  meta += buildNekoBTMetaRow("Title", escapeNekoBTHtml(item.cleanTitle));
+  meta += buildNekoBTMetaRow("Full title", escapeNekoBTHtml(item.title));
+  if (item.comments) {
+    meta += buildNekoBTMetaRow(
+      "Release page",
+      `<a href="${escapeNekoBTHtml(item.comments)}" rel="noopener noreferrer nofollow" target="_blank">${escapeNekoBTHtml(item.comments)}</a>`,
+    );
+  }
+  if (item.pubDate) {
+    meta += buildNekoBTMetaRow(
+      "Published",
+      escapeNekoBTHtml(formatAmeNZBPubDate(item.pubDate)),
+    );
+  }
+  if (item.size) {
+    meta += buildNekoBTMetaRow(
+      "Size",
+      escapeNekoBTHtml(formatNekoBTBytes(item.size)),
+    );
+  }
+  if (item.grabs != null && item.grabs !== "") {
+    meta += buildNekoBTMetaRow("Grabs", escapeNekoBTHtml(item.grabs));
+  }
+  if (item.files != null && item.files !== "") {
+    meta += buildNekoBTMetaRow("Files", escapeNekoBTHtml(item.files));
+  }
+  if (item.resolution) {
+    meta += buildNekoBTMetaRow("Resolution", escapeNekoBTHtml(item.resolution));
+  }
+  if (item.source) {
+    meta += buildNekoBTMetaRow("Source", escapeNekoBTHtml(item.source));
+  }
+  if (item.language) {
+    meta += buildNekoBTMetaRow("Language", escapeNekoBTHtml(item.language));
+  }
+  if (item.subs) {
+    meta += buildNekoBTMetaRow("Subtitles", escapeNekoBTHtml(item.subs));
+  }
+  if (item.season != null && item.season !== "") {
+    meta += buildNekoBTMetaRow("Season", escapeNekoBTHtml(item.season));
+  }
+  if (item.episode != null && item.episode !== "") {
+    meta += buildNekoBTMetaRow("Episode", escapeNekoBTHtml(item.episode));
+  }
+
+  return `<div class="nyaa-enhancer-nekobt-content"><dl class="nyaa-enhancer-nekobt-meta">${meta}</dl></div>`;
+}
+
+function buildExternalServiceLinkHtml(url, notFoundLabel) {
+  if (url) {
+    return `<a rel="noopener noreferrer nofollow" href="${url}" target="_blank">${url}</a>`;
+  }
+  return `<span style="color: #999;">${notFoundLabel}</span>`;
+}
 
 // Function to add ameNZB link to supported torrent view pages
 async function addAmeNZBToViewPage() {
@@ -1632,42 +3721,23 @@ async function addAmeNZBToViewPage() {
     const prefs = await loadStoredPreferences();
     if (!prefs.showAmeNZBLinks || !prefs.ameNZBApiKey) return;
 
-    const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
-    const isAnime = Array.from(categoryLinks).some(
-      (link) => link.textContent === "Anime",
-    );
-    const isSupported = Array.from(categoryLinks).some(
-      (link) =>
-        link.textContent === "English-translated" || link.textContent === "Raw",
-    );
-
-    if (!isAnime || !isSupported) return;
+    if (!isAmeNZBSupportedViewPage()) return;
 
     // Guard again after async prefs load in case something raced past the lock
     if (document.querySelector(".amenzb-row")) return;
 
-    // Get the info hash from the page
     const infoHashKbd = document.querySelector("kbd");
     if (!infoHashKbd) return;
     const infoHash = infoHashKbd.textContent.trim();
 
-    const apiUrl = `https://amenzb.moe/api?t=search&apikey=${encodeURIComponent(prefs.ameNZBApiKey)}&info_hash=${encodeURIComponent(infoHash)}`;
-
-    const result = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: "fetchUrl", url: apiUrl }, resolve);
-    });
-
-    // Count every request that actually reached ameNZB, regardless of result
-    if (result) await incrementAmeNZBRequestCount();
-
-    if (!result?.ok) return;
-
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(result.text, "text/xml");
-    const commentsEl = xmlDoc.querySelector("item > comments");
-    if (!commentsEl) return;
-
-    const ameNZBLink = commentsEl.textContent.trim();
+    const { link: ameNZBLink } = await fetchAmeNZBSearch(
+      infoHash,
+      prefs.ameNZBApiKey,
+    );
+    const ameNZBContent = buildExternalServiceLinkHtml(
+      ameNZBLink,
+      "Not found on ameNZB",
+    );
 
     // If AnimeTosho already claimed the info hash row, append after it.
     // Otherwise (Raw or AT disabled) integrate ameNZB into the info hash row
@@ -1682,9 +3752,7 @@ async function addAmeNZBToViewPage() {
       newRow.innerHTML = `
         <div class="col-md-1">ameNZB:</div>
         <div class="col-md-5">
-          <a rel="noopener noreferrer nofollow" href="${ameNZBLink}" target="_blank">
-            ${ameNZBLink}
-          </a>
+          ${ameNZBContent}
         </div>
       `;
       atRow.insertAdjacentElement("afterend", newRow);
@@ -1702,9 +3770,7 @@ async function addAmeNZBToViewPage() {
         newAmeNZBRow.innerHTML = `
           <div class="col-md-1">ameNZB:</div>
           <div class="col-md-5">
-            <a rel="noopener noreferrer nofollow" href="${ameNZBLink}" target="_blank">
-              ${ameNZBLink}
-            </a>
+            ${ameNZBContent}
           </div>
           <div class="col-md-1">Info hash:</div>
           <div class="col-md-5"><kbd>${infoHash}</kbd></div>
@@ -1722,6 +3788,7 @@ async function addAmeNZBToViewPage() {
             </div>
           `;
           newAmeNZBRow.insertAdjacentElement("afterend", nekoBTRow);
+          repositionTsukihimeRowAfterNekoBT();
         }
       } else {
         const infoHashRow = Array.from(document.querySelectorAll(".row")).find(
@@ -1735,9 +3802,7 @@ async function addAmeNZBToViewPage() {
         newRow.innerHTML = `
           <div class="col-md-1">ameNZB:</div>
           <div class="col-md-5">
-            <a rel="noopener noreferrer nofollow" href="${ameNZBLink}" target="_blank">
-              ${ameNZBLink}
-            </a>
+            ${ameNZBContent}
           </div>
           <div class="col-md-1">Info hash:</div>
           <div class="col-md-5"><kbd>${infoHash}</kbd></div>
@@ -1745,6 +3810,7 @@ async function addAmeNZBToViewPage() {
         infoHashRow.replaceWith(newRow);
       }
     }
+    repositionTsukihimeRowAfterNekoBT();
   } finally {
     ameNZBFetchInProgress = false;
   }
@@ -1772,6 +3838,480 @@ function incrementAmeNZBRequestCount() {
 
 // Lock to prevent concurrent nekoBT fetch calls
 let nekoBTFetchInProgress = false;
+let nekobtSectionFetchId = 0;
+let nekobtLangCache = null;
+let nekobtLangFetchPromise = null;
+
+function fetchUrlViaBackground(url) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "fetchUrl", url }, resolve);
+  });
+}
+
+function isNekoBTSupportedViewPage() {
+  return isSupportedAnimeViewPageCategory();
+}
+
+async function resolveNekoBTTorrentIdFromInfoHash(infoHash) {
+  const apiUrl = `https://nekobt.to/api/v1/torrents/search?query=${encodeURIComponent(infoHash)}`;
+  const result = await fetchUrlViaBackground(apiUrl);
+  if (!result?.ok) return null;
+  try {
+    const json = JSON.parse(result.text);
+    if (json.error || !json.data?.infohash_match) return null;
+    return String(json.data.infohash_match);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchNekoBTTorrentData(torrentId) {
+  const apiUrl = `https://nekobt.to/api/v1/torrents/${encodeURIComponent(torrentId)}`;
+  const result = await fetchUrlViaBackground(apiUrl);
+  if (!result?.ok) return null;
+  try {
+    const json = JSON.parse(result.text);
+    if (json.error || !json.data) return null;
+    return json.data;
+  } catch {
+    return null;
+  }
+}
+
+function escapeNekoBTHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function formatNekoBTBytes(size) {
+  const n = Number(size);
+  if (!isFinite(n) || n < 0) return "—";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  const decimals = i === 0 ? 0 : v >= 100 ? 0 : 1;
+  return `${v.toFixed(decimals)} ${units[i]}`;
+}
+
+function formatNekoBTTimestamp(ms) {
+  const n = Number(ms);
+  if (!isFinite(n) || n <= 0) return "—";
+  return new Date(n).toLocaleString();
+}
+
+async function loadNekoBTLangData() {
+  if (nekobtLangCache) return nekobtLangCache;
+  if (!nekobtLangFetchPromise) {
+    nekobtLangFetchPromise = (async () => {
+      const result = await fetchUrlViaBackground(
+        "https://nekobt.to/api/v1/langs",
+      );
+      if (!result?.ok) return null;
+      try {
+        const json = JSON.parse(result.text);
+        if (json.error || !json.data?.langs) return null;
+        nekobtLangCache = {
+          langs: json.data.langs,
+          convert: json.data.convert || {},
+        };
+        return nekobtLangCache;
+      } catch {
+        return null;
+      } finally {
+        nekobtLangFetchPromise = null;
+      }
+    })();
+  }
+  return nekobtLangFetchPromise;
+}
+
+function resolveNekoBTLangCode(rawCode, langData) {
+  const trimmed = rawCode.trim();
+  if (!trimmed) return trimmed;
+  let code = trimmed.toLowerCase();
+  if (langData.convert[code]) code = langData.convert[code];
+  if (langData.langs[code]) return code;
+  if (langData.langs[trimmed]) return trimmed;
+  if (langData.convert[trimmed]) {
+    const converted = langData.convert[trimmed];
+    if (langData.langs[converted]) return converted;
+  }
+  return trimmed;
+}
+
+function getNekoBTLangDisplayName(rawCode, langData) {
+  const code = resolveNekoBTLangCode(rawCode, langData);
+  const entry = langData.langs[code];
+  if (entry?.name) return entry.name;
+  return rawCode.trim();
+}
+
+function formatNekoBTLangList(value, useFullNames, langData) {
+  if (!value || typeof value !== "string") return "—";
+  const trimmed = value.trim();
+  if (!trimmed) return "—";
+  const codes = trimmed
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (!codes.length) return "—";
+  if (!useFullNames || !langData) return codes.join(", ");
+  return codes.map((c) => getNekoBTLangDisplayName(c, langData)).join(", ");
+}
+
+function renderNekoBTSimpleMarkdown(md) {
+  let html = escapeNekoBTHtml(md);
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
+    const safeUrl = url.trim();
+    if (!/^https?:\/\//i.test(safeUrl)) return text;
+    return `<a href="${escapeNekoBTHtml(safeUrl)}" rel="noopener noreferrer nofollow" target="_blank">${text}</a>`;
+  });
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\n/g, "<br>");
+  return html;
+}
+
+function buildNekoBTMetaRow(label, valueHtml) {
+  if (!valueHtml) return "";
+  return `<div class="nyaa-enhancer-nekobt-meta-row"><dt>${escapeNekoBTHtml(label)}</dt><dd>${valueHtml}</dd></div>`;
+}
+
+function renderNekoBTPanelContent(data, prefs, langData) {
+  const useFullLangNames = !!prefs.showNekoBTFullLangNames;
+  const torrentUrl = `https://nekobt.to/torrents/${encodeURIComponent(data.id)}`;
+  const titleHtml = `<a href="${escapeNekoBTHtml(torrentUrl)}" rel="noopener noreferrer nofollow" target="_blank">${escapeNekoBTHtml(data.title || "View on nekoBT")}</a>`;
+
+  const uploader = data.uploader;
+  const uploaderHtml = uploader
+    ? `<a href="https://nekobt.to/users/${encodeURIComponent(uploader.id)}" rel="noopener noreferrer nofollow" target="_blank">${escapeNekoBTHtml(uploader.display_name || uploader.username)}</a>`
+    : "Anonymous";
+
+  const group = data.groups?.[0];
+  const groupHtml = group
+    ? `<a href="https://nekobt.to/groups/${encodeURIComponent(group.id)}" rel="noopener noreferrer nofollow" target="_blank">${escapeNekoBTHtml(group.display_name || group.name)}</a>${group.tagline ? ` <span class="nyaa-enhancer-nekobt-muted">— ${escapeNekoBTHtml(group.tagline)}</span>` : ""}`
+    : null;
+
+  const flags = [];
+  if (data.batch) flags.push("Batch");
+  if (data.hardsub) flags.push("Hardsub");
+  if (data.mtl) flags.push("MTL");
+  if (data.otl) flags.push("OTL");
+  const flagsHtml = flags.length ? escapeNekoBTHtml(flags.join(", ")) : null;
+
+  let meta = "";
+  meta += buildNekoBTMetaRow("Title", titleHtml);
+  meta += buildNekoBTMetaRow("Uploader", uploaderHtml);
+  if (groupHtml) meta += buildNekoBTMetaRow("Group", groupHtml);
+  meta += buildNekoBTMetaRow(
+    "Swarm",
+    `${escapeNekoBTHtml(data.seeders ?? "?")} seeders · ${escapeNekoBTHtml(data.leechers ?? "?")} leechers · ${escapeNekoBTHtml(data.completed ?? "?")} completed`,
+  );
+  meta += buildNekoBTMetaRow(
+    "Health",
+    data.torrent_health != null
+      ? `${escapeNekoBTHtml(data.torrent_health)}%`
+      : "—",
+  );
+  meta += buildNekoBTMetaRow(
+    "Size",
+    escapeNekoBTHtml(formatNekoBTBytes(data.filesize)),
+  );
+  meta += buildNekoBTMetaRow(
+    "Uploaded",
+    escapeNekoBTHtml(formatNekoBTTimestamp(data.uploaded_at)),
+  );
+  meta += buildNekoBTMetaRow(
+    "Info hash",
+    `<code>${escapeNekoBTHtml(data.infohash || "")}</code>`,
+  );
+  meta += buildNekoBTMetaRow(
+    "Audio",
+    escapeNekoBTHtml(
+      formatNekoBTLangList(data.audio_lang, useFullLangNames, langData),
+    ),
+  );
+  meta += buildNekoBTMetaRow(
+    "Subtitles",
+    escapeNekoBTHtml(
+      formatNekoBTLangList(data.sub_lang, useFullLangNames, langData),
+    ),
+  );
+  if (data.fsub_lang) {
+    meta += buildNekoBTMetaRow(
+      "Forced subs",
+      escapeNekoBTHtml(
+        formatNekoBTLangList(data.fsub_lang, useFullLangNames, langData),
+      ),
+    );
+  }
+  if (flagsHtml) meta += buildNekoBTMetaRow("Tags", flagsHtml);
+
+  const files = Array.isArray(data.files) ? data.files : [];
+  const filesHtml = files.length
+    ? `<ul class="nyaa-enhancer-nekobt-file-list">${files
+        .map(
+          (f) =>
+            `<li><i class="fa fa-file"></i> ${escapeNekoBTHtml(f.name || f.path)} <span class="file-size">(${escapeNekoBTHtml(formatNekoBTBytes(f.length))})</span></li>`,
+        )
+        .join("")}</ul>`
+    : "";
+
+  const screenshots = Array.isArray(data.screenshots) ? data.screenshots : [];
+  const screenshotsHtml = screenshots.length
+    ? `<div class="nyaa-enhancer-nekobt-screenshots">${screenshots
+        .map(
+          (url) =>
+            `<a href="${escapeNekoBTHtml(url)}" target="_blank" rel="noopener noreferrer nofollow"><img src="${escapeNekoBTHtml(url)}" alt="Screenshot" loading="lazy"></a>`,
+        )
+        .join("")}</div>`
+    : "";
+
+  const description = data.description?.trim();
+  const descriptionHtml = description
+    ? `<div class="nyaa-enhancer-nekobt-block"><h4>Description</h4><div class="nyaa-enhancer-nekobt-markdown">${renderNekoBTSimpleMarkdown(description)}</div></div>`
+    : "";
+
+  const mediainfo = data.mediainfo?.trim();
+  const mediainfoHtml = mediainfo
+    ? `<div class="nyaa-enhancer-nekobt-block"><h4>MediaInfo</h4><pre class="nyaa-enhancer-nekobt-mediainfo">${escapeNekoBTHtml(mediainfo)}</pre></div>`
+    : "";
+
+  return `
+    <div class="nyaa-enhancer-nekobt-content">
+      <dl class="nyaa-enhancer-nekobt-meta">${meta}</dl>
+      ${filesHtml ? `<div class="nyaa-enhancer-nekobt-block"><h4>Files</h4>${filesHtml}</div>` : ""}
+      ${descriptionHtml}
+      ${mediainfoHtml}
+      ${screenshotsHtml ? `<div class="nyaa-enhancer-nekobt-block"><h4>Screenshots</h4>${screenshotsHtml}</div>` : ""}
+    </div>
+  `;
+}
+
+function switchDescriptionPanelTab(panel, activeSection) {
+  const sectionConfig = [
+    {
+      id: "description",
+      getBody: () => document.getElementById("torrent-description"),
+    },
+    {
+      id: "atscreenshots",
+      getBody: () => panel.querySelector("#at-screenshots-panel"),
+    },
+    {
+      id: "atfileinfo",
+      getBody: () => panel.querySelector("#at-fileinfo-panel"),
+    },
+    {
+      id: "atattachments",
+      getBody: () => panel.querySelector("#at-attachments-panel"),
+    },
+    {
+      id: "amenzb",
+      getBody: () => panel.querySelector("#amenzb-torrent-panel"),
+    },
+    {
+      id: "nekobt",
+      getBody: () => panel.querySelector("#nekobt-torrent-panel"),
+    },
+    {
+      id: "tsukihime",
+      getBody: () => panel.querySelector("#tsukihime-torrent-panel"),
+    },
+  ];
+
+  for (const { id, getBody } of sectionConfig) {
+    const tab = panel.querySelector(`[data-section="${id}"]`);
+    const body = getBody();
+    const active = id === activeSection;
+    if (tab) {
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    }
+    if (body) body.hidden = !active;
+  }
+}
+
+function removeAmeNZBDescriptionSection(panel) {
+  panel.querySelector('[data-section="amenzb"]')?.remove();
+  panel.querySelector("#amenzb-torrent-panel")?.remove();
+  switchDescriptionPanelTab(panel, "description");
+}
+
+function ensureAmeNZBDescriptionTab(panel) {
+  let amenzbTab = panel.querySelector('[data-section="amenzb"]');
+  if (amenzbTab) return amenzbTab;
+
+  const tabsHeader = panel.querySelector(".nyaa-enhancer-description-tabs");
+  if (!tabsHeader) return null;
+
+  amenzbTab = document.createElement("button");
+  amenzbTab.type = "button";
+  amenzbTab.className = "nyaa-enhancer-desc-tab";
+  amenzbTab.setAttribute("role", "tab");
+  amenzbTab.setAttribute("aria-selected", "false");
+  amenzbTab.dataset.section = "amenzb";
+  amenzbTab.textContent = "ameNZB";
+  amenzbTab.addEventListener("click", () =>
+    switchDescriptionPanelTab(panel, "amenzb"),
+  );
+
+  const nekobtTab = panel.querySelector('[data-section="nekobt"]');
+  if (nekobtTab) tabsHeader.insertBefore(amenzbTab, nekobtTab);
+  else tabsHeader.appendChild(amenzbTab);
+  return amenzbTab;
+}
+
+function getOrCreateAmeNZBPanelBody(panel) {
+  let body = panel.querySelector("#amenzb-torrent-panel");
+  if (body) return body;
+
+  body = document.createElement("div");
+  body.id = "amenzb-torrent-panel";
+  body.className = "panel-body nyaa-enhancer-nekobt-panel";
+  body.hidden = true;
+  panel.appendChild(body);
+  return body;
+}
+
+async function updateAmeNZBDescriptionSection() {
+  const panel = document.querySelector(".nyaa-enhancer-description-panel");
+  if (!panel) return;
+
+  const prefs = await loadStoredPreferences();
+  if (!prefs.showAmeNZBSection || !prefs.ameNZBApiKey) {
+    removeAmeNZBDescriptionSection(panel);
+    return;
+  }
+
+  if (!isAmeNZBSupportedViewPage()) {
+    removeAmeNZBDescriptionSection(panel);
+    return;
+  }
+
+  const fetchId = ++amenzbSectionFetchId;
+  ensureAmeNZBDescriptionTab(panel);
+  const amenzbBody = getOrCreateAmeNZBPanelBody(panel);
+  setAnimetoshoTabStatus(amenzbBody, "Loading ameNZB data…");
+
+  const infoHash = document.querySelector("kbd")?.textContent?.trim();
+  if (!infoHash) {
+    if (fetchId !== amenzbSectionFetchId) return;
+    setAnimetoshoTabStatus(amenzbBody, "Could not read info hash.");
+    return;
+  }
+
+  const { item } = await fetchAmeNZBSearch(infoHash, prefs.ameNZBApiKey);
+  if (fetchId !== amenzbSectionFetchId) return;
+
+  if (!item) {
+    setAnimetoshoTabStatus(amenzbBody, "Not found on ameNZB.");
+    return;
+  }
+
+  amenzbBody.innerHTML = renderAmeNZBPanelContent(item);
+}
+
+function removeNekoBTDescriptionSection(panel) {
+  panel.querySelector('[data-section="nekobt"]')?.remove();
+  panel.querySelector("#nekobt-torrent-panel")?.remove();
+  switchDescriptionPanelTab(panel, "description");
+}
+
+function ensureNekoBTDescriptionTab(panel) {
+  let nekobtTab = panel.querySelector('[data-section="nekobt"]');
+  if (nekobtTab) return nekobtTab;
+
+  const tabsHeader = panel.querySelector(".nyaa-enhancer-description-tabs");
+  if (!tabsHeader) return null;
+
+  nekobtTab = document.createElement("button");
+  nekobtTab.type = "button";
+  nekobtTab.className = "nyaa-enhancer-desc-tab";
+  nekobtTab.setAttribute("role", "tab");
+  nekobtTab.setAttribute("aria-selected", "false");
+  nekobtTab.dataset.section = "nekobt";
+  nekobtTab.textContent = "NekoBT";
+  nekobtTab.addEventListener("click", () =>
+    switchDescriptionPanelTab(panel, "nekobt"),
+  );
+  tabsHeader.appendChild(nekobtTab);
+  return nekobtTab;
+}
+
+function getOrCreateNekoBTPanelBody(panel) {
+  let body = panel.querySelector("#nekobt-torrent-panel");
+  if (body) return body;
+
+  body = document.createElement("div");
+  body.id = "nekobt-torrent-panel";
+  body.className = "panel-body nyaa-enhancer-nekobt-panel";
+  body.hidden = true;
+  panel.appendChild(body);
+  return body;
+}
+
+async function updateNekoBTDescriptionSection() {
+  const panel = document.querySelector(".nyaa-enhancer-description-panel");
+  if (!panel) return;
+
+  const prefs = await loadStoredPreferences();
+  if (!prefs.showNekoBTSection) {
+    removeNekoBTDescriptionSection(panel);
+    return;
+  }
+
+  if (!isNekoBTSupportedViewPage()) {
+    removeNekoBTDescriptionSection(panel);
+    return;
+  }
+
+  const fetchId = ++nekobtSectionFetchId;
+  ensureNekoBTDescriptionTab(panel);
+  const nekobtBody = getOrCreateNekoBTPanelBody(panel);
+  setAnimetoshoTabStatus(nekobtBody, "Loading nekoBT data…");
+
+  const infoHash = document.querySelector("kbd")?.textContent?.trim();
+  if (!infoHash) {
+    if (fetchId !== nekobtSectionFetchId) return;
+    setAnimetoshoTabStatus(nekobtBody, "Could not read info hash.");
+    return;
+  }
+
+  const torrentId = await resolveNekoBTTorrentIdFromInfoHash(infoHash);
+  if (fetchId !== nekobtSectionFetchId) return;
+
+  if (!torrentId) {
+    setAnimetoshoTabStatus(nekobtBody, "Not found on nekoBT.");
+    return;
+  }
+
+  const data = await fetchNekoBTTorrentData(torrentId);
+  if (fetchId !== nekobtSectionFetchId) return;
+
+  if (!data) {
+    setAnimetoshoTabStatus(
+      nekobtBody,
+      "Failed to load nekoBT torrent details.",
+    );
+    return;
+  }
+
+  let langData = null;
+  if (prefs.showNekoBTFullLangNames) {
+    langData = await loadNekoBTLangData();
+  }
+  if (fetchId !== nekobtSectionFetchId) return;
+
+  nekobtBody.innerHTML = renderNekoBTPanelContent(data, prefs, langData);
+}
 
 // Remove the nekoBT row, restoring the original info hash row if it was integrated
 function removeNekoBTRow() {
@@ -1788,8 +4328,10 @@ function removeNekoBTRow() {
       `;
       nekoBTRow.replaceWith(restoredRow);
     }
+    repositionTsukihimeRowAfterNekoBT();
   } else {
     nekoBTRow.remove();
+    repositionTsukihimeRowAfterNekoBT();
   }
 }
 
@@ -1803,17 +4345,7 @@ async function addNekoBTToViewPage() {
   try {
     const prefs = await loadStoredPreferences();
     if (!prefs.showNekoBTLinks) return;
-
-    const categoryLinks = document.querySelectorAll(".row .col-md-5 a");
-    const isAnime = Array.from(categoryLinks).some(
-      (link) => link.textContent === "Anime",
-    );
-    const isSupported = Array.from(categoryLinks).some(
-      (link) =>
-        link.textContent === "English-translated" || link.textContent === "Raw",
-    );
-
-    if (!isAnime || !isSupported) return;
+    if (!isNekoBTSupportedViewPage()) return;
 
     if (document.querySelector(".nekobt-row")) return;
 
@@ -1821,24 +4353,14 @@ async function addNekoBTToViewPage() {
     if (!infoHashKbd) return;
     const infoHash = infoHashKbd.textContent.trim();
 
-    const apiUrl = `https://nekobt.to/api/v1/torrents/search?query=${encodeURIComponent(infoHash)}`;
-
-    const result = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: "fetchUrl", url: apiUrl }, resolve);
-    });
-
-    if (!result?.ok) return;
-
-    let json;
-    try {
-      json = JSON.parse(result.text);
-    } catch {
-      return;
-    }
-
-    if (json.error || !json.data?.infohash_match) return;
-
-    const nekoBTLink = `https://nekobt.to/torrents/${json.data.infohash_match}`;
+    const torrentId = await resolveNekoBTTorrentIdFromInfoHash(infoHash);
+    const nekoBTLink = torrentId
+      ? `https://nekobt.to/torrents/${torrentId}`
+      : null;
+    const nekoBTContent = buildExternalServiceLinkHtml(
+      nekoBTLink,
+      "Not found on nekoBT",
+    );
 
     // If another row already claimed the info hash slot, append after the last of them.
     // Otherwise (Raw page with no AT and no ameNZB) integrate into the info hash row.
@@ -1854,9 +4376,7 @@ async function addNekoBTToViewPage() {
       newRow.innerHTML = `
         <div class="col-md-1">nekoBT:</div>
         <div class="col-md-5">
-          <a rel="noopener noreferrer nofollow" href="${nekoBTLink}" target="_blank">
-            ${nekoBTLink}
-          </a>
+          ${nekoBTContent}
         </div>
       `;
       anchorRow.insertAdjacentElement("afterend", newRow);
@@ -1873,17 +4393,597 @@ async function addNekoBTToViewPage() {
       newRow.innerHTML = `
         <div class="col-md-1">nekoBT:</div>
         <div class="col-md-5">
-          <a rel="noopener noreferrer nofollow" href="${nekoBTLink}" target="_blank">
-            ${nekoBTLink}
-          </a>
+          ${nekoBTContent}
         </div>
         <div class="col-md-1">Info hash:</div>
         <div class="col-md-5"><kbd>${infoHash}</kbd></div>
       `;
       infoHashRow.replaceWith(newRow);
     }
+    repositionTsukihimeRowAfterNekoBT();
   } finally {
     nekoBTFetchInProgress = false;
+  }
+}
+
+// ── Tsukihime (view page links + description section) ───────────────────────
+
+let tsukihimeFetchInProgress = false;
+let tsukihimeSectionFetchId = 0;
+
+const tsukihimeSearchCache = {
+  infoHash: null,
+  promise: null,
+  data: null,
+  fetched: false,
+};
+
+const tsukihimeFileMediainfoCache = new Map();
+
+function clearTsukihimeSearchCache() {
+  tsukihimeSearchCache.infoHash = null;
+  tsukihimeSearchCache.promise = null;
+  tsukihimeSearchCache.data = null;
+  tsukihimeSearchCache.fetched = false;
+  tsukihimeFileMediainfoCache.clear();
+}
+
+function isTsukihimeSupportedViewPage() {
+  return isNekoBTSupportedViewPage();
+}
+
+function getTsukihimeRowAnchor() {
+  return (
+    document.querySelector(".nekobt-row") ||
+    document.querySelector(".amenzb-row") ||
+    Array.from(document.querySelectorAll(".row")).find((row) =>
+      row.textContent.includes("Animetosho:"),
+    ) ||
+    Array.from(document.querySelectorAll(".row")).find((row) =>
+      row.textContent.includes("Info hash:"),
+    )
+  );
+}
+
+function repositionTsukihimeRowAfterNekoBT() {
+  const row = document.querySelector(".tsukihime-row");
+  if (!row) return;
+  const anchor = getTsukihimeRowAnchor();
+  if (!anchor || anchor === row) return;
+  if (row.previousElementSibling === anchor) return;
+  anchor.insertAdjacentElement("afterend", row);
+}
+
+function formatTsukihimeTimestamp(sec) {
+  const n = Number(sec);
+  if (!isFinite(n) || n <= 0) return "—";
+  return new Date(n * 1000).toLocaleString();
+}
+
+function formatTsukihimeLangCodes(langs) {
+  if (!Array.isArray(langs) || !langs.length) return "—";
+  return langs.join(", ");
+}
+
+function aggregateTsukihimeTrackerStats(trackers) {
+  if (!Array.isArray(trackers) || !trackers.length) return null;
+  let seeders = 0;
+  let leechers = 0;
+  let complete = 0;
+  for (const tracker of trackers) {
+    seeders = Math.max(seeders, Number(tracker.seeders) || 0);
+    leechers = Math.max(leechers, Number(tracker.leechers) || 0);
+    complete = Math.max(complete, Number(tracker.complete) || 0);
+  }
+  return { seeders, leechers, complete };
+}
+
+function stripTsukihimeHtml(html) {
+  return String(html)
+    .replace(/<br\s*\/?>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function renderTsukihimeLinkChips(links) {
+  if (!links || typeof links !== "object") return "";
+  const entries = Object.entries(links).filter(([, url]) => url);
+  if (!entries.length) return "";
+  return `<div class="nyaa-enhancer-tsukihime-link-chips">${entries
+    .map(
+      ([label, url]) =>
+        `<a class="nyaa-enhancer-tsukihime-chip" href="${escapeNekoBTHtml(url)}" rel="noopener noreferrer nofollow" target="_blank">${escapeNekoBTHtml(label)}</a>`,
+    )
+    .join("")}</div>`;
+}
+
+function summarizeTsukihimeAttachments(attachments) {
+  if (!Array.isArray(attachments) || !attachments.length) {
+    return { subtitles: [], fonts: [], other: [] };
+  }
+  const subtitles = [];
+  const fonts = [];
+  const other = [];
+  for (const att of attachments) {
+    if (att.type === 1) {
+      const info = att.info || {};
+      const label = [
+        info.lang,
+        info.codec,
+        info.name,
+        info.forced ? "forced" : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      subtitles.push(label || "Subtitle");
+    } else if (att.type === 0) {
+      fonts.push(att.info?.name || "Font file");
+    } else if (att.type !== 2 && att.type !== 3) {
+      other.push(`Attachment (type ${att.type})`);
+    }
+  }
+  return { subtitles, fonts, other };
+}
+
+function renderTsukihimeCollapsibleList(summaryText, items) {
+  if (!items.length) return "";
+  const chevron = `<span class="nyaa-enhancer-tsukihime-files-chevron" aria-hidden="true"><i class="fa fa-chevron-right"></i><i class="fa fa-chevron-down"></i></span>`;
+  const listHtml = `<ul class="nyaa-enhancer-tsukihime-sub-list">${items
+    .map((item) => `<li>${escapeNekoBTHtml(item)}</li>`)
+    .join("")}</ul>`;
+  return `<details class="nyaa-enhancer-tsukihime-files-collapsible nyaa-enhancer-tsukihime-attachment-collapsible">
+    <summary class="nyaa-enhancer-tsukihime-attachment-summary">${chevron}${escapeNekoBTHtml(summaryText)}</summary>
+    ${listHtml}
+  </details>`;
+}
+
+async function fetchTsukihimeFileMediainfo(torrentId, fileId) {
+  const key = `${torrentId}:${fileId}`;
+  if (tsukihimeFileMediainfoCache.has(key)) {
+    return tsukihimeFileMediainfoCache.get(key);
+  }
+
+  const apiUrl = `https://api.tsukihime.org/v1/torrents/${encodeURIComponent(torrentId)}/file/${encodeURIComponent(fileId)}`;
+  const result = await fetchUrlViaBackground(apiUrl);
+  if (!result?.ok) {
+    tsukihimeFileMediainfoCache.set(key, null);
+    return null;
+  }
+
+  try {
+    const json = JSON.parse(result.text);
+    const mediainfo = json.mediainfo?.trim() || null;
+    tsukihimeFileMediainfoCache.set(key, mediainfo);
+    return mediainfo;
+  } catch {
+    tsukihimeFileMediainfoCache.set(key, null);
+    return null;
+  }
+}
+
+function ensureTsukihimePanelClickHandler(body) {
+  if (!body || body.dataset.clickBound === "true") return;
+  body.dataset.clickBound = "true";
+  body.addEventListener("click", onTsukihimePanelClick);
+}
+
+async function onTsukihimePanelClick(event) {
+  const btn = event.target.closest(".nyaa-enhancer-tsukihime-mediainfo-btn");
+  if (!btn) return;
+  event.preventDefault();
+  await toggleTsukihimeFileMediainfo(btn);
+}
+
+async function toggleTsukihimeFileMediainfo(btn) {
+  const card = btn.closest(".nyaa-enhancer-tsukihime-file-card");
+  if (!card) return;
+
+  const panel = card.querySelector(".nyaa-enhancer-tsukihime-mediainfo-panel");
+  const torrentId = btn.dataset.torrentId;
+  const fileId = btn.dataset.fileId;
+  if (!panel || !torrentId || !fileId) return;
+
+  if (!panel.hidden && panel.dataset.loaded === "true") {
+    panel.hidden = true;
+    btn.textContent = "Show MediaInfo";
+    return;
+  }
+
+  panel.hidden = false;
+  if (panel.dataset.loaded === "true") {
+    btn.textContent = "Hide MediaInfo";
+    return;
+  }
+
+  panel.innerHTML =
+    '<p class="nyaa-enhancer-nekobt-status">Loading MediaInfo…</p>';
+  btn.disabled = true;
+
+  const mediainfo = await fetchTsukihimeFileMediainfo(torrentId, fileId);
+  btn.disabled = false;
+
+  if (!mediainfo) {
+    panel.innerHTML =
+      '<p class="nyaa-enhancer-nekobt-status">MediaInfo not available.</p>';
+    panel.dataset.loaded = "true";
+    btn.textContent = "Show MediaInfo";
+    return;
+  }
+
+  panel.innerHTML = `<pre class="nyaa-enhancer-nekobt-mediainfo">${escapeNekoBTHtml(mediainfo)}</pre>`;
+  panel.dataset.loaded = "true";
+  btn.textContent = "Hide MediaInfo";
+}
+
+function renderTsukihimeFileCard(file, torrentId) {
+  const displayName =
+    file.filename?.split("/").pop() || file.filename || "Unknown file";
+  const linksHtml = renderTsukihimeLinkChips(file.links);
+  const audioLinksHtml = file.links_audio
+    ? `<div class="nyaa-enhancer-tsukihime-link-group">
+        <span class="nyaa-enhancer-tsukihime-link-label">Audio downloads</span>
+        ${renderTsukihimeLinkChips(file.links_audio)}
+      </div>`
+    : "";
+  const { subtitles, fonts, other } = summarizeTsukihimeAttachments(
+    file.attachments,
+  );
+
+  let attachmentsHtml = "";
+  if (subtitles.length) {
+    attachmentsHtml += renderTsukihimeCollapsibleList(
+      `${subtitles.length} subtitle${subtitles.length === 1 ? "" : "s"}`,
+      subtitles,
+    );
+  }
+  if (fonts.length) {
+    attachmentsHtml += renderTsukihimeCollapsibleList(
+      `${fonts.length} font file${fonts.length === 1 ? "" : "s"}`,
+      fonts,
+    );
+  }
+  if (other.length) {
+    attachmentsHtml += renderTsukihimeCollapsibleList(
+      `${other.length} other attachment${other.length === 1 ? "" : "s"}`,
+      other,
+    );
+  }
+
+  const mediainfoBtnHtml =
+    torrentId != null && file.id != null
+      ? `<button type="button" class="nyaa-enhancer-tsukihime-mediainfo-btn" data-torrent-id="${escapeNekoBTHtml(String(torrentId))}" data-file-id="${escapeNekoBTHtml(String(file.id))}">Show MediaInfo</button>`
+      : "";
+
+  return `
+    <article class="nyaa-enhancer-tsukihime-file-card">
+      <div class="nyaa-enhancer-tsukihime-file-header">
+        <span class="nyaa-enhancer-tsukihime-file-name">${escapeNekoBTHtml(displayName)}</span>
+        <span class="nyaa-enhancer-tsukihime-file-size">${escapeNekoBTHtml(formatNekoBTBytes(file.size))}</span>
+      </div>
+      ${mediainfoBtnHtml}
+      <div class="nyaa-enhancer-tsukihime-mediainfo-panel" hidden></div>
+      ${
+        linksHtml
+          ? `<div class="nyaa-enhancer-tsukihime-link-group">
+              <span class="nyaa-enhancer-tsukihime-link-label">Video downloads</span>
+              ${linksHtml}
+            </div>`
+          : ""
+      }
+      ${audioLinksHtml}
+      ${
+        attachmentsHtml
+          ? `<div class="nyaa-enhancer-tsukihime-link-group">
+              <span class="nyaa-enhancer-tsukihime-link-label">Attachments</span>
+              ${attachmentsHtml}
+            </div>`
+          : ""
+      }
+    </article>
+  `;
+}
+
+function renderTsukihimePanelContent(data) {
+  const viewUrl = `https://tsukihime.org/view/${encodeURIComponent(data.id)}`;
+  const titleHtml = `<a href="${escapeNekoBTHtml(viewUrl)}" rel="noopener noreferrer nofollow" target="_blank">${escapeNekoBTHtml(data.name || "View on Tsukihime")}</a>`;
+
+  const anime = data.anime;
+  let animeHtml = null;
+  if (anime) {
+    const animeUrl = `https://tsukihime.org/anime/${encodeURIComponent(anime.id)}`;
+    const animeTitle = anime.english_title
+      ? `${anime.title} (${anime.english_title})`
+      : anime.title;
+    animeHtml = `<a href="${escapeNekoBTHtml(animeUrl)}" rel="noopener noreferrer nofollow" target="_blank">${escapeNekoBTHtml(animeTitle)}</a>`;
+    if (anime.release_year) {
+      animeHtml += ` <span class="nyaa-enhancer-tsukihime-muted">(${escapeNekoBTHtml(anime.release_year)})</span>`;
+    }
+  }
+
+  const group = data.group;
+  const groupHtml = group
+    ? escapeNekoBTHtml(group.name || group.id)
+    : null;
+
+  const stats = aggregateTsukihimeTrackerStats(data.trackers);
+
+  let meta = "";
+  meta += buildNekoBTMetaRow("Title", titleHtml);
+  if (animeHtml) meta += buildNekoBTMetaRow("Anime", animeHtml);
+  if (groupHtml) meta += buildNekoBTMetaRow("Group", groupHtml);
+  if (stats) {
+    meta += buildNekoBTMetaRow(
+      "Swarm",
+      `${escapeNekoBTHtml(stats.seeders)} seeders · ${escapeNekoBTHtml(stats.leechers)} leechers · ${escapeNekoBTHtml(stats.complete)} completed`,
+    );
+  }
+  meta += buildNekoBTMetaRow(
+    "Total size",
+    escapeNekoBTHtml(formatNekoBTBytes(data.totalsize)),
+  );
+  if (data.filecount != null) {
+    meta += buildNekoBTMetaRow("Files", escapeNekoBTHtml(data.filecount));
+  }
+  if (data.episode_no != null && data.episode_no !== "") {
+    meta += buildNekoBTMetaRow("Episode", escapeNekoBTHtml(data.episode_no));
+  }
+  meta += buildNekoBTMetaRow(
+    "Audio",
+    escapeNekoBTHtml(formatTsukihimeLangCodes(data.audiolangs)),
+  );
+  meta += buildNekoBTMetaRow(
+    "Subtitles",
+    escapeNekoBTHtml(formatTsukihimeLangCodes(data.sublangs)),
+  );
+  if (data.source_date) {
+    meta += buildNekoBTMetaRow(
+      "Source date",
+      escapeNekoBTHtml(formatTsukihimeTimestamp(data.source_date)),
+    );
+  }
+  if (data.added_date) {
+    meta += buildNekoBTMetaRow(
+      "Added",
+      escapeNekoBTHtml(formatTsukihimeTimestamp(data.added_date)),
+    );
+  }
+  if (data.state) {
+    meta += buildNekoBTMetaRow("State", escapeNekoBTHtml(data.state));
+  }
+  if (data.has_nzb != null) {
+    meta += buildNekoBTMetaRow(
+      "NZB available",
+      data.has_nzb ? "Yes" : "No",
+    );
+  }
+  meta += buildNekoBTMetaRow(
+    "Info hash",
+    `<code>${escapeNekoBTHtml(data.btih || "")}</code>`,
+  );
+
+  const files = Array.isArray(data.files) ? data.files : [];
+  const fileCards = files
+    .map((f) => renderTsukihimeFileCard(f, data.id))
+    .join("");
+  let filesHtml = "";
+  if (files.length === 1) {
+    filesHtml = `<div class="nyaa-enhancer-tsukihime-files">
+        <h4 class="nyaa-enhancer-tsukihime-files-title">Files <span class="nyaa-enhancer-tsukihime-muted">(1)</span></h4>
+        <div class="nyaa-enhancer-tsukihime-file-list">${fileCards}</div>
+      </div>`;
+  } else if (files.length > 1) {
+    filesHtml = `<details class="nyaa-enhancer-tsukihime-files nyaa-enhancer-tsukihime-files-collapsible">
+        <summary class="nyaa-enhancer-tsukihime-files-title"><span class="nyaa-enhancer-tsukihime-files-chevron" aria-hidden="true"><i class="fa fa-chevron-right"></i><i class="fa fa-chevron-down"></i></span>Files <span class="nyaa-enhancer-tsukihime-muted">(${files.length})</span></summary>
+        <div class="nyaa-enhancer-tsukihime-file-list">${fileCards}</div>
+      </details>`;
+  }
+
+  let synopsisHtml = "";
+  if (anime?.synopsis) {
+    const synopsis = stripTsukihimeHtml(anime.synopsis);
+    if (synopsis) {
+      synopsisHtml = `<div class="nyaa-enhancer-nekobt-block"><h4>Synopsis</h4><p class="nyaa-enhancer-tsukihime-synopsis">${escapeNekoBTHtml(synopsis)}</p></div>`;
+    }
+  }
+
+  let genresHtml = "";
+  if (anime?.genres?.length) {
+    genresHtml = `<div class="nyaa-enhancer-tsukihime-tags">${anime.genres
+      .map((g) => `<span class="nyaa-enhancer-tsukihime-tag">${escapeNekoBTHtml(g)}</span>`)
+      .join("")}</div>`;
+  }
+
+  return `
+    <div class="nyaa-enhancer-tsukihime-content">
+      <dl class="nyaa-enhancer-nekobt-meta">${meta}</dl>
+      ${genresHtml}
+      ${synopsisHtml}
+      ${filesHtml}
+    </div>
+  `;
+}
+
+function removeTsukihimeDescriptionSection(panel) {
+  panel.querySelector('[data-section="tsukihime"]')?.remove();
+  panel.querySelector("#tsukihime-torrent-panel")?.remove();
+  switchDescriptionPanelTab(panel, "description");
+}
+
+function ensureTsukihimeDescriptionTab(panel) {
+  let tab = panel.querySelector('[data-section="tsukihime"]');
+  if (tab) return tab;
+
+  const tabsHeader = panel.querySelector(".nyaa-enhancer-description-tabs");
+  if (!tabsHeader) return null;
+
+  tab = document.createElement("button");
+  tab.type = "button";
+  tab.className = "nyaa-enhancer-desc-tab";
+  tab.setAttribute("role", "tab");
+  tab.setAttribute("aria-selected", "false");
+  tab.dataset.section = "tsukihime";
+  tab.textContent = "Tsukihime";
+  tab.addEventListener("click", () =>
+    switchDescriptionPanelTab(panel, "tsukihime"),
+  );
+  tabsHeader.appendChild(tab);
+  return tab;
+}
+
+function getOrCreateTsukihimePanelBody(panel) {
+  let body = panel.querySelector("#tsukihime-torrent-panel");
+  if (body) return body;
+
+  body = document.createElement("div");
+  body.id = "tsukihime-torrent-panel";
+  body.className = "panel-body nyaa-enhancer-nekobt-panel nyaa-enhancer-tsukihime-panel";
+  body.hidden = true;
+  ensureTsukihimePanelClickHandler(body);
+  panel.appendChild(body);
+  return body;
+}
+
+async function fetchTsukihimeTorrent(infoHash) {
+  if (!infoHash) {
+    return { data: null, link: null, torrentId: null };
+  }
+
+  if (
+    tsukihimeSearchCache.infoHash === infoHash &&
+    tsukihimeSearchCache.fetched &&
+    !tsukihimeSearchCache.promise
+  ) {
+    const data = tsukihimeSearchCache.data;
+    return {
+      data,
+      link: data ? `https://tsukihime.org/view/${data.id}` : null,
+      torrentId: data ? String(data.id) : null,
+    };
+  }
+
+  if (tsukihimeSearchCache.infoHash === infoHash && tsukihimeSearchCache.promise) {
+    await tsukihimeSearchCache.promise;
+    const data = tsukihimeSearchCache.data;
+    return {
+      data,
+      link: data ? `https://tsukihime.org/view/${data.id}` : null,
+      torrentId: data ? String(data.id) : null,
+    };
+  }
+
+  tsukihimeSearchCache.infoHash = infoHash;
+  tsukihimeSearchCache.data = null;
+  tsukihimeSearchCache.fetched = false;
+
+  tsukihimeSearchCache.promise = (async () => {
+    try {
+      const apiUrl = `https://api.tsukihime.org/v1/torrents/btih/${encodeURIComponent(infoHash)}`;
+      const result = await fetchUrlViaBackground(apiUrl);
+      if (result?.ok) {
+        try {
+          const json = JSON.parse(result.text);
+          if (json.id != null) {
+            tsukihimeSearchCache.data = json;
+          }
+        } catch {
+          /* ignore parse errors */
+        }
+      }
+      tsukihimeSearchCache.fetched = true;
+    } finally {
+      tsukihimeSearchCache.promise = null;
+    }
+  })();
+
+  await tsukihimeSearchCache.promise;
+  const data = tsukihimeSearchCache.data;
+  return {
+    data,
+    link: data ? `https://tsukihime.org/view/${data.id}` : null,
+    torrentId: data ? String(data.id) : null,
+  };
+}
+
+async function updateTsukihimeDescriptionSection() {
+  const panel = document.querySelector(".nyaa-enhancer-description-panel");
+  if (!panel) return;
+
+  const prefs = await loadStoredPreferences();
+  if (!prefs.showTsukihimeSection) {
+    removeTsukihimeDescriptionSection(panel);
+    return;
+  }
+
+  if (!isTsukihimeSupportedViewPage()) {
+    removeTsukihimeDescriptionSection(panel);
+    return;
+  }
+
+  const fetchId = ++tsukihimeSectionFetchId;
+  ensureTsukihimeDescriptionTab(panel);
+  const body = getOrCreateTsukihimePanelBody(panel);
+  ensureTsukihimePanelClickHandler(body);
+  setAnimetoshoTabStatus(body, "Loading Tsukihime data…");
+
+  const infoHash = document.querySelector("kbd")?.textContent?.trim();
+  if (!infoHash) {
+    if (fetchId !== tsukihimeSectionFetchId) return;
+    setAnimetoshoTabStatus(body, "Could not read info hash.");
+    return;
+  }
+
+  const { data } = await fetchTsukihimeTorrent(infoHash);
+  if (fetchId !== tsukihimeSectionFetchId) return;
+
+  if (!data) {
+    setAnimetoshoTabStatus(body, "Not found on Tsukihime.");
+    return;
+  }
+
+  body.innerHTML = renderTsukihimePanelContent(data);
+}
+
+function removeTsukihimeRow() {
+  document.querySelector(".tsukihime-row")?.remove();
+}
+
+async function addTsukihimeToViewPage() {
+  if (!window.location.pathname.startsWith("/view/")) return;
+  if (tsukihimeFetchInProgress) return;
+  if (document.querySelector(".tsukihime-row")) return;
+
+  tsukihimeFetchInProgress = true;
+  try {
+    const prefs = await loadStoredPreferences();
+    if (!prefs.showTsukihimeLinks) return;
+    if (!isTsukihimeSupportedViewPage()) return;
+    if (document.querySelector(".tsukihime-row")) return;
+
+    const infoHash = document.querySelector("kbd")?.textContent?.trim();
+    if (!infoHash) return;
+
+    const { link: tsukihimeLink } = await fetchTsukihimeTorrent(infoHash);
+    const tsukihimeContent = buildExternalServiceLinkHtml(
+      tsukihimeLink,
+      "Not found on Tsukihime",
+    );
+
+    const anchor = getTsukihimeRowAnchor();
+    if (!anchor) return;
+
+    const newRow = document.createElement("div");
+    newRow.className = "row tsukihime-row";
+    newRow.innerHTML = `
+      <div class="col-md-1">Tsukihime:</div>
+      <div class="col-md-5">
+        ${tsukihimeContent}
+      </div>
+    `;
+    anchor.insertAdjacentElement("afterend", newRow);
+    repositionTsukihimeRowAfterNekoBT();
+  } finally {
+    tsukihimeFetchInProgress = false;
   }
 }
 
@@ -1917,11 +5017,6 @@ function removeSeaDexHighlights() {
     seaDexStylesInjected = false;
   }
   seaDexViewFetchInProgress = false;
-}
-
-function getInfoHashFromMagnet(href) {
-  const match = href.match(/urn:btih:([^&]*)/i);
-  return match ? match[1].toLowerCase() : "";
 }
 
 async function seaDexFetch(url) {
@@ -3083,6 +6178,9 @@ async function filterDeadTorrents(isInitialLoad = false) {
     if (prefs.fileSizeFilterEnabled) {
       filterByFileSize();
     }
+    if (prefs.completedDownloadsFilterEnabled) {
+      filterByCompletedDownloads();
+    }
     return;
   }
 
@@ -3119,8 +6217,12 @@ async function filterDeadTorrents(isInitialLoad = false) {
           const showBySize =
             !prefs.fileSizeFilterEnabled ||
             isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+          const showByDownloads = !failsCompletedDownloadsFilter(
+            prefs,
+            getCompletedDownloadsFromRow(row),
+          );
 
-          if (showByKeyword && showBySize) {
+          if (showByKeyword && showBySize && showByDownloads) {
             row.style.display = "";
           }
         }
@@ -3148,6 +6250,8 @@ function observeTableChanges() {
       return;
     }
     filterDeadTorrents();
+    filterByCompletedDownloads();
+    patchAnimetoshoListLinksForNewRows();
   });
 
   observer.observe(tableBody, {
@@ -3181,8 +6285,12 @@ async function filterByKeywords(isInitialLoad = false) {
         const showBySize =
           !prefs.fileSizeFilterEnabled ||
           isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+        const showByDownloads = !failsCompletedDownloadsFilter(
+          prefs,
+          getCompletedDownloadsFromRow(row),
+        );
 
-        if (showByDead && showBySize) {
+        if (showByDead && showBySize && showByDownloads) {
           row.style.display = "";
         }
       }
@@ -3213,8 +6321,12 @@ async function filterByKeywords(isInitialLoad = false) {
     const wrongSize =
       prefs.fileSizeFilterEnabled &&
       !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+    const wrongDownloads = failsCompletedDownloadsFilter(
+      prefs,
+      getCompletedDownloadsFromRow(row),
+    );
 
-    if (containsKeyword || isDead || wrongSize) {
+    if (containsKeyword || isDead || wrongSize || wrongDownloads) {
       if (row.style.display !== "none") {
         row.style.display = "none";
         if (containsKeyword) hiddenCount++;
@@ -3289,16 +6401,20 @@ async function initializeExtension(isInitialLoad = false) {
   addAnimetoshoComments();
   addAmeNZBToViewPage();
   addNekoBTToViewPage();
+  addTsukihimeToViewPage();
   initializeSeaDex();
   initializeScreenshotPreview();
   addMagnetButtonToViewPage();
   addSendButtonToViewPage();
+  enhanceTorrentDescriptionPanel();
   showChangelog();
   filterDeadTorrents(isInitialLoad);
   observeTableChanges();
   filterByKeywords(isInitialLoad);
   toggleComments();
+  applyImprovedFileListFromPrefs();
   filterByFileSize();
+  filterByCompletedDownloads();
   handleChangelogPage();
   addChangelogNavItem();
   addMonitorButton();
@@ -3436,6 +6552,43 @@ async function addSendButtonToViewPage() {
   insertAfter.parentNode.insertBefore(sendButton, insertAfter.nextSibling);
 }
 
+function enhanceTorrentDescriptionPanel() {
+  if (!window.location.pathname.startsWith("/view/")) return;
+
+  const descriptionBody = document.getElementById("torrent-description");
+  if (!descriptionBody) return;
+
+  const panel = descriptionBody.closest(".panel.panel-default");
+  if (!panel) return;
+
+  if (!panel.classList.contains("nyaa-enhancer-description-panel")) {
+    panel.classList.add("nyaa-enhancer-description-panel");
+
+    const tabsHeader = document.createElement("div");
+    tabsHeader.className = "nyaa-enhancer-description-tabs";
+    tabsHeader.setAttribute("role", "tablist");
+
+    const descTab = document.createElement("button");
+    descTab.type = "button";
+    descTab.className = "nyaa-enhancer-desc-tab active";
+    descTab.setAttribute("role", "tab");
+    descTab.setAttribute("aria-selected", "true");
+    descTab.dataset.section = "description";
+    descTab.textContent = "Description";
+    descTab.addEventListener("click", () =>
+      switchDescriptionPanelTab(panel, "description"),
+    );
+
+    tabsHeader.appendChild(descTab);
+    panel.insertBefore(tabsHeader, descriptionBody);
+  }
+
+  updateAmeNZBDescriptionSection();
+  updateNekoBTDescriptionSection();
+  updateTsukihimeDescriptionSection();
+  updateAnimetoshoEpisodeFeatures();
+}
+
 async function toggleComments() {
   // Only run on view pages
   if (!window.location.pathname.startsWith("/view/")) return;
@@ -3446,6 +6599,94 @@ async function toggleComments() {
 
   // Set initial display style based on preference
   comments.style.display = prefs.hideComments ? "none" : "block";
+}
+
+function isTorrentFileListItem(li) {
+  return li.querySelector(":scope > i.fa-file") !== null;
+}
+
+function countTorrentFilesIn(container) {
+  let count = 0;
+  container.querySelectorAll("li").forEach((li) => {
+    if (isTorrentFileListItem(li)) count++;
+  });
+  return count;
+}
+
+function getFolderLinkOriginalLabel(link) {
+  if (!link.dataset.nyaaEnhancerFolderLabel) {
+    const clone = link.cloneNode(true);
+    clone.querySelectorAll("i").forEach((icon) => icon.remove());
+    link.dataset.nyaaEnhancerFolderLabel = clone.textContent.trim();
+  }
+  return link.dataset.nyaaEnhancerFolderLabel;
+}
+
+function setFolderLinkLabel(link, label) {
+  const icon = link.querySelector("i");
+  link.textContent = "";
+  if (icon) link.appendChild(icon);
+  link.appendChild(document.createTextNode(label));
+}
+
+function restoreImprovedFileList() {
+  const fileList = document.querySelector(".torrent-file-list");
+  if (!fileList) return;
+
+  const panel = fileList.closest(".panel");
+  const titleEl = panel?.querySelector(".panel-heading .panel-title");
+  if (titleEl?.dataset.nyaaEnhancerFileListTitle) {
+    titleEl.textContent = titleEl.dataset.nyaaEnhancerFileListTitle;
+    delete titleEl.dataset.nyaaEnhancerFileListTitle;
+  }
+
+  fileList.querySelectorAll("a.folder").forEach((link) => {
+    if (link.dataset.nyaaEnhancerFolderLabel) {
+      setFolderLinkLabel(link, link.dataset.nyaaEnhancerFolderLabel);
+      delete link.dataset.nyaaEnhancerFolderLabel;
+    }
+  });
+}
+
+function applyImprovedFileList(enabled) {
+  if (!window.location.pathname.startsWith("/view/")) return;
+
+  if (!enabled) {
+    restoreImprovedFileList();
+    return;
+  }
+
+  const fileList = document.querySelector(".torrent-file-list");
+  if (!fileList) return;
+
+  const rootUl = fileList.querySelector(":scope > ul");
+  const topLevelFolderLis = rootUl
+    ? [...rootUl.children].filter((li) => li.querySelector("a.folder"))
+    : [];
+
+  const totalFiles = countTorrentFilesIn(fileList);
+  const panel = fileList.closest(".panel");
+  const titleEl = panel?.querySelector(".panel-heading .panel-title");
+  if (titleEl) {
+    if (!titleEl.dataset.nyaaEnhancerFileListTitle) {
+      titleEl.dataset.nyaaEnhancerFileListTitle = titleEl.textContent.trim();
+    }
+    titleEl.textContent = `${titleEl.dataset.nyaaEnhancerFileListTitle} - ${totalFiles}`;
+  }
+
+  fileList.querySelectorAll("a.folder").forEach((link) => {
+    const folderLi = link.closest("li");
+    if (!folderLi || topLevelFolderLis.includes(folderLi)) return;
+
+    const folderFileCount = countTorrentFilesIn(folderLi);
+    const originalLabel = getFolderLinkOriginalLabel(link);
+    setFolderLinkLabel(link, `${originalLabel} - ${folderFileCount}`);
+  });
+}
+
+async function applyImprovedFileListFromPrefs() {
+  const prefs = await loadStoredPreferences();
+  applyImprovedFileList(prefs.improvedFileList);
 }
 
 // Function to convert size string to bytes
@@ -3493,6 +6734,92 @@ function isInSizeRange(sizeInBytes, range) {
   }
 }
 
+async function filterByCompletedDownloads() {
+  if (!isNyaaHomePage()) return;
+
+  const prefs = await loadStoredPreferences();
+  const rows = document.querySelectorAll("table.torrent-list tbody tr");
+  let hiddenCount = 0;
+
+  if (!prefs.completedDownloadsFilterEnabled) {
+    rows.forEach((row) => {
+      if (row.style.display === "none") {
+        const title = getTitleFromRow(row);
+        const seedersCell = row.querySelector("td:nth-of-type(6)");
+        const leechersCell = row.querySelector("td:nth-of-type(7)");
+        const sizeCell = row.querySelector("td:nth-of-type(4)");
+
+        const seeders = seedersCell ? parseInt(seedersCell.textContent) : 0;
+        const leechers = leechersCell ? parseInt(leechersCell.textContent) : 0;
+        const sizeInBytes = sizeCell ? convertToBytes(sizeCell.textContent) : 0;
+
+        const showByDead = !(
+          seeders === 0 &&
+          leechers === 0 &&
+          prefs.hideDeadTorrents
+        );
+        const showByKeyword =
+          !prefs.keywordFilterEnabled ||
+          !prefs.keywords.some((keyword) =>
+            title?.toLowerCase().includes(keyword.toLowerCase()),
+          );
+        const showBySize =
+          !prefs.fileSizeFilterEnabled ||
+          isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+
+        if (showByDead && showByKeyword && showBySize) {
+          row.style.display = "";
+        }
+      }
+    });
+    return;
+  }
+
+  rows.forEach((row) => {
+    const title = getTitleFromRow(row);
+    const seedersCell = row.querySelector("td:nth-of-type(6)");
+    const leechersCell = row.querySelector("td:nth-of-type(7)");
+    const sizeCell = row.querySelector("td:nth-of-type(4)");
+
+    const seeders = seedersCell ? parseInt(seedersCell.textContent) : 0;
+    const leechers = leechersCell ? parseInt(leechersCell.textContent) : 0;
+    const sizeInBytes = sizeCell ? convertToBytes(sizeCell.textContent) : 0;
+    const completedDownloads = getCompletedDownloadsFromRow(row);
+
+    const wrongDownloads = failsCompletedDownloadsFilter(
+      prefs,
+      completedDownloads,
+    );
+    const isDead = seeders === 0 && leechers === 0 && prefs.hideDeadTorrents;
+    const containsKeyword =
+      prefs.keywordFilterEnabled &&
+      prefs.keywords.some((keyword) =>
+        title?.toLowerCase().includes(keyword.toLowerCase()),
+      );
+    const wrongSize =
+      prefs.fileSizeFilterEnabled &&
+      !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+
+    if (wrongDownloads || isDead || containsKeyword || wrongSize) {
+      if (row.style.display !== "none") {
+        row.style.display = "none";
+        if (wrongDownloads) hiddenCount++;
+      }
+    } else {
+      row.style.display = "";
+    }
+  });
+
+  if (hiddenCount > 0 && prefs.showFilterNotifications) {
+    showNotification(
+      `Hidden ${hiddenCount} torrent${
+        hiddenCount === 1 ? "" : "s"
+      } by completed downloads`,
+      true,
+    );
+  }
+}
+
 async function filterByFileSize() {
   const prefs = await loadStoredPreferences();
   const rows = document.querySelectorAll("table.torrent-list tbody tr");
@@ -3519,8 +6846,12 @@ async function filterByFileSize() {
           !prefs.keywords.some((keyword) =>
             title?.toLowerCase().includes(keyword.toLowerCase()),
           );
+        const showByDownloads = !failsCompletedDownloadsFilter(
+          prefs,
+          getCompletedDownloadsFromRow(row),
+        );
 
-        if (showByDead && showByKeyword) {
+        if (showByDead && showByKeyword && showByDownloads) {
           row.style.display = "";
         }
       }
@@ -3548,8 +6879,12 @@ async function filterByFileSize() {
       prefs.keywords.some((keyword) =>
         title?.toLowerCase().includes(keyword.toLowerCase()),
       );
+    const wrongDownloads = failsCompletedDownloadsFilter(
+      prefs,
+      getCompletedDownloadsFromRow(row),
+    );
 
-    if (wrongSize || isDead || containsKeyword) {
+    if (wrongSize || isDead || containsKeyword || wrongDownloads) {
       if (row.style.display !== "none") {
         row.style.display = "none";
         if (wrongSize) hiddenCount++;
@@ -4056,6 +7391,24 @@ async function handleChangelogPage() {
           <i class="fa fa-github"></i> GitHub
         </a>
       </p>
+    </div>
+    <div class="version-entry">
+      <h2>
+        Version 1.12.0
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.12.0" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added tabbed panels on torrent view pages - Description plus optional ameNZB, nekoBT, Tsukihime, and AnimeTosho tabs</li>
+        <li>Added "Improved File List" toggle to show total and per-folder file counts on view pages (Enabled by default)</li>
+        <li>Added "Completed downloads" as a filter option</li>
+        <li>Improved AnimeTosho list and view links - resolved by using info hash for English-translated, Non-English-translated, and Raw anime</li>
+        <li>Added "Show Screenshots Section", "Show FileInfo Section", and "Show Attachments Section" toggles from AnimeTosho data</li>
+        <li>Added "Display ameNZB Section" toggle for release details in the description tabs - requires an ameNZB API key (Disabled by default)</li>
+        <li>Added "Display nekoBT Section" toggle for release metadata in the description tabs, plus "Full Language Names" for audio/subtitle labels (Disabled by default)</li>
+        <li>Added a Tsukihime settings section with "Display Tsukihime Links" and "Display Tsukihime Section" toggles for view-page links and tabbed metadata, synopsis, genres, files, and per-file MediaInfo (Disabled by default)</li>
+      </ul>
     </div>
     <div class="version-entry">
       <h2>

@@ -123,17 +123,17 @@ To install the extension in your browser, follow these steps.
 
 ### Installation
 
-**Chrome Web Store (up-to-date at 1.10.0):**  
+**Chrome Web Store (up-to-date at 1.11.0):**  
 <a href="https://chromewebstore.google.com/detail/nyaa-enhancer/donibkpnifppkihgmnoocogmmbbocpdd" target="_blank">
 <img src="https://developer.chrome.com/static/docs/webstore/branding/image/HRs9MPufa1J1h5glNhut.png" alt="Chrome Web Store" height="50px" >
 </a>
 
-**Firefox Add-Ons Store (up-to-date at 1.10.0):**  
+**Firefox Add-Ons Store (up-to-date at 1.11.0):**  
 <a href="https://addons.mozilla.org/en-US/firefox/addon/nyaa-enhancer/" target="_blank">
 <img src="https://extensionworkshop.com/assets/img/documentation/publish/get-the-addon-178x60px.dad84b42.png" alt="Firefox Add-Ons Store" height="50px" >
 </a>
 
-**Edge Add-Ons Store (pending update, currently at 1.9.1):**  
+**Edge Add-Ons Store (up-to-date at 1.11.0):**  
 <a href="https://microsoftedge.microsoft.com/addons/detail/nyaa-enhancer/cpkcppifogblfgbggdeljjnibjfcdakf" target="_blank">
 <img src="https://developer.microsoft.com/store/badges/images/English_get-it-from-MS.png" alt="Edge Add-Ons Store" height="50px" >
 </a>
@@ -216,6 +216,17 @@ _Monitoring:_
 - ny.iss.one
 
 Look for the green "On" badge in your browser toolbar to confirm the extension is active for the current site.
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+<!-- ACKNOWLEDGEMENTS -->
+
+## Acknowledgements
+
+Parts of this extension were inspired by or adapted from other community projects:
+
+- [**Nyaa AnimeTosho Extender (ION Fork)**](https://github.com/IONI0/Nyaa-AnimeTosho-Extender-ION-Fork) by [IONI0](https://github.com/IONI0/) - AnimeTosho Screenshots, FileInfo, and Attachments on view pages (episode-specific data, batch file-list selection). Further improved and reimplemented for the extension.
+- [**NyaaBlue**](https://releases.moe/nyaablue.user.js) by [ThaUnknown](https://releases.moe/) - SeaDex / best-release highlighting via the [releases.moe](https://releases.moe/) API ([MIT](https://opensource.org/licenses/MIT)).
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 

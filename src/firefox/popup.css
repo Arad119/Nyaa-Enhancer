@@ -145,6 +145,35 @@ body {
   padding-right: 20px;
 }
 
+.completed-downloads-filter-container {
+  gap: 8px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.completed-downloads-filter-container select,
+.completed-downloads-filter-container input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: 1px solid #3a3a3a;
+  background: #2a2a2a;
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.completed-downloads-filter-container input {
+  max-width: 100px;
+  flex: 0 0 100px;
+}
+
+.completed-downloads-filter-container select:disabled,
+.completed-downloads-filter-container input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .toggle-container {
   position: relative;
   display: inline-block;

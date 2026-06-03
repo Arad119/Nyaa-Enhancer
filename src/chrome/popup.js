@@ -104,11 +104,19 @@ chrome.storage.sync.get(
     showATLinks: true,
     useNewATDomain: true,
     showATComments: false,
+    showATScreenshotsSection: true,
+    showATFileInfoSection: true,
+    showATAttachmentsSection: true,
     ameNZBApiKey: "",
     showAmeNZBLinks: false,
+    showAmeNZBSection: false,
     ameNZBRequestCount: 0,
     ameNZBRequestDate: "",
     showNekoBTLinks: false,
+    showNekoBTSection: false,
+    showNekoBTFullLangNames: true,
+    showTsukihimeLinks: false,
+    showTsukihimeSection: false,
     showMagnetButtons: true,
     showSendButtons: true,
     showQuickFilter: true,
@@ -118,8 +126,12 @@ chrome.storage.sync.get(
     keywordFilterEnabled: false,
     showFilterNotifications: true,
     hideComments: false,
+    improvedFileList: true,
     fileSizeFilterEnabled: false,
     fileSizeRange: "less_than_256mb",
+    completedDownloadsFilterEnabled: false,
+    completedDownloadsFilterOperator: "gt",
+    completedDownloadsFilterValue: 0,
     showChangelogNav: true,
     showMonitorButtons: true,
     monitoredKeywords: [],
@@ -155,6 +167,15 @@ chrome.storage.sync.get(
       .querySelector('[data-toggle="showATCommentsToggle"]')
       .setAttribute("aria-checked", items.showATComments);
     document
+      .querySelector('[data-toggle="showATScreenshotsSectionToggle"]')
+      .setAttribute("aria-checked", items.showATScreenshotsSection);
+    document
+      .querySelector('[data-toggle="showATFileInfoSectionToggle"]')
+      .setAttribute("aria-checked", items.showATFileInfoSection);
+    document
+      .querySelector('[data-toggle="showATAttachmentsSectionToggle"]')
+      .setAttribute("aria-checked", items.showATAttachmentsSection);
+    document
       .querySelector('[data-toggle="showMagnetButtonsToggle"]')
       .setAttribute("aria-checked", items.showMagnetButtons);
     document
@@ -175,6 +196,9 @@ chrome.storage.sync.get(
     document
       .querySelector('[data-toggle="hideCommentsToggle"]')
       .setAttribute("aria-checked", items.hideComments);
+    document
+      .querySelector('[data-toggle="improvedFileListToggle"]')
+      .setAttribute("aria-checked", items.improvedFileList);
     document
       .querySelector('[data-toggle="fileSizeFilterToggle"]')
       .setAttribute("aria-checked", items.fileSizeFilterEnabled);
@@ -203,6 +227,12 @@ chrome.storage.sync.get(
     ameNZBToggle.setAttribute("aria-checked", items.showAmeNZBLinks);
     ameNZBToggle.disabled = !items.ameNZBApiKey;
 
+    const ameNZBSectionToggle = document.querySelector(
+      '[data-toggle="showAmeNZBSectionToggle"]',
+    );
+    ameNZBSectionToggle.setAttribute("aria-checked", items.showAmeNZBSection);
+    ameNZBSectionToggle.disabled = !items.ameNZBApiKey;
+
     const todayUTC = new Date().toISOString().slice(0, 10);
     const todayCount =
       items.ameNZBRequestDate === todayUTC ? items.ameNZBRequestCount : 0;
@@ -212,6 +242,18 @@ chrome.storage.sync.get(
     document
       .querySelector('[data-toggle="showNekoBTLinksToggle"]')
       .setAttribute("aria-checked", items.showNekoBTLinks);
+    document
+      .querySelector('[data-toggle="showNekoBTSectionToggle"]')
+      .setAttribute("aria-checked", items.showNekoBTSection);
+    document
+      .querySelector('[data-toggle="showNekoBTFullLangNamesToggle"]')
+      .setAttribute("aria-checked", items.showNekoBTFullLangNames);
+    document
+      .querySelector('[data-toggle="showTsukihimeLinksToggle"]')
+      .setAttribute("aria-checked", items.showTsukihimeLinks);
+    document
+      .querySelector('[data-toggle="showTsukihimeSectionToggle"]')
+      .setAttribute("aria-checked", items.showTsukihimeSection);
     document
       .querySelector('[data-toggle="showSeaDexToggle"]')
       .setAttribute("aria-checked", items.showSeaDex);
@@ -239,8 +281,46 @@ chrome.storage.sync.get(
     const sizeSelect = document.getElementById("sizeRangeSelect");
     sizeSelect.value = items.fileSizeRange;
     sizeSelect.disabled = !items.fileSizeFilterEnabled;
+
+    document
+      .querySelector('[data-toggle="completedDownloadsFilterToggle"]')
+      .setAttribute("aria-checked", items.completedDownloadsFilterEnabled);
+    const completedDownloadsOperatorSelect = document.getElementById(
+      "completedDownloadsOperatorSelect",
+    );
+    const completedDownloadsValueInput = document.getElementById(
+      "completedDownloadsValueInput",
+    );
+    completedDownloadsOperatorSelect.value =
+      items.completedDownloadsFilterOperator || "gt";
+    completedDownloadsValueInput.value = String(
+      items.completedDownloadsFilterValue ?? 0,
+    );
+    setCompletedDownloadsFilterControlsEnabled(
+      items.completedDownloadsFilterEnabled,
+    );
   },
 );
+
+function setCompletedDownloadsFilterControlsEnabled(enabled) {
+  const operatorSelect = document.getElementById(
+    "completedDownloadsOperatorSelect",
+  );
+  const valueInput = document.getElementById("completedDownloadsValueInput");
+  if (operatorSelect) operatorSelect.disabled = !enabled;
+  if (valueInput) valueInput.disabled = !enabled;
+}
+
+function notifyContentScriptSetting(setting, value) {
+  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+    if (!tabs[0]?.id) return;
+    chrome.tabs.sendMessage(tabs[0].id, {
+      type: "settingChanged",
+      setting,
+      value,
+    });
+  });
+}
 
 const EYE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
 const EYE_SLASH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
@@ -350,11 +430,26 @@ document.getElementById("ameNZBApiKeyClear").addEventListener("click", () => {
   ameNZBToggle.disabled = true;
   ameNZBToggle.setAttribute("aria-checked", false);
 
-  chrome.storage.sync.set({ ameNZBApiKey: "", showAmeNZBLinks: false });
+  const ameNZBSectionToggle = document.querySelector(
+    '[data-toggle="showAmeNZBSectionToggle"]',
+  );
+  ameNZBSectionToggle.disabled = true;
+  ameNZBSectionToggle.setAttribute("aria-checked", false);
+
+  chrome.storage.sync.set({
+    ameNZBApiKey: "",
+    showAmeNZBLinks: false,
+    showAmeNZBSection: false,
+  });
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     chrome.tabs.sendMessage(tabs[0].id, {
       type: "settingChanged",
       setting: "showAmeNZBLinks",
+      value: false,
+    });
+    chrome.tabs.sendMessage(tabs[0].id, {
+      type: "settingChanged",
+      setting: "showAmeNZBSection",
       value: false,
     });
   });
@@ -366,14 +461,28 @@ document.getElementById("ameNZBApiKey").addEventListener("input", (e) => {
   const ameNZBToggle = document.querySelector(
     '[data-toggle="showAmeNZBLinksToggle"]',
   );
+  const ameNZBSectionToggle = document.querySelector(
+    '[data-toggle="showAmeNZBSectionToggle"]',
+  );
   ameNZBToggle.disabled = !key;
+  ameNZBSectionToggle.disabled = !key;
   if (!key) {
     ameNZBToggle.setAttribute("aria-checked", false);
-    chrome.storage.sync.set({ ameNZBApiKey: "", showAmeNZBLinks: false });
+    ameNZBSectionToggle.setAttribute("aria-checked", false);
+    chrome.storage.sync.set({
+      ameNZBApiKey: "",
+      showAmeNZBLinks: false,
+      showAmeNZBSection: false,
+    });
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       chrome.tabs.sendMessage(tabs[0].id, {
         type: "settingChanged",
         setting: "showAmeNZBLinks",
+        value: false,
+      });
+      chrome.tabs.sendMessage(tabs[0].id, {
+        type: "settingChanged",
+        setting: "showAmeNZBSection",
         value: false,
       });
     });
@@ -508,7 +617,7 @@ document.getElementById("tcSaveBtn").addEventListener("click", () => {
   }, 2000);
 });
 
-// Chrome cannot include a port in match patterns (unlike Chrome's `${origin}/*`).
+// Firefox cannot include a port in match patterns (unlike Chrome's `${origin}/*`).
 // Hostname-only patterns still cover every port on that host (e.g. :8114).
 function torrentOriginsForUrl(url) {
   const u = new URL(url.trim());
@@ -687,6 +796,45 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
           },
         );
         break;
+      case "showATScreenshotsSectionToggle":
+        setting = "showATScreenshotsSection";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showATScreenshotsSection",
+              value: newState,
+            });
+          },
+        );
+        break;
+      case "showATFileInfoSectionToggle":
+        setting = "showATFileInfoSection";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showATFileInfoSection",
+              value: newState,
+            });
+          },
+        );
+        break;
+      case "showATAttachmentsSectionToggle":
+        setting = "showATAttachmentsSection";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showATAttachmentsSection",
+              value: newState,
+            });
+          },
+        );
+        break;
       case "showAmeNZBLinksToggle":
         setting = "showAmeNZBLinks";
         chrome.tabs.query(
@@ -700,6 +848,19 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
           },
         );
         break;
+      case "showAmeNZBSectionToggle":
+        setting = "showAmeNZBSection";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showAmeNZBSection",
+              value: newState,
+            });
+          },
+        );
+        break;
       case "showNekoBTLinksToggle":
         setting = "showNekoBTLinks";
         chrome.tabs.query(
@@ -708,6 +869,58 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
             chrome.tabs.sendMessage(tabs[0].id, {
               type: "settingChanged",
               setting: "showNekoBTLinks",
+              value: newState,
+            });
+          },
+        );
+        break;
+      case "showNekoBTSectionToggle":
+        setting = "showNekoBTSection";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showNekoBTSection",
+              value: newState,
+            });
+          },
+        );
+        break;
+      case "showNekoBTFullLangNamesToggle":
+        setting = "showNekoBTFullLangNames";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showNekoBTFullLangNames",
+              value: newState,
+            });
+          },
+        );
+        break;
+      case "showTsukihimeLinksToggle":
+        setting = "showTsukihimeLinks";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showTsukihimeLinks",
+              value: newState,
+            });
+          },
+        );
+        break;
+      case "showTsukihimeSectionToggle":
+        setting = "showTsukihimeSection";
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "settingChanged",
+              setting: "showTsukihimeSection",
               value: newState,
             });
           },
@@ -789,19 +1002,28 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
           },
         );
         break;
-      case "fileSizeFilterToggle":
-        setting = "fileSizeFilterEnabled";
-        document.getElementById("sizeRangeSelect").disabled = !newState;
+      case "improvedFileListToggle":
+        setting = "improvedFileList";
         chrome.tabs.query(
           { active: true, currentWindow: true },
           function (tabs) {
             chrome.tabs.sendMessage(tabs[0].id, {
               type: "settingChanged",
-              setting: "fileSizeFilterEnabled",
+              setting: "improvedFileList",
               value: newState,
             });
           },
         );
+        break;
+      case "fileSizeFilterToggle":
+        setting = "fileSizeFilterEnabled";
+        document.getElementById("sizeRangeSelect").disabled = !newState;
+        notifyContentScriptSetting("fileSizeFilterEnabled", newState);
+        break;
+      case "completedDownloadsFilterToggle":
+        setting = "completedDownloadsFilterEnabled";
+        setCompletedDownloadsFilterControlsEnabled(newState);
+        notifyContentScriptSetting("completedDownloadsFilterEnabled", newState);
         break;
       case "showChangelogNavToggle":
         setting = "showChangelogNav";
@@ -1172,14 +1394,26 @@ document
 document.getElementById("sizeRangeSelect").addEventListener("change", (e) => {
   const newValue = e.target.value;
   chrome.storage.sync.set({ fileSizeRange: newValue });
-  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-    chrome.tabs.sendMessage(tabs[0].id, {
-      type: "settingChanged",
-      setting: "fileSizeRange",
-      value: newValue,
-    });
-  });
+  notifyContentScriptSetting("fileSizeRange", newValue);
 });
+
+document
+  .getElementById("completedDownloadsOperatorSelect")
+  .addEventListener("change", (e) => {
+    const newValue = e.target.value;
+    chrome.storage.sync.set({ completedDownloadsFilterOperator: newValue });
+    notifyContentScriptSetting("completedDownloadsFilterOperator", newValue);
+  });
+
+document
+  .getElementById("completedDownloadsValueInput")
+  .addEventListener("change", (e) => {
+    const parsed = parseInt(e.target.value, 10);
+    const newValue = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    e.target.value = String(newValue);
+    chrome.storage.sync.set({ completedDownloadsFilterValue: newValue });
+    notifyContentScriptSetting("completedDownloadsFilterValue", newValue);
+  });
 
 // Monitored Users Functions
 function displayMonitoredUsers(monitoredUsers) {
@@ -1301,7 +1535,7 @@ function displayMonitoredUsers(monitoredUsers) {
     unmonitorBtn.className = "keyword-remove unmonitor-btn";
     unmonitorBtn.textContent = "Unmonitor";
     unmonitorBtn.addEventListener("click", () => {
-      unmonitorUser(user.username);
+      unmonitorUser(user.username); 
     });
 
     // Add elements to item

@@ -9,7 +9,7 @@
       <button class="nav-button" data-tab="torrent-client">
         Torrent Client
       </button>
-      <button class="nav-button" data-tab="keyword-filter">Filter</button>
+      <button class="nav-button" data-tab="keyword-filter">Keywords</button>
       <button class="nav-button" data-tab="monitored-users">Monitoring</button>
       <button class="nav-button active" data-tab="settings">Settings</button>
       <button class="nav-button" data-tab="about">About</button>
@@ -151,13 +151,17 @@
               class="tc-qbt-csrf-disclaimer"
               role="note"
             >
-              <p class="tc-qbt-csrf-disclaimer-title">qBittorrent requirement</p>
+              <p class="tc-qbt-csrf-disclaimer-title">
+                qBittorrent requirement
+              </p>
               <p class="tc-qbt-csrf-disclaimer-text">
                 In your qBittorrent WebUI, open
                 <strong>Options → Web UI</strong> and
                 <strong>disable</strong> (uncheck)
-                <strong>Enable Cross-Site Request Forgery (CSRF) protection</strong>.
-                If this stays enabled, Sending a torrent to qBittorrent will fail.
+                <strong
+                  >Enable Cross-Site Request Forgery (CSRF) protection</strong
+                >. If this stays enabled, Sending a torrent to qBittorrent will
+                fail.
               </p>
             </div>
 
@@ -564,6 +568,34 @@
               <option value="greater_than_20gb">Greater than 20 GiB</option>
             </select>
           </div>
+
+          <div class="setting-item">
+            <span>Filter completed downloads</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="completedDownloadsFilterToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-item completed-downloads-filter-container">
+            <select id="completedDownloadsOperatorSelect" disabled>
+              <option value="gt">Greater than</option>
+              <option value="eq">Equal to</option>
+              <option value="lt">Less than</option>
+            </select>
+            <input
+              type="number"
+              id="completedDownloadsValueInput"
+              min="0"
+              step="1"
+              placeholder="Count"
+              disabled
+            />
+          </div>
         </div>
 
         <!-- View Page Settings -->
@@ -573,6 +605,14 @@
             <span>Hide Comments</span>
             <div class="toggle-container">
               <button class="toggle-button" data-toggle="hideCommentsToggle">
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+          <div class="setting-item">
+            <span>Improved File List</span>
+            <div class="toggle-container">
+              <button class="toggle-button" data-toggle="improvedFileListToggle">
                 <span class="toggle-indicator"></span>
               </button>
             </div>
@@ -604,6 +644,42 @@
             <span>Show AnimeTosho Comments</span>
             <div class="toggle-container">
               <button class="toggle-button" data-toggle="showATCommentsToggle">
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <span>Show Screenshots Section</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showATScreenshotsSectionToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <span>Show FileInfo Section</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showATFileInfoSectionToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <span>Show Downloads Section</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showATAttachmentsSectionToggle"
+              >
                 <span class="toggle-indicator"></span>
               </button>
             </div>
@@ -688,6 +764,18 @@
               </button>
             </div>
           </div>
+          <div class="setting-item">
+            <span>Display ameNZB Section</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showAmeNZBSectionToggle"
+                disabled
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
 
           <div class="setting-item amenzb-quota-row">
             <span style="color: #999">API Requests Today</span>
@@ -719,6 +807,28 @@
               </button>
             </div>
           </div>
+          <div class="setting-item">
+            <span>Display nekoBT Section</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showNekoBTSectionToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+          <div class="setting-item">
+            <span>Full Language Names</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showNekoBTFullLangNamesToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
 
           <div
             class="setting-item"
@@ -728,6 +838,44 @@
               >⚠ Rate limits are enforced but not publicly disclosed. If
               exceeded, requests will silently fail until the limit
               resets.</span
+            >
+          </div>
+        </div>
+
+        <!-- Tsukihime Settings -->
+        <div class="settings-category">
+          <h3 class="category-title">Tsukihime</h3>
+          <div class="setting-item">
+            <span>Display Tsukihime Links</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showTsukihimeLinksToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+          <div class="setting-item">
+            <span>Display Tsukihime Section</span>
+            <div class="toggle-container">
+              <button
+                class="toggle-button"
+                data-toggle="showTsukihimeSectionToggle"
+              >
+                <span class="toggle-indicator"></span>
+              </button>
+            </div>
+          </div>
+
+          <div
+            class="setting-item"
+            style="flex-direction: column; align-items: flex-start; gap: 4px"
+          >
+            <span style="color: #999; font-size: 12px"
+              >⚠ Tsukihime API rate limits are currently unknown. Excessive use
+              may trigger rate limiting; if that happens, requests may fail
+              until access is restored.</span
             >
           </div>
         </div>

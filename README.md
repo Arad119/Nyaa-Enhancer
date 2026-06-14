@@ -254,7 +254,7 @@ Distributed under the GPLv3 License. See `LICENSE.txt` for more information.
 [issues-url]: https://github.com/Arad119/Nyaa-Enhancer/issues
 [chrome-shield]: https://img.shields.io/chrome-web-store/users/donibkpnifppkihgmnoocogmmbbocpdd.svg?style=for-the-badge
 [chrome-shield-url]: https://chromewebstore.google.com/detail/nyaa-enhancer/donibkpnifppkihgmnoocogmmbbocpdd
-[firefox-shield]: https://img.shields.io/amo/users/nyaa-enhancer.svg?style=for-the-badge
+[firefox-shield]: https://img.shields.io/amo/dw/nyaa-enhancer.svg?style=for-the-badge
 [firefox-shield-url]: https://addons.mozilla.org/en-US/firefox/addon/nyaa-enhancer/
 [license-shield]: https://img.shields.io/github/license/Arad119/Nyaa-Enhancer.svg?style=for-the-badge
 [license-url]: https://github.com/Arad119/Nyaa-Enhancer/blob/main/LICENSE.txt

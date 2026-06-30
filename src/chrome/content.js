@@ -21,7 +21,7 @@ function loadStoredPreferences() {
         // - improvedFileList: whether to show file counts on view page file lists
         // - fileSizeFilterEnabled: whether to enable file size filtering
         // - fileSizeRange: the range for file size filtering
-        // - completedDownloadsFilterEnabled: home page completed downloads filter
+        // - completedDownloadsFilterEnabled: torrent list completed downloads filter
         // - completedDownloadsFilterOperator: gt, eq, or lt
         // - completedDownloadsFilterValue: threshold for completed downloads filter
         // - useNewATDomain: whether to use animetosho.xyz instead of animetosho.org
@@ -611,9 +611,9 @@ function getTitleFromRow(row) {
   return titleLink?.title || titleLink?.textContent || null;
 }
 
-function isNyaaHomePage() {
+function isNyaaTorrentListPage() {
   const path = window.location.pathname;
-  return path === "/" || path === "";
+  return path === "/" || path === "" || path.startsWith("/user/");
 }
 
 function getCompletedDownloadsFromRow(row) {
@@ -635,7 +635,7 @@ function matchesCompletedDownloadsFilter(count, operator, threshold) {
 }
 
 function failsCompletedDownloadsFilter(prefs, count) {
-  if (!isNyaaHomePage() || !prefs.completedDownloadsFilterEnabled) {
+  if (!isNyaaTorrentListPage() || !prefs.completedDownloadsFilterEnabled) {
     return false;
   }
   const threshold = Number(prefs.completedDownloadsFilterValue);
@@ -919,14 +919,7 @@ async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added tabbed panels on torrent view pages - Description plus optional ameNZB, nekoBT, Tsukihime, and AnimeTosho tabs<br>
-        • Added "Improved File List" toggle to show total and per-folder file counts on view pages (Enabled by default)<br>
-        • Added "Completed downloads" as a filter option<br>
-        • Improved AnimeTosho list and view links - resolved by using info hash for English-translated, Non-English-translated, and Raw anime<br>
-        • Added "Show Screenshots Section", "Show FileInfo Section", and "Show Downloads Section" toggles from AnimeTosho data<br>
-        • Added "Display ameNZB Section" toggle for release details in the description tabs - requires an ameNZB API key (Disabled by default)<br>
-        • Added "Display nekoBT Section" toggle for release metadata in the description tabs, plus "Full Language Names" for audio/subtitle labels (Disabled by default)<br>
-        • Added a Tsukihime settings section with "Display Tsukihime Links" and "Display Tsukihime Section" toggles for view-page links and tabbed metadata, synopsis, genres, files, and per-file MediaInfo (Disabled by default)
+        • Fixed bug where the "Filter completed downloads" option did not apply on user profile pages
       </div>
       <div class="changelog-actions">
         <button class="changelog-button okay">Okay</button>
@@ -6735,7 +6728,7 @@ function isInSizeRange(sizeInBytes, range) {
 }
 
 async function filterByCompletedDownloads() {
-  if (!isNyaaHomePage()) return;
+  if (!isNyaaTorrentListPage()) return;
 
   const prefs = await loadStoredPreferences();
   const rows = document.querySelectorAll("table.torrent-list tbody tr");
@@ -7391,6 +7384,17 @@ async function handleChangelogPage() {
           <i class="fa fa-github"></i> GitHub
         </a>
       </p>
+    </div>
+    <div class="version-entry">
+      <h2>
+        Version 1.12.1
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.12.1" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Fixed bug where the "Filter completed downloads" option did not apply on user profile pages</li>
+      </ul>
     </div>
     <div class="version-entry">
       <h2>

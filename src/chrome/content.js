@@ -77,6 +77,13 @@ function loadStoredPreferences() {
         transmissionUsername: "",
         transmissionPassword: "",
         delugePassword: "",
+        qbtCategories: [],
+        qbtTags: [],
+        qbtDefaultCategory: "",
+        qbtDefaultTags: [],
+        qbtPromptOnSend: true,
+        qbtLastCategory: null,
+        qbtLastTags: null,
       },
       (items) => {
         resolve(items);
@@ -919,7 +926,7 @@ async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Fixed bug where the "Filter completed downloads" option did not apply on user profile pages
+        • Added qBittorrent category and tag support when sending torrents, configure defaults in settings or pick per torrent via the "Prompt on Send" popup
       </div>
       <div class="changelog-actions">
         <button class="changelog-button okay">Okay</button>
@@ -1586,12 +1593,14 @@ async function refreshAnimetoshoListLinks() {
     const infoHash = row ? getTorrentInfoHashFromRow(row) : "";
     if (!infoHash) return;
     link.style.visibility = "hidden";
-    resolveAnimetoshoViewLink(infoHash, prefs.useNewATDomain).then((viewUrl) => {
-      if (viewUrl) {
-        link.href = viewUrl;
-        link.style.visibility = "";
-      }
-    });
+    resolveAnimetoshoViewLink(infoHash, prefs.useNewATDomain).then(
+      (viewUrl) => {
+        if (viewUrl) {
+          link.href = viewUrl;
+          link.style.visibility = "";
+        }
+      },
+    );
   });
 }
 
@@ -1984,34 +1993,36 @@ function isAnimetoshoXyzFileEpisodeId(episodeId) {
 
 function pickAnimetoshoXyzVideoFilesFromDoc(doc) {
   const entries = [];
-  doc.querySelectorAll(".view_list_entry .link a[href^='/file/']").forEach((a) => {
-    const href = a.getAttribute("href");
-    const fullName = a.textContent.trim();
-    if (!href || !fullName) return;
+  doc
+    .querySelectorAll(".view_list_entry .link a[href^='/file/']")
+    .forEach((a) => {
+      const href = a.getAttribute("href");
+      const fullName = a.textContent.trim();
+      if (!href || !fullName) return;
 
-    const filename = fullName.split("/").pop();
-    const lower = filename.toLowerCase();
-    if (
-      !lower.endsWith(".mkv") &&
-      !lower.endsWith(".mp4") &&
-      !lower.endsWith(".ts")
-    ) {
-      return;
-    }
+      const filename = fullName.split("/").pop();
+      const lower = filename.toLowerCase();
+      if (
+        !lower.endsWith(".mkv") &&
+        !lower.endsWith(".mp4") &&
+        !lower.endsWith(".ts")
+      ) {
+        return;
+      }
 
-    const lowerPath = fullName.toLowerCase();
-    if (
-      (lowerPath.startsWith("extra") ||
-        lowerPath.startsWith("bonus") ||
-        lowerPath.startsWith("special") ||
-        lowerPath.startsWith("creditless")) &&
-      fullName.includes("/")
-    ) {
-      return;
-    }
+      const lowerPath = fullName.toLowerCase();
+      if (
+        (lowerPath.startsWith("extra") ||
+          lowerPath.startsWith("bonus") ||
+          lowerPath.startsWith("special") ||
+          lowerPath.startsWith("creditless")) &&
+        fullName.includes("/")
+      ) {
+        return;
+      }
 
-    entries.push({ href, filename });
-  });
+      entries.push({ href, filename });
+    });
 
   entries.sort((a, b) => a.filename.localeCompare(b.filename));
   return entries.map(({ href, filename }) => ({
@@ -2281,12 +2292,7 @@ function collectATDownloadLinksFromCell(td, downloads, seen) {
           : currentHost
             ? `${currentHost} · ${part}`
             : part;
-      pushATAttachmentLink(
-        downloads,
-        node.getAttribute("href"),
-        label,
-        seen,
-      );
+      pushATAttachmentLink(downloads, node.getAttribute("href"), label, seen);
       return;
     }
 
@@ -2349,7 +2355,10 @@ function findBatchViewListEntry(doc, epId, epFilename) {
     const href = fileLink.getAttribute("href") || "";
     const filename = fileLink.textContent.trim().split("/").pop();
 
-    if (normalizedEpId && (href === normalizedEpId || href.endsWith(normalizedEpId))) {
+    if (
+      normalizedEpId &&
+      (href === normalizedEpId || href.endsWith(normalizedEpId))
+    ) {
       return entry;
     }
     if (
@@ -2368,11 +2377,7 @@ function findBatchViewListEntry(doc, epId, epFilename) {
   return null;
 }
 
-function extractATDownloadLinksFromBatchEntry(
-  batchHtml,
-  epId,
-  epFilename,
-) {
+function extractATDownloadLinksFromBatchEntry(batchHtml, epId, epFilename) {
   if (!batchHtml) return [];
 
   try {
@@ -2661,10 +2666,12 @@ function setupAnimetoshoFileListEpisodeSelection(record) {
     atEpisodeSelection.epId = fileId;
     atEpisodeSelection.epFilename = filename;
 
-    fileList.querySelectorAll("li.nyaa-enhancer-at-episode-file").forEach((li) => {
-      setTorrentFileListIcon(li, false);
-      li.style.backgroundColor = "";
-    });
+    fileList
+      .querySelectorAll("li.nyaa-enhancer-at-episode-file")
+      .forEach((li) => {
+        setTorrentFileListIcon(li, false);
+        li.style.backgroundColor = "";
+      });
 
     setTorrentFileListIcon(item, true);
     restoreScroll();
@@ -2907,10 +2914,7 @@ async function fetchAnimetoshoScreenshotHtml(
     atEpisodeSelection.countVidFiles > 1 &&
     isAnimetoshoXyzFileEpisodeId(epId)
   ) {
-    if (
-      episodeViewHtml &&
-      String(epId) !== String(record.xyzViewId)
-    ) {
+    if (episodeViewHtml && String(epId) !== String(record.xyzViewId)) {
       return episodeViewHtml;
     }
     return fetchAnimetoshoEpisodeViewHtml(epId, useNewATDomain);
@@ -2986,14 +2990,16 @@ function openATScreenshotModal(screenshots, initialIndex, trackNum) {
     prevButton.type = "button";
     prevButton.className =
       "nyaa-enhancer-screenshot-viewer-nav nyaa-enhancer-screenshot-viewer-nav-prev";
-    prevButton.innerHTML = '<i class="fa fa-chevron-left" aria-hidden="true"></i>';
+    prevButton.innerHTML =
+      '<i class="fa fa-chevron-left" aria-hidden="true"></i>';
     prevButton.setAttribute("aria-label", "Previous screenshot");
 
     nextButton = document.createElement("button");
     nextButton.type = "button";
     nextButton.className =
       "nyaa-enhancer-screenshot-viewer-nav nyaa-enhancer-screenshot-viewer-nav-next";
-    nextButton.innerHTML = '<i class="fa fa-chevron-right" aria-hidden="true"></i>';
+    nextButton.innerHTML =
+      '<i class="fa fa-chevron-right" aria-hidden="true"></i>';
     nextButton.setAttribute("aria-label", "Next screenshot");
   }
 
@@ -3012,9 +3018,7 @@ function openATScreenshotModal(screenshots, initialIndex, trackNum) {
   }
 
   function goRelative(delta) {
-    goToIndex(
-      (currentIndex + delta + screenshots.length) % screenshots.length,
-    );
+    goToIndex((currentIndex + delta + screenshots.length) % screenshots.length);
   }
 
   function updateModal() {
@@ -3105,16 +3109,14 @@ function openATScreenshotModal(screenshots, initialIndex, trackNum) {
     const filmstrip = document.createElement("div");
     filmstrip.className = "nyaa-enhancer-screenshot-viewer-filmstrip";
     const filmstripInner = document.createElement("div");
-    filmstripInner.className = "nyaa-enhancer-screenshot-viewer-filmstrip-inner";
+    filmstripInner.className =
+      "nyaa-enhancer-screenshot-viewer-filmstrip-inner";
 
     screenshots.forEach((shot, i) => {
       const thumbBtn = document.createElement("button");
       thumbBtn.type = "button";
       thumbBtn.className = "nyaa-enhancer-screenshot-viewer-thumb";
-      thumbBtn.setAttribute(
-        "aria-label",
-        shot.title || `Screenshot ${i + 1}`,
-      );
+      thumbBtn.setAttribute("aria-label", shot.title || `Screenshot ${i + 1}`);
 
       const thumbImg = document.createElement("img");
       thumbImg.loading = "lazy";
@@ -3235,225 +3237,234 @@ async function refreshAnimetoshoEpisodeFeatures(prefs, options = {}) {
   if (!panel) return;
 
   try {
-  const wantScreenshots = !!prefs.showATScreenshotsSection;
-  const wantFileinfo = !!prefs.showATFileInfoSection;
-  const wantAttachments = !!prefs.showATAttachmentsSection;
+    const wantScreenshots = !!prefs.showATScreenshotsSection;
+    const wantFileinfo = !!prefs.showATFileInfoSection;
+    const wantAttachments = !!prefs.showATAttachmentsSection;
 
-  if (!wantScreenshots) {
-    panel.querySelector('[data-section="atscreenshots"]')?.remove();
-    panel.querySelector("#at-screenshots-panel")?.remove();
-  }
-  if (!wantFileinfo) {
-    panel.querySelector('[data-section="atfileinfo"]')?.remove();
-    panel.querySelector("#at-fileinfo-panel")?.remove();
-  }
-  if (!wantAttachments) {
-    panel.querySelector('[data-section="atattachments"]')?.remove();
-    panel.querySelector("#at-attachments-panel")?.remove();
-  }
-
-  const insertAfterForFileinfo = wantScreenshots ? "atscreenshots" : "description";
-  let insertAfterForAttachments = "description";
-  if (wantFileinfo) insertAfterForAttachments = "atfileinfo";
-  else if (wantScreenshots) insertAfterForAttachments = "atscreenshots";
-
-  const screenshotBody = wantScreenshots
-    ? (ensureDescriptionTab(panel, "atscreenshots", "Screenshots", "description"),
-      getOrCreateDescriptionPanelBody(panel, "atscreenshots"))
-    : null;
-  const fileinfoBody = wantFileinfo
-    ? (ensureDescriptionTab(
-        panel,
-        "atfileinfo",
-        "FileInfo",
-        insertAfterForFileinfo,
-      ),
-      getOrCreateDescriptionPanelBody(panel, "atfileinfo"))
-    : null;
-  const attachmentsBody = wantAttachments
-    ? (ensureDescriptionTab(
-        panel,
-        "atattachments",
-        "Downloads",
-        insertAfterForAttachments,
-      ),
-      getOrCreateDescriptionPanelBody(panel, "atattachments"))
-    : null;
-
-  const loadingMessage = "Loading from AnimeTosho…";
-  if (!fromEpisodePick) {
-    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, loadingMessage);
-    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, loadingMessage);
-    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, loadingMessage);
-  }
-
-  if (!isAnimetoshoSupportedViewPage()) {
-    const msg =
-      "AnimeTosho episode data is only available for anime (English-translated, Non-English-translated, or Raw).";
-    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
-    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
-    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
-    return;
-  }
-
-  const infoHash = document.querySelector("kbd")?.textContent?.trim();
-  if (!infoHash) {
-    const msg = "Info hash not found.";
-    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
-    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
-    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
-    return;
-  }
-
-  const record = await getAnimetoshoTorrentRecord(
-    infoHash,
-    prefs.useNewATDomain,
-  );
-  if (fetchId !== atEpisodeFetchId) return;
-
-  if (!record?.viewUrl) {
-    const msg = "Not found on AnimeTosho.";
-    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
-    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
-    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
-    return;
-  }
-
-  if (record.useNewATDomain && !record.xyzPageData) {
-    const viewResult = await fetchUrlViaBackground(record.viewUrl);
-    if (fetchId !== atEpisodeFetchId) return;
-    if (viewResult?.ok) {
-      atXyzViewPageHtml = viewResult.text;
-      atBatchViewHtml = viewResult.text;
-      record.xyzPageData = parseAnimetoshoXyzViewPage(viewResult.text);
+    if (!wantScreenshots) {
+      panel.querySelector('[data-section="atscreenshots"]')?.remove();
+      panel.querySelector("#at-screenshots-panel")?.remove();
     }
-  }
+    if (!wantFileinfo) {
+      panel.querySelector('[data-section="atfileinfo"]')?.remove();
+      panel.querySelector("#at-fileinfo-panel")?.remove();
+    }
+    if (!wantAttachments) {
+      panel.querySelector('[data-section="atattachments"]')?.remove();
+      panel.querySelector("#at-attachments-panel")?.remove();
+    }
 
-  initAnimetoshoEpisodeSelection(record);
-  if (fetchId !== atEpisodeFetchId) return;
+    const insertAfterForFileinfo = wantScreenshots
+      ? "atscreenshots"
+      : "description";
+    let insertAfterForAttachments = "description";
+    if (wantFileinfo) insertAfterForAttachments = "atfileinfo";
+    else if (wantScreenshots) insertAfterForAttachments = "atscreenshots";
 
-  if (!atEpisodeSelection.epId) {
-    const msg = "No episode file found on AnimeTosho.";
-    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
-    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
-    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
-    return;
-  }
+    const screenshotBody = wantScreenshots
+      ? (ensureDescriptionTab(
+          panel,
+          "atscreenshots",
+          "Screenshots",
+          "description",
+        ),
+        getOrCreateDescriptionPanelBody(panel, "atscreenshots"))
+      : null;
+    const fileinfoBody = wantFileinfo
+      ? (ensureDescriptionTab(
+          panel,
+          "atfileinfo",
+          "FileInfo",
+          insertAfterForFileinfo,
+        ),
+        getOrCreateDescriptionPanelBody(panel, "atfileinfo"))
+      : null;
+    const attachmentsBody = wantAttachments
+      ? (ensureDescriptionTab(
+          panel,
+          "atattachments",
+          "Downloads",
+          insertAfterForAttachments,
+        ),
+        getOrCreateDescriptionPanelBody(panel, "atattachments"))
+      : null;
 
-  if (atEpisodeSelection.countVidFiles > 1 && !atBatchViewHtml) {
-    const batchResult = await fetchUrlViaBackground(record.viewUrl);
+    const loadingMessage = "Loading from AnimeTosho…";
+    if (!fromEpisodePick) {
+      if (screenshotBody)
+        setAnimetoshoTabStatus(screenshotBody, loadingMessage);
+      if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, loadingMessage);
+      if (attachmentsBody)
+        setAnimetoshoTabStatus(attachmentsBody, loadingMessage);
+    }
+
+    if (!isAnimetoshoSupportedViewPage()) {
+      const msg =
+        "AnimeTosho episode data is only available for anime (English-translated, Non-English-translated, or Raw).";
+      if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
+      if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
+      if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
+      return;
+    }
+
+    const infoHash = document.querySelector("kbd")?.textContent?.trim();
+    if (!infoHash) {
+      const msg = "Info hash not found.";
+      if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
+      if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
+      if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
+      return;
+    }
+
+    const record = await getAnimetoshoTorrentRecord(
+      infoHash,
+      prefs.useNewATDomain,
+    );
     if (fetchId !== atEpisodeFetchId) return;
-    atBatchViewHtml = batchResult?.ok ? batchResult.text : null;
-    if (record.useNewATDomain && batchResult?.ok) {
-      atXyzViewPageHtml = batchResult.text;
-      if (!record.xyzPageData) {
-        record.xyzPageData = parseAnimetoshoXyzViewPage(batchResult.text);
+
+    if (!record?.viewUrl) {
+      const msg = "Not found on AnimeTosho.";
+      if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
+      if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
+      if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
+      return;
+    }
+
+    if (record.useNewATDomain && !record.xyzPageData) {
+      const viewResult = await fetchUrlViaBackground(record.viewUrl);
+      if (fetchId !== atEpisodeFetchId) return;
+      if (viewResult?.ok) {
+        atXyzViewPageHtml = viewResult.text;
+        atBatchViewHtml = viewResult.text;
+        record.xyzPageData = parseAnimetoshoXyzViewPage(viewResult.text);
       }
     }
-  }
 
-  let episodeViewHtml;
-  if (
-    record.useNewATDomain &&
-    String(atEpisodeSelection.epId) === String(record.xyzViewId) &&
-    atXyzViewPageHtml
-  ) {
-    episodeViewHtml = atXyzViewPageHtml;
-  } else {
-    episodeViewHtml = await fetchAnimetoshoEpisodeViewHtml(
-      atEpisodeSelection.epId,
-      record.useNewATDomain,
-    );
-  }
-  if (fetchId !== atEpisodeFetchId) return;
-
-  if (!episodeViewHtml) {
-    const msg = "Failed to load episode data from AnimeTosho.";
-    if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
-    if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
-    if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
-    return;
-  }
-
-  const latestPrefs = await loadStoredPreferences();
-  if (
-    fetchId !== atEpisodeFetchId ||
-    !animetoshoEpisodeFeaturesEnabled(latestPrefs)
-  ) {
-    return;
-  }
-
-  if (wantFileinfo && fileinfoBody) {
-    const { fileInfo, filename } = await fetchAnimetoshoEpisodeFileinfo(
-      atEpisodeSelection.epId,
-      record.useNewATDomain,
-      episodeViewHtml,
-    );
+    initAnimetoshoEpisodeSelection(record);
     if (fetchId !== atEpisodeFetchId) return;
 
-    if (fileInfo) {
-      renderATFileinfoBody(
-        fileinfoBody,
-        fileInfo,
-        filename || atEpisodeSelection.epFilename,
-      );
-    } else {
-      setAnimetoshoTabStatus(
-        fileinfoBody,
-        "No FileInfo on AnimeTosho for this episode.",
-      );
+    if (!atEpisodeSelection.epId) {
+      const msg = "No episode file found on AnimeTosho.";
+      if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
+      if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
+      if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
+      return;
     }
-  }
 
-  const attachmentGroups = mergeAnimetoshoSubtitleAttachments(
-    atBatchViewHtml,
-    episodeViewHtml,
-    atEpisodeSelection.countVidFiles,
-    record.useNewATDomain,
-    atEpisodeSelection.epId,
-    atEpisodeSelection.epFilename,
-  );
-
-  if (wantAttachments && attachmentsBody) {
-    if (hasATAttachmentGroups(attachmentGroups)) {
-      renderATAttachmentsBody(attachmentsBody, attachmentGroups);
-    } else {
-      setAnimetoshoTabStatus(
-        attachmentsBody,
-        "No downloads on AnimeTosho for this episode.",
-      );
+    if (atEpisodeSelection.countVidFiles > 1 && !atBatchViewHtml) {
+      const batchResult = await fetchUrlViaBackground(record.viewUrl);
+      if (fetchId !== atEpisodeFetchId) return;
+      atBatchViewHtml = batchResult?.ok ? batchResult.text : null;
+      if (record.useNewATDomain && batchResult?.ok) {
+        atXyzViewPageHtml = batchResult.text;
+        if (!record.xyzPageData) {
+          record.xyzPageData = parseAnimetoshoXyzViewPage(batchResult.text);
+        }
+      }
     }
-  }
 
-  if (wantScreenshots && screenshotBody) {
-    const screenshotHtml = await fetchAnimetoshoScreenshotHtml(
-      record,
-      atEpisodeSelection.epId,
-      record.useNewATDomain,
-      episodeViewHtml,
-    );
-    if (fetchId !== atEpisodeFetchId) return;
-
-    const screenshots = extractATScreenshotsFromHtml(screenshotHtml);
-    if (!screenshots.length) {
-      setAnimetoshoTabStatus(
-        screenshotBody,
-        "No screenshots on AnimeTosho for this episode.",
-      );
+    let episodeViewHtml;
+    if (
+      record.useNewATDomain &&
+      String(atEpisodeSelection.epId) === String(record.xyzViewId) &&
+      atXyzViewPageHtml
+    ) {
+      episodeViewHtml = atXyzViewPageHtml;
     } else {
-      const screenshotSubtitles = record.useNewATDomain
-        ? []
-        : attachmentGroups.subtitles;
-      renderATScreenshotsGrid(
-        screenshotBody,
-        screenshots,
-        screenshotSubtitles,
+      episodeViewHtml = await fetchAnimetoshoEpisodeViewHtml(
+        atEpisodeSelection.epId,
         record.useNewATDomain,
       );
     }
-  }
+    if (fetchId !== atEpisodeFetchId) return;
 
-  setupAnimetoshoFileListEpisodeSelection(record);
+    if (!episodeViewHtml) {
+      const msg = "Failed to load episode data from AnimeTosho.";
+      if (screenshotBody) setAnimetoshoTabStatus(screenshotBody, msg);
+      if (fileinfoBody) setAnimetoshoTabStatus(fileinfoBody, msg);
+      if (attachmentsBody) setAnimetoshoTabStatus(attachmentsBody, msg);
+      return;
+    }
+
+    const latestPrefs = await loadStoredPreferences();
+    if (
+      fetchId !== atEpisodeFetchId ||
+      !animetoshoEpisodeFeaturesEnabled(latestPrefs)
+    ) {
+      return;
+    }
+
+    if (wantFileinfo && fileinfoBody) {
+      const { fileInfo, filename } = await fetchAnimetoshoEpisodeFileinfo(
+        atEpisodeSelection.epId,
+        record.useNewATDomain,
+        episodeViewHtml,
+      );
+      if (fetchId !== atEpisodeFetchId) return;
+
+      if (fileInfo) {
+        renderATFileinfoBody(
+          fileinfoBody,
+          fileInfo,
+          filename || atEpisodeSelection.epFilename,
+        );
+      } else {
+        setAnimetoshoTabStatus(
+          fileinfoBody,
+          "No FileInfo on AnimeTosho for this episode.",
+        );
+      }
+    }
+
+    const attachmentGroups = mergeAnimetoshoSubtitleAttachments(
+      atBatchViewHtml,
+      episodeViewHtml,
+      atEpisodeSelection.countVidFiles,
+      record.useNewATDomain,
+      atEpisodeSelection.epId,
+      atEpisodeSelection.epFilename,
+    );
+
+    if (wantAttachments && attachmentsBody) {
+      if (hasATAttachmentGroups(attachmentGroups)) {
+        renderATAttachmentsBody(attachmentsBody, attachmentGroups);
+      } else {
+        setAnimetoshoTabStatus(
+          attachmentsBody,
+          "No downloads on AnimeTosho for this episode.",
+        );
+      }
+    }
+
+    if (wantScreenshots && screenshotBody) {
+      const screenshotHtml = await fetchAnimetoshoScreenshotHtml(
+        record,
+        atEpisodeSelection.epId,
+        record.useNewATDomain,
+        episodeViewHtml,
+      );
+      if (fetchId !== atEpisodeFetchId) return;
+
+      const screenshots = extractATScreenshotsFromHtml(screenshotHtml);
+      if (!screenshots.length) {
+        setAnimetoshoTabStatus(
+          screenshotBody,
+          "No screenshots on AnimeTosho for this episode.",
+        );
+      } else {
+        const screenshotSubtitles = record.useNewATDomain
+          ? []
+          : attachmentGroups.subtitles;
+        renderATScreenshotsGrid(
+          screenshotBody,
+          screenshots,
+          screenshotSubtitles,
+          record.useNewATDomain,
+        );
+      }
+    }
+
+    setupAnimetoshoFileListEpisodeSelection(record);
   } finally {
     if (fromEpisodePick) {
       restoreScroll();
@@ -3563,11 +3574,17 @@ function getAmeNZBAttr(item, name) {
 }
 
 function cleanAmeNZBTitle(title) {
-  return title.trim().replace(/\s*\{[^}]*\}\s*$/g, "").trim();
+  return title
+    .trim()
+    .replace(/\s*\{[^}]*\}\s*$/g, "")
+    .trim();
 }
 
 function formatAmeNZBPubDate(pubDate) {
-  return pubDate.trim().replace(/\s+[+-]\d{4}$/, "").trim();
+  return pubDate
+    .trim()
+    .replace(/\s+[+-]\d{4}$/, "")
+    .trim();
 }
 
 function parseAmeNZBSearchXml(xmlText) {
@@ -4695,9 +4712,7 @@ function renderTsukihimePanelContent(data) {
   }
 
   const group = data.group;
-  const groupHtml = group
-    ? escapeNekoBTHtml(group.name || group.id)
-    : null;
+  const groupHtml = group ? escapeNekoBTHtml(group.name || group.id) : null;
 
   const stats = aggregateTsukihimeTrackerStats(data.trackers);
 
@@ -4745,10 +4760,7 @@ function renderTsukihimePanelContent(data) {
     meta += buildNekoBTMetaRow("State", escapeNekoBTHtml(data.state));
   }
   if (data.has_nzb != null) {
-    meta += buildNekoBTMetaRow(
-      "NZB available",
-      data.has_nzb ? "Yes" : "No",
-    );
+    meta += buildNekoBTMetaRow("NZB available", data.has_nzb ? "Yes" : "No");
   }
   meta += buildNekoBTMetaRow(
     "Info hash",
@@ -4783,7 +4795,10 @@ function renderTsukihimePanelContent(data) {
   let genresHtml = "";
   if (anime?.genres?.length) {
     genresHtml = `<div class="nyaa-enhancer-tsukihime-tags">${anime.genres
-      .map((g) => `<span class="nyaa-enhancer-tsukihime-tag">${escapeNekoBTHtml(g)}</span>`)
+      .map(
+        (g) =>
+          `<span class="nyaa-enhancer-tsukihime-tag">${escapeNekoBTHtml(g)}</span>`,
+      )
       .join("")}</div>`;
   }
 
@@ -4830,7 +4845,8 @@ function getOrCreateTsukihimePanelBody(panel) {
 
   body = document.createElement("div");
   body.id = "tsukihime-torrent-panel";
-  body.className = "panel-body nyaa-enhancer-nekobt-panel nyaa-enhancer-tsukihime-panel";
+  body.className =
+    "panel-body nyaa-enhancer-nekobt-panel nyaa-enhancer-tsukihime-panel";
   body.hidden = true;
   ensureTsukihimePanelClickHandler(body);
   panel.appendChild(body);
@@ -4855,7 +4871,10 @@ async function fetchTsukihimeTorrent(infoHash) {
     };
   }
 
-  if (tsukihimeSearchCache.infoHash === infoHash && tsukihimeSearchCache.promise) {
+  if (
+    tsukihimeSearchCache.infoHash === infoHash &&
+    tsukihimeSearchCache.promise
+  ) {
     await tsukihimeSearchCache.promise;
     const data = tsukihimeSearchCache.data;
     return {
@@ -6484,44 +6503,232 @@ function createSendButton(magnetUrl, extraStyles = {}) {
       password = currentPrefs.qbtPassword;
     }
 
-    sendButton.disabled = true;
+    const isQbt = currentPrefs.torrentClient === "qbittorrent";
+    const needsPrompt =
+      isQbt &&
+      currentPrefs.qbtPromptOnSend &&
+      (currentPrefs.qbtCategories.length > 0 ||
+        currentPrefs.qbtTags.length > 0);
 
-    const result = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          type: "sendTorrent",
-          client: currentPrefs.torrentClient,
-          url: currentPrefs.torrentClientUrl,
-          username,
-          password,
-          magnetUrl,
-        },
-        resolve,
-      );
-    });
+    const doSend = async (category, tags) => {
+      sendButton.disabled = true;
 
-    sendButton.disabled = false;
+      const msg = {
+        type: "sendTorrent",
+        client: currentPrefs.torrentClient,
+        url: currentPrefs.torrentClientUrl,
+        username,
+        password,
+        magnetUrl,
+      };
+      if (isQbt) {
+        msg.category = category || "";
+        msg.tags = tags || [];
+        // Save last selection
+        chrome.storage.sync.set({
+          qbtLastCategory: category || "",
+          qbtLastTags: tags || [],
+        });
+      }
 
-    if (!result || !result.ok) {
-      const msg =
-        result?.error === "already_exists"
-          ? "Torrent already exists in your client."
-          : result?.error === "wrong_client"
-            ? "Wrong torrent client selected for this URL. Fix it in the extension popup."
-            : result?.error === "auth_failed"
-              ? "Authentication failed — check your credentials."
-              : result?.error === "auth_required"
-                ? "Torrent client requires authentication."
-                : "Failed to send torrent. Check the client connection.";
-      showNotification(msg, false);
+      const result = await new Promise((resolve) => {
+        chrome.runtime.sendMessage(msg, resolve);
+      });
+
+      sendButton.disabled = false;
+
+      if (!result || !result.ok) {
+        const msgTxt =
+          result?.error === "already_exists"
+            ? "Torrent already exists in your client."
+            : result?.error === "wrong_client"
+              ? "Wrong torrent client selected for this URL. Fix it in the extension popup."
+              : result?.error === "auth_failed"
+                ? "Authentication failed — check your credentials."
+                : result?.error === "auth_required"
+                  ? "Torrent client requires authentication."
+                  : "Failed to send torrent. Check the client connection.";
+        showNotification(msgTxt, false);
+        return;
+      }
+
+      showNotification("Torrent sent to client!", true);
+    };
+
+    if (!isQbt) {
+      await doSend("", []);
       return;
     }
 
-    showNotification("Torrent sent to client!", true);
+    // For qBittorrent, decide category and tags
+    if (!needsPrompt) {
+      // Use global defaults directly
+      await doSend(
+        currentPrefs.qbtDefaultCategory || "",
+        currentPrefs.qbtDefaultTags || [],
+      );
+      return;
+    }
+
+    // Show category/tag selection modal
+    openQbtCategoryTagModal(currentPrefs, doSend);
   });
 
   return sendButton;
 }
+
+// ── qBittorrent category/tag selection modal ─────────────────────────────────
+
+function openQbtCategoryTagModal(prefs, onConfirm) {
+  // Remove any existing modal first (skip fade-out so a fresh one can open)
+  closeQbtCategoryTagModal(true);
+
+  const categories = prefs.qbtCategories || [];
+  const tags = prefs.qbtTags || [];
+  // A "last selection" exists only if user has actually used the modal before (not null)
+  const useLastSel =
+    prefs.qbtLastCategory !== null || prefs.qbtLastTags !== null;
+
+  const defaultCategory = useLastSel
+    ? prefs.qbtLastCategory || ""
+    : prefs.qbtDefaultCategory || "";
+  const defaultTags =
+    useLastSel && prefs.qbtLastTags
+      ? prefs.qbtLastTags
+      : prefs.qbtDefaultTags || [];
+
+  const overlay = document.createElement("div");
+  overlay.className = "qbt-modal-overlay";
+  overlay.id = "qbtCategoryTagOverlay";
+
+  const modal = document.createElement("div");
+  modal.className = "qbt-modal";
+  modal.id = "qbtCategoryTagModal";
+
+  modal.innerHTML = `
+    <div class="qbt-modal-header">
+      <h3>Send to qBittorrent</h3>
+      <button type="button" class="qbt-modal-close" id="qbtModalCloseBtn" aria-label="Close">&times;</button>
+    </div>
+    <div class="qbt-modal-body">
+      <div class="qbt-modal-field">
+        <label class="qbt-modal-label">Category</label>
+        <select id="qbtModalCategorySelect" class="qbt-modal-select">
+          <option value="">(none)</option>
+          ${categories
+            .map(
+              (c) =>
+                `<option value="${escapeHtml(c)}" ${
+                  c === defaultCategory ? "selected" : ""
+                }>${escapeHtml(c)}</option>`,
+            )
+            .join("")}
+        </select>
+      </div>
+      <div class="qbt-modal-field">
+        <label class="qbt-modal-label">Tags${
+          tags.length ? ` (${tags.length})` : ""
+        }</label>
+        <div class="qbt-modal-tags" id="qbtModalTagsContainer">
+          ${
+            tags.length
+              ? tags
+                  .map(
+                    (t) => `
+                <label class="qbt-tag-item">
+                  <input type="checkbox" value="${escapeHtml(t)}" ${
+                    defaultTags.includes(t) ? "checked" : ""
+                  } />
+                  <span>${escapeHtml(t)}</span>
+                </label>
+              `,
+                  )
+                  .join("")
+              : `<span class="qbt-modal-empty">No tags defined. Add some in extension settings.</span>`
+          }
+        </div>
+      </div>
+      <div class="qbt-modal-hint">
+        Your last selection will be remembered next time.
+      </div>
+    </div>
+    <div class="qbt-modal-footer">
+      <button type="button" class="qbt-modal-btn qbt-modal-btn-cancel" id="qbtModalCancelBtn">Cancel</button>
+      <button type="button" class="qbt-modal-btn qbt-modal-btn-confirm" id="qbtModalConfirmBtn">Send Torrent</button>
+    </div>
+  `;
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const closeBtn = modal.querySelector("#qbtModalCloseBtn");
+  const cancelBtn = modal.querySelector("#qbtModalCancelBtn");
+  const confirmBtn = modal.querySelector("#qbtModalConfirmBtn");
+
+  const close = () => closeQbtCategoryTagModal();
+
+  closeBtn.addEventListener("click", close);
+  cancelBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+
+  confirmBtn.addEventListener("click", () => {
+    const select = modal.querySelector("#qbtModalCategorySelect");
+    const category = select.value;
+    const tagInputs = modal.querySelectorAll(
+      "#qbtModalTagsContainer input[type='checkbox']:checked",
+    );
+    const tags = Array.from(tagInputs).map((cb) => cb.value);
+    close();
+    onConfirm(category, tags);
+  });
+
+  document.addEventListener("keydown", qbtModalKeyHandler);
+}
+
+function closeQbtCategoryTagModal(immediate = false) {
+  const overlay = document.getElementById("qbtCategoryTagOverlay");
+  document.removeEventListener("keydown", qbtModalKeyHandler);
+  if (!overlay) return;
+
+  if (immediate) {
+    overlay.remove();
+    return;
+  }
+
+  // Already animating out — don't restart
+  if (overlay.classList.contains("hiding")) return;
+
+  const modal = overlay.querySelector(".qbt-modal");
+  overlay.classList.add("hiding");
+  if (modal) modal.classList.add("hiding");
+
+  // Wait for fade-out animation before removing (same pattern as Quick Search)
+  const onOverlayFadeOut = (e) => {
+    if (e.target !== overlay) return;
+    overlay.removeEventListener("animationend", onOverlayFadeOut);
+    overlay.remove();
+  };
+  overlay.addEventListener("animationend", onOverlayFadeOut);
+}
+
+function qbtModalKeyHandler(e) {
+  if (e.key === "Escape") closeQbtCategoryTagModal();
+  if (e.key === "Enter") {
+    const confirmBtn = document.getElementById("qbtModalConfirmBtn");
+    if (confirmBtn) confirmBtn.click();
+  }
+}
+
+function escapeHtml(str) {
+  if (typeof str !== "string") return "";
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ── End qBittorrent category/tag selection modal ─────────────────────────────
 
 async function addSendButtonToViewPage() {
   if (!window.location.pathname.startsWith("/view/")) return;
@@ -7384,6 +7591,17 @@ async function handleChangelogPage() {
           <i class="fa fa-github"></i> GitHub
         </a>
       </p>
+    </div>
+    <div class="version-entry">
+      <h2>
+        Version 1.12.2
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.12.2" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added qBittorrent category and tag support when sending torrents, configure defaults in settings or pick per torrent via the "Prompt on Send" popup</li>
+      </ul>
     </div>
     <div class="version-entry">
       <h2>

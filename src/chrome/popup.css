@@ -723,3 +723,84 @@ body {
 .sp-disclaimer.visible {
   display: block;
 }
+
+/* ── qBittorrent Categories & Tags UI ─────────────────────────────────────── */
+
+@keyframes tc-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#tcQbtSyncBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+#tcQbtSyncBtn:disabled {
+  cursor: wait;
+}
+
+#tcQbtSyncIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  line-height: 1;
+  transform-origin: center center;
+  flex-shrink: 0;
+  padding-right: 0px;
+}
+
+.tc-manage-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tc-manage-list::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 3px;
+}
+
+.tc-manage-list::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+
+.tc-manage-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.tc-categories-section h4 {
+  font-family: "Segoe UI", Tahoma, sans-serif;
+}
+
+.tc-tags-checkboxes::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tc-tags-checkboxes::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 3px;
+}
+
+.tc-tags-checkboxes::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+
+.tc-tags-checkboxes::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.tc-manage-item {
+  font-family: "Segoe UI", Tahoma, sans-serif;
+}
+
+/* ── End qBittorrent Categories & Tags UI ─────────────────────────────────── */

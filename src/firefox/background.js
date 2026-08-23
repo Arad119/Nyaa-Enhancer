@@ -83,6 +83,14 @@ browser.runtime.onMessage.addListener((message) => {
       message: err.message,
     }));
   }
+
+  if (message.type === "qbtFetchCategoriesAndTags") {
+    return handleQbtFetchCategoriesAndTags(message).catch((err) => ({
+      ok: false,
+      error: "connection_failed",
+      message: err.message,
+    }));
+  }
 });
 
 // ── Shared utilities ─────────────────────────────────────────────────────────
@@ -219,7 +227,9 @@ async function probeTransmissionRpc(baseUrl) {
     } catch {
       /* ignore */
     }
-    return detectClientFromHtml(body) === "transmission" ? "transmission" : null;
+    return detectClientFromHtml(body) === "transmission"
+      ? "transmission"
+      : null;
   } catch {
     return null;
   }
@@ -264,6 +274,8 @@ async function handleSendTorrent({
   username,
   password,
   magnetUrl,
+  category,
+  tags,
 }) {
   if (!(await hasTorrentClientHostAccess(url))) {
     return { ok: false, error: "permission_denied" };
@@ -275,7 +287,59 @@ async function handleSendTorrent({
     case "deluge":
       return sendDeluge(baseUrl, password, magnetUrl);
     default:
-      return sendQbt(baseUrl, username, password, magnetUrl);
+      return sendQbt(baseUrl, username, password, magnetUrl, category, tags);
+  }
+}
+
+async function handleQbtFetchCategoriesAndTags({ url, username, password }) {
+  if (!(await hasTorrentClientHostAccess(url))) {
+    return { ok: false, error: "permission_denied" };
+  }
+  const baseUrl = normalizeUrl(url);
+  const check = await testQbt(baseUrl, username, password);
+  if (!check.ok) return check;
+  if (username && password) {
+    if ((await qbtLogin(baseUrl, username, password)) === "Fails.") {
+      return { ok: false, error: "auth_failed" };
+    }
+  }
+  try {
+    const [catResp, tagsResp] = await Promise.all([
+      fetch(`${baseUrl}/api/v2/torrents/categories`, {
+        credentials: "include",
+      }),
+      fetch(`${baseUrl}/api/v2/torrents/tags`, { credentials: "include" }),
+    ]);
+    let categories = [];
+    if (catResp.ok) {
+      const catJson = await catResp.json();
+      if (catJson && typeof catJson === "object") {
+        categories = Object.keys(catJson).filter((k) => k && k.trim());
+      }
+    }
+    let tags = [];
+    if (tagsResp.ok) {
+      const tagsText = await tagsResp.text();
+      try {
+        const parsed = JSON.parse(tagsText);
+        if (Array.isArray(parsed)) {
+          tags = parsed.filter((t) => typeof t === "string" && t.trim());
+        }
+      } catch (_) {
+        // Some versions might return newline-separated list
+        tags = tagsText
+          .split(/[\n,]+/)
+          .map((t) => t.trim())
+          .filter((t) => t);
+      }
+    }
+    return { ok: true, categories, tags };
+  } catch (err) {
+    return {
+      ok: false,
+      error: "request_failed",
+      message: err.message,
+    };
   }
 }
 
@@ -303,7 +367,10 @@ async function testQbt(baseUrl, username, password) {
   const body = (await resp.text()).trim();
   if (resp.ok) {
     if (isValidQbtVersion(body)) return { ok: true, version: body };
-    const detected = detectClientFromBody(body, resp.headers.get("content-type"));
+    const detected = detectClientFromBody(
+      body,
+      resp.headers.get("content-type"),
+    );
     if (detected) return wrongClientResult(detected);
     const probed = await probeAlternateClients(baseUrl, "qbittorrent");
     if (probed) return wrongClientResult(probed);
@@ -315,7 +382,7 @@ async function testQbt(baseUrl, username, password) {
   return { ok: false, error: "connection_failed" };
 }
 
-async function sendQbt(baseUrl, username, password, magnetUrl) {
+async function sendQbt(baseUrl, username, password, magnetUrl, category, tags) {
   const check = await testQbt(baseUrl, username, password);
   if (!check.ok) return check;
   if (username && password) {
@@ -335,10 +402,20 @@ async function sendQbt(baseUrl, username, password, magnetUrl) {
         return { ok: false, error: "already_exists" };
     }
   }
+  const bodyParts = [`urls=${encodeURIComponent(magnetUrl)}`];
+  if (category && category.trim()) {
+    bodyParts.push(`category=${encodeURIComponent(category.trim())}`);
+  }
+  if (tags && Array.isArray(tags) && tags.length > 0) {
+    const tagStr = tags.filter((t) => t && t.trim()).join(",");
+    if (tagStr) {
+      bodyParts.push(`tags=${encodeURIComponent(tagStr)}`);
+    }
+  }
   const resp = await fetch(`${baseUrl}/api/v2/torrents/add`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `urls=${encodeURIComponent(magnetUrl)}`,
+    body: bodyParts.join("&"),
     credentials: "include",
   });
   if (resp.ok) return { ok: true };
@@ -482,7 +559,10 @@ async function testDeluge(baseUrl, password) {
   });
   const text = await resp.text();
   if (!resp.ok) {
-    const detected = detectClientFromBody(text, resp.headers.get("content-type"));
+    const detected = detectClientFromBody(
+      text,
+      resp.headers.get("content-type"),
+    );
     if (detected) return wrongClientResult(detected);
     const probed = await probeAlternateClients(baseUrl, "deluge");
     if (probed) return wrongClientResult(probed);
@@ -492,7 +572,10 @@ async function testDeluge(baseUrl, password) {
   try {
     data = JSON.parse(text);
   } catch {
-    const detected = detectClientFromBody(text, resp.headers.get("content-type"));
+    const detected = detectClientFromBody(
+      text,
+      resp.headers.get("content-type"),
+    );
     if (detected) return wrongClientResult(detected);
     const probed = await probeAlternateClients(baseUrl, "deluge");
     if (probed) return wrongClientResult(probed);

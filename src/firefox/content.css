@@ -1375,3 +1375,309 @@ body:not(.dark) .nyaa-enhancer-at-track-select {
     height: 42px;
   }
 }
+
+/* ── qBittorrent Category/Tag Selection Modal ─────────────────────────────── */
+
+.qbt-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2147483000;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  backdrop-filter: blur(2px);
+  animation: qbt-overlay-fade-in 0.3s ease;
+}
+
+.qbt-modal-overlay.hiding {
+  animation: qbt-overlay-fade-out 0.3s ease;
+}
+
+@keyframes qbt-overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes qbt-overlay-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.qbt-modal {
+  background: #1e1e1e;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  width: 92%;
+  max-width: 480px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  animation: qbt-popup-fade-in 0.3s ease;
+}
+
+.qbt-modal.hiding {
+  animation: qbt-popup-fade-out 0.3s ease;
+}
+
+@keyframes qbt-popup-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes qbt-popup-fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+}
+
+.qbt-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #333;
+  background: #252525;
+}
+
+.qbt-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.qbt-modal-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 24px;
+  line-height: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.qbt-modal-close:hover {
+  background: #333;
+  color: #fff;
+}
+
+.qbt-modal-body {
+  padding: 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.qbt-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qbt-modal-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #bbb;
+}
+
+.qbt-modal-select {
+  width: 100%;
+  padding: 9px 12px;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 5px;
+  color: #eee;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23888888%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px auto;
+  padding-right: 34px;
+}
+
+.qbt-modal-select:hover {
+  border-color: #555;
+}
+
+.qbt-modal-select:focus {
+  outline: none;
+  border-color: #337ab7;
+  box-shadow: 0 0 0 2px rgba(51, 122, 183, 0.2);
+}
+
+.qbt-modal-select option {
+  background: #2a2a2a;
+  color: #eee;
+}
+
+.qbt-modal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  background: #1a1a1a;
+  border: 1px solid #2d2d2d;
+  border-radius: 5px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.qbt-tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #ccc;
+  font-size: 12px;
+  user-select: none;
+  transition: all 0.15s;
+}
+
+.qbt-tag-item:hover {
+  background: #333;
+  border-color: #4a4a4a;
+}
+
+.qbt-tag-item input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+  accent-color: #337ab7;
+  width: 14px;
+  height: 14px;
+}
+
+.qbt-tag-item:has(input[type="checkbox"]:checked) {
+  background: rgba(51, 122, 183, 0.18);
+  border-color: #337ab7;
+  color: #9cc4e8;
+}
+
+.qbt-modal-empty {
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+  padding: 6px 4px;
+}
+
+.qbt-modal-hint {
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
+  margin-top: -4px;
+  padding-top: 4px;
+  border-top: 1px dashed #333;
+  padding-left: 4px;
+}
+
+.qbt-modal-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 14px 18px;
+  border-top: 1px solid #333;
+  background: #252525;
+}
+
+.qbt-modal-btn {
+  padding: 8px 18px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.qbt-modal-btn-cancel {
+  background: #2a2a2a;
+  color: #ccc;
+  border-color: #3a3a3a;
+}
+
+.qbt-modal-btn-cancel:hover {
+  background: #333;
+  border-color: #4a4a4a;
+  color: #fff;
+}
+
+.qbt-modal-btn-confirm {
+  background: #337ab7;
+  color: white;
+  border-color: #2e6da4;
+}
+
+.qbt-modal-btn-confirm:hover {
+  background: #286090;
+  border-color: #204d74;
+}
+
+.qbt-modal-btn-confirm:active {
+  transform: translateY(1px);
+}
+
+@media (max-width: 520px) {
+  .qbt-modal {
+    width: 96%;
+    border-radius: 6px;
+  }
+
+  .qbt-modal-header {
+    padding: 12px 14px;
+  }
+
+  .qbt-modal-body {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .qbt-modal-footer {
+    padding: 12px 14px;
+  }
+
+  .qbt-modal-btn {
+    padding: 8px 14px;
+  }
+}
+
+/* ── End qBittorrent Category/Tag Selection Modal ─────────────────────────── */

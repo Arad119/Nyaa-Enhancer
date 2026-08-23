@@ -146,6 +146,13 @@ browser.storage.sync.get(
     transmissionUsername: "",
     transmissionPassword: "",
     delugePassword: "",
+    qbtCategories: [],
+    qbtTags: [],
+    qbtDefaultCategory: "",
+    qbtDefaultTags: [],
+    qbtPromptOnSend: true,
+    qbtLastCategory: null,
+    qbtLastTags: null,
   },
   (items) => {
     document
@@ -218,6 +225,7 @@ browser.storage.sync.get(
     document.getElementById("tcIp").value = items.torrentClientUrl || "";
     loadClientAuth(tc, items);
     applyClientUI(tc);
+    loadQbtCategoryTagSettings(items);
 
     const ameNZBApiKeyInput = document.getElementById("ameNZBApiKey");
     ameNZBApiKeyInput.value = items.ameNZBApiKey || "";
@@ -527,8 +535,11 @@ function applyClientUI(client) {
   const usernameWrapper = document.getElementById("tcUsernameWrapper");
   const csrfDisclaimer = document.getElementById("tcQbtCsrfDisclaimer");
   if (csrfDisclaimer) {
-    csrfDisclaimer.style.display =
-      client === "qbittorrent" ? "block" : "none";
+    csrfDisclaimer.style.display = client === "qbittorrent" ? "block" : "none";
+  }
+  const catSection = document.getElementById("tcQbtCategoriesSection");
+  if (catSection) {
+    catSection.style.display = client === "qbittorrent" ? "block" : "none";
   }
   if (client === "deluge") {
     usernameWrapper.style.display = "none";
@@ -572,9 +583,439 @@ function saveTorrentClientSettings() {
   } else {
     settings.qbtUsername = username;
     settings.qbtPassword = password;
+    // Save qBittorrent category/tag settings
+    const promptToggle = document.getElementById("tcPromptCategoriesToggle");
+    settings.qbtPromptOnSend = promptToggle
+      ? promptToggle.getAttribute("aria-checked") === "true"
+      : true;
+    const defaultCatSelect = document.getElementById("tcDefaultCategory");
+    settings.qbtDefaultCategory = defaultCatSelect
+      ? defaultCatSelect.value
+      : "";
+    // Collect default tags from checkboxes
+    const defaultTags = [];
+    document
+      .querySelectorAll("#tcDefaultTagsList input[type='checkbox']:checked")
+      .forEach((cb) => defaultTags.push(cb.value));
+    settings.qbtDefaultTags = defaultTags;
   }
   browser.storage.sync.set(settings);
 }
+
+// ── qBittorrent Categories & Tags management ────────────────────────────────
+
+function loadQbtCategoryTagSettings(items) {
+  const categories = items.qbtCategories || [];
+  const tags = items.qbtTags || [];
+  const defaultCategory = items.qbtDefaultCategory || "";
+  const defaultTags = items.qbtDefaultTags || [];
+  const promptOnSend = items.qbtPromptOnSend !== false;
+
+  const promptToggle = document.getElementById("tcPromptCategoriesToggle");
+  if (promptToggle) {
+    promptToggle.setAttribute("aria-checked", String(promptOnSend));
+  }
+
+  displayQbtCategories(categories, defaultCategory);
+  displayQbtTags(tags);
+  displayDefaultTags(tags, defaultTags);
+}
+
+function displayQbtCategories(categories, selectedDefault) {
+  const listEl = document.getElementById("tcCategoriesList");
+  const selectEl = document.getElementById("tcDefaultCategory");
+  if (!listEl || !selectEl) return;
+
+  listEl.innerHTML = "";
+  if (!categories.length) {
+    const empty = document.createElement("span");
+    empty.style.cssText = "color: #666; font-size: 12px; font-style: italic;";
+    empty.textContent = "No categories defined.";
+    listEl.appendChild(empty);
+  } else {
+    categories.forEach((cat) => {
+      const item = document.createElement("div");
+      item.className = "tc-manage-item";
+      item.style.cssText =
+        "display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background: #2a2a2a; border-radius: 3px;";
+      const nameSpan = document.createElement("span");
+      nameSpan.style.cssText = "color: #ddd; font-size: 13px;";
+      nameSpan.textContent = cat;
+      const rmBtn = document.createElement("button");
+      rmBtn.className = "tc-manage-remove";
+      rmBtn.textContent = "Remove";
+      rmBtn.style.cssText =
+        "background: #ff4444; color: white; border: none; border-radius: 3px; padding: 2px 8px; font-size: 11px; cursor: pointer;";
+      rmBtn.addEventListener("click", () => removeQbtCategory(cat));
+      item.appendChild(nameSpan);
+      item.appendChild(rmBtn);
+      listEl.appendChild(item);
+    });
+  }
+
+  // Update default category dropdown
+  selectEl.innerHTML = '<option value="">(none)</option>';
+  categories.forEach((cat) => {
+    const opt = document.createElement("option");
+    opt.value = cat;
+    opt.textContent = cat;
+    if (cat === selectedDefault) opt.selected = true;
+    selectEl.appendChild(opt);
+  });
+}
+
+function displayQbtTags(tags) {
+  const listEl = document.getElementById("tcTagsList");
+  if (!listEl) return;
+
+  listEl.innerHTML = "";
+  if (!tags.length) {
+    const empty = document.createElement("span");
+    empty.style.cssText = "color: #666; font-size: 12px; font-style: italic;";
+    empty.textContent = "No tags defined.";
+    listEl.appendChild(empty);
+    return;
+  }
+  tags.forEach((tag) => {
+    const item = document.createElement("div");
+    item.className = "tc-manage-item";
+    item.style.cssText =
+      "display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background: #2a2a2a; border-radius: 3px;";
+    const nameSpan = document.createElement("span");
+    nameSpan.style.cssText = "color: #ddd; font-size: 13px;";
+    nameSpan.textContent = tag;
+    const rmBtn = document.createElement("button");
+    rmBtn.className = "tc-manage-remove";
+    rmBtn.textContent = "Remove";
+    rmBtn.style.cssText =
+      "background: #ff4444; color: white; border: none; border-radius: 3px; padding: 2px 8px; font-size: 11px; cursor: pointer;";
+    rmBtn.addEventListener("click", () => removeQbtTag(tag));
+    item.appendChild(nameSpan);
+    item.appendChild(rmBtn);
+    listEl.appendChild(item);
+  });
+}
+
+function displayDefaultTags(tags, defaultTags) {
+  const container = document.getElementById("tcDefaultTagsList");
+  if (!container) return;
+
+  container.innerHTML = "";
+  if (!tags.length) {
+    const empty = document.createElement("span");
+    empty.style.cssText = "color: #666; font-size: 12px; font-style: italic;";
+    empty.textContent = "No tags defined yet.";
+    container.appendChild(empty);
+    return;
+  }
+  tags.forEach((tag) => {
+    const label = document.createElement("label");
+    label.style.cssText =
+      "display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: #2a2a2a; border-radius: 3px; cursor: pointer; color: #ddd; font-size: 12px; user-select: none;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = tag;
+    cb.style.cssText = "accent-color: #4caf50;";
+    if (defaultTags.includes(tag)) cb.checked = true;
+    cb.addEventListener("change", () => saveTorrentClientSettings());
+    const text = document.createElement("span");
+    text.textContent = tag;
+    label.appendChild(cb);
+    label.appendChild(text);
+    container.appendChild(label);
+  });
+}
+
+function addQbtCategory() {
+  const input = document.getElementById("tcNewCategoryInput");
+  const name = input.value.trim();
+  if (!name) return;
+  browser.storage.sync.get({ qbtCategories: [] }, (items) => {
+    const list = items.qbtCategories || [];
+    if (list.includes(name)) {
+      input.value = "";
+      return;
+    }
+    list.push(name);
+    browser.storage.sync.set({ qbtCategories: list }, () => {
+      input.value = "";
+      browser.storage.sync.get({ qbtDefaultCategory: "" }, (items2) =>
+        displayQbtCategories(list, items2.qbtDefaultCategory),
+      );
+    });
+  });
+}
+
+function removeQbtCategory(cat) {
+  browser.storage.sync.get(
+    { qbtCategories: [], qbtDefaultCategory: "", qbtLastCategory: null },
+    (items) => {
+      const list = (items.qbtCategories || []).filter((c) => c !== cat);
+      const defaultCat =
+        items.qbtDefaultCategory === cat ? "" : items.qbtDefaultCategory;
+      // Only update lastCat if it was actually set (not null)
+      let lastCat = items.qbtLastCategory;
+      if (lastCat !== null && lastCat === cat) {
+        lastCat = "";
+      }
+      browser.storage.sync.set(
+        {
+          qbtCategories: list,
+          qbtDefaultCategory: defaultCat,
+          qbtLastCategory: lastCat,
+        },
+        () => displayQbtCategories(list, defaultCat),
+      );
+    },
+  );
+}
+
+function addQbtTag() {
+  const input = document.getElementById("tcNewTagInput");
+  const name = input.value.trim();
+  if (!name) return;
+  browser.storage.sync.get({ qbtTags: [], qbtDefaultTags: [] }, (items) => {
+    const list = items.qbtTags || [];
+    if (list.includes(name)) {
+      input.value = "";
+      return;
+    }
+    list.push(name);
+    const defaultTags = items.qbtDefaultTags || [];
+    browser.storage.sync.set({ qbtTags: list }, () => {
+      input.value = "";
+      displayQbtTags(list);
+      displayDefaultTags(list, defaultTags);
+    });
+  });
+}
+
+function removeQbtTag(tag) {
+  browser.storage.sync.get(
+    { qbtTags: [], qbtDefaultTags: [], qbtLastTags: null },
+    (items) => {
+      const list = (items.qbtTags || []).filter((t) => t !== tag);
+      const defaultTags = (items.qbtDefaultTags || []).filter((t) => t !== tag);
+      // Only update lastTags if it was actually set (not null)
+      let lastTags = items.qbtLastTags;
+      if (lastTags !== null && Array.isArray(lastTags)) {
+        lastTags = lastTags.filter((t) => t !== tag);
+      }
+      browser.storage.sync.set(
+        { qbtTags: list, qbtDefaultTags: defaultTags, qbtLastTags: lastTags },
+        () => {
+          displayQbtTags(list);
+          displayDefaultTags(list, defaultTags);
+        },
+      );
+    },
+  );
+}
+
+// Attach event listeners for qBittorrent category/tag management
+document.addEventListener("DOMContentLoaded", () => {
+  const addCatBtn = document.getElementById("tcAddCategoryBtn");
+  if (addCatBtn) {
+    addCatBtn.addEventListener("click", addQbtCategory);
+  }
+  const addTagBtn = document.getElementById("tcAddTagBtn");
+  if (addTagBtn) {
+    addTagBtn.addEventListener("click", addQbtTag);
+  }
+  const catInput = document.getElementById("tcNewCategoryInput");
+  if (catInput) {
+    catInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") addQbtCategory();
+    });
+  }
+  const tagInput = document.getElementById("tcNewTagInput");
+  if (tagInput) {
+    tagInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") addQbtTag();
+    });
+  }
+  const defaultCatSelect = document.getElementById("tcDefaultCategory");
+  if (defaultCatSelect) {
+    defaultCatSelect.addEventListener("change", saveTorrentClientSettings);
+  }
+  const syncBtn = document.getElementById("tcQbtSyncBtn");
+  if (syncBtn) {
+    syncBtn.addEventListener("click", syncQbtCategoriesAndTags);
+  }
+});
+
+async function syncQbtCategoriesAndTags() {
+  const url = document.getElementById("tcIp").value.trim();
+  const username = document.getElementById("tcUsername").value.trim();
+  const password = document.getElementById("tcPassword").value;
+  const syncIcon = document.getElementById("tcQbtSyncIcon");
+  const syncBtn = document.getElementById("tcQbtSyncBtn");
+
+  if (!url) {
+    setQbtSyncStatus(null, null, "⚠ Enter a Torrent Client URL first.");
+    return;
+  }
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    setQbtSyncStatus(null, null, "⚠ URL must start with http:// or https://");
+    return;
+  }
+
+  syncBtn.disabled = true;
+  if (syncIcon) syncIcon.style.animation = "tc-spin 1s linear infinite";
+  setQbtSyncStatus(null, null, "Syncing...");
+
+  const startTime = Date.now();
+  const minDuration = 400;
+
+  try {
+    const result = await browser.runtime.sendMessage({
+      type: "qbtFetchCategoriesAndTags",
+      url,
+      username,
+      password,
+    });
+
+    const elapsed = Date.now() - startTime;
+    const waitMs = Math.max(0, minDuration - elapsed);
+    if (waitMs > 0) {
+      await new Promise((res) => setTimeout(res, waitMs));
+    }
+
+    if (!result) {
+      setQbtSyncStatus(null, null, "✗ No response from background");
+      return;
+    }
+    if (!result.ok) {
+      let msg = "✗ Sync failed";
+      switch (result.error) {
+        case "auth_failed":
+          msg = "✗ Authentication failed - wrong credentials";
+          break;
+        case "auth_required":
+          msg = "✗ Server requires authentication";
+          break;
+        case "permission_denied":
+          msg = "✗ Missing permission. Click Test Connection first.";
+          break;
+        case "wrong_client":
+          msg = "✗ This URL is not a qBittorrent server";
+          break;
+        default:
+          msg = result.message
+            ? `✗ Sync failed: ${result.message}`
+            : "✗ Sync failed. Check the URL/credentials.";
+      }
+      setQbtSyncStatus(null, null, msg);
+      return;
+    }
+
+    const remoteCats = result.categories || [];
+    const remoteTags = result.tags || [];
+
+    browser.storage.sync.get(
+      {
+        qbtCategories: [],
+        qbtTags: [],
+        qbtDefaultCategory: "",
+        qbtDefaultTags: [],
+      },
+      (items) => {
+        const mergedCats = new Set([
+          ...(items.qbtCategories || []),
+          ...remoteCats,
+        ]);
+        const mergedTags = new Set([
+          ...(items.qbtTags || []),
+          ...remoteTags,
+        ]);
+        const catList = [...mergedCats].sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" }),
+        );
+        const tagList = [...mergedTags].sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" }),
+        );
+        const defaultCategory =
+          items.qbtDefaultCategory &&
+          mergedCats.has(items.qbtDefaultCategory)
+            ? items.qbtDefaultCategory
+            : "";
+        const defaultTags = (items.qbtDefaultTags || []).filter((t) =>
+          mergedTags.has(t),
+        );
+
+        browser.storage.sync.set(
+          {
+            qbtCategories: catList,
+            qbtTags: tagList,
+            qbtDefaultCategory: defaultCategory,
+            qbtDefaultTags: defaultTags,
+          },
+          () => {
+            displayQbtCategories(catList, defaultCategory);
+            displayQbtTags(tagList);
+            displayDefaultTags(tagList, defaultTags);
+            const addedCats = remoteCats.filter(
+              (c) => !(items.qbtCategories || []).includes(c),
+            ).length;
+            const addedTags = remoteTags.filter(
+              (t) => !(items.qbtTags || []).includes(t),
+            ).length;
+            const catStr =
+              addedCats > 0
+                ? `${addedCats} new categor${addedCats === 1 ? "y" : "ies"}`
+                : null;
+            const tagStr =
+              addedTags > 0
+                ? `${addedTags} new tag${addedTags === 1 ? "" : "s"}`
+                : null;
+            const summary =
+              catStr && tagStr
+                ? `Added ${catStr} & ${tagStr}`
+                : catStr || tagStr || "Already up to date.";
+            setQbtSyncStatus("#4caf50", "↻", `✓ Synced. ${summary}`);
+          },
+        );
+      },
+    );
+  } catch (err) {
+    const elapsed = Date.now() - startTime;
+    const waitMs = Math.max(0, minDuration - elapsed);
+    if (waitMs > 0) {
+      await new Promise((res) => setTimeout(res, waitMs));
+    }
+    setQbtSyncStatus(null, null, `✗ Sync error: ${err.message}`);
+  } finally {
+    syncBtn.disabled = false;
+    if (syncIcon) syncIcon.style.animation = "";
+  }
+}
+
+function setQbtSyncStatus(color, iconChar, text) {
+  const statusEl = document.getElementById("tcQbtSyncStatus");
+  if (statusEl) {
+    statusEl.textContent = text || "";
+    if (color) {
+      statusEl.style.color = color;
+    } else if (text) {
+      statusEl.style.color = text.startsWith("⚠") || text === "Syncing..."
+        ? "#999"
+        : "#ff4444";
+    } else {
+      statusEl.style.color = "";
+    }
+  }
+  const syncIcon = document.getElementById("tcQbtSyncIcon");
+  if (syncIcon && iconChar) syncIcon.textContent = iconChar;
+  if (statusEl && text && color !== "#ff4444" && text !== "Syncing...") {
+    clearTimeout(statusEl._qbtClearTimer);
+    statusEl._qbtClearTimer = setTimeout(() => {
+      statusEl.textContent = "";
+      statusEl.style.color = "";
+    }, 6000);
+  }
+}
+
+// ── End qBittorrent Categories & Tags management ────────────────────────────
 
 // Client dropdown change — reload auth fields and adjust UI
 document.getElementById("tcClientSelect").addEventListener("change", (e) => {
@@ -665,7 +1106,14 @@ function showTorrentTestResult(result, client, statusEl) {
   statusEl.style.color = "#ff4444";
 }
 
-function runTorrentConnectionTest(client, url, username, password, statusEl, testBtn) {
+function runTorrentConnectionTest(
+  client,
+  url,
+  username,
+  password,
+  statusEl,
+  testBtn,
+) {
   testBtn.disabled = true;
   statusEl.textContent = "Testing...";
   statusEl.style.color = "#999";
@@ -707,7 +1155,7 @@ document.getElementById("tcTestBtn").addEventListener("click", () => {
     return;
   }
 
-  // Save settings before requesting permissions — Firefox closes the popup during
+  // Save settings before requesting permissions — Chrome closes the popup during
   // the permission prompt, so values must be persisted to survive the round-trip.
   saveTorrentClientSettings();
 
@@ -721,7 +1169,14 @@ document.getElementById("tcTestBtn").addEventListener("click", () => {
       statusEl.style.color = "#ff4444";
       return;
     }
-    runTorrentConnectionTest(client, url, username, password, statusEl, testBtn);
+    runTorrentConnectionTest(
+      client,
+      url,
+      username,
+      password,
+      statusEl,
+      testBtn,
+    );
   });
 });
 
@@ -1094,6 +1549,9 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
           },
         );
         break;
+      case "tcPromptCategoriesToggle":
+        saveTorrentClientSettings();
+        return;
     }
     browser.storage.sync.set({ [setting]: newState });
   });
@@ -1535,7 +1993,7 @@ function displayMonitoredUsers(monitoredUsers) {
     unmonitorBtn.className = "keyword-remove unmonitor-btn";
     unmonitorBtn.textContent = "Unmonitor";
     unmonitorBtn.addEventListener("click", () => {
-      unmonitorUser(user.username); 
+      unmonitorUser(user.username);
     });
 
     // Add elements to item

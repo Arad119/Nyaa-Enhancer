@@ -1681,3 +1681,158 @@ body:not(.dark) .nyaa-enhancer-at-track-select {
 }
 
 /* ── End qBittorrent Category/Tag Selection Modal ─────────────────────────── */
+
+/* Compact torrent tables on smaller screens */
+@media (max-width: 1920px) {
+  .container:has(table.torrent-list) {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  table.torrent-list > thead > tr > th,
+  table.torrent-list > tbody > tr > td {
+    padding: 7px 6px;
+  }
+
+  .magnet-checkbox-column {
+    width: 48px;
+  }
+
+  .button-container {
+    margin-bottom: 8px !important;
+  }
+
+  .button-container .copy-magnets-button {
+    margin: 8px !important;
+    padding: 5px 9px;
+  }
+}
+
+@media (max-width: 1440px) {
+  .container:has(table.torrent-list) {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  table.torrent-list > thead > tr > th,
+  table.torrent-list > tbody > tr > td {
+    padding: 6px 5px;
+  }
+
+  table.torrent-list > thead > tr > th {
+    font-size: 14px;
+  }
+
+  .magnet-checkbox-column {
+    width: 44px;
+  }
+
+  .button-container {
+    margin-bottom: 7px !important;
+  }
+
+  .button-container .copy-magnets-button {
+    margin: 6px !important;
+    padding: 4px 8px;
+  }
+}
+
+@media (max-width: 992px) {
+  .container:has(table.torrent-list) {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .table-responsive:has(table.torrent-list) {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  table.torrent-list > thead > tr > th,
+  table.torrent-list > tbody > tr > td {
+    padding: 5px 4px;
+  }
+
+  table.torrent-list > thead > tr > th {
+    font-size: 13px;
+  }
+
+  .magnet-checkbox-column {
+    width: 34px;
+  }
+
+  .button-container {
+    margin-bottom: 6px !important;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .button-container .copy-magnets-button {
+    margin: 0 !important;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .container:has(table.torrent-list) {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  table.torrent-list > thead > tr > th,
+  table.torrent-list > tbody > tr > td {
+    padding: 3px 2px;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  table.torrent-list > thead > tr > th {
+    font-size: 11px;
+  }
+
+  table.torrent-list td:first-child {
+    padding-left: 1px;
+    padding-right: 1px;
+  }
+
+  .magnet-checkbox-column {
+    width: 26px;
+  }
+
+  .magnet-checkbox {
+    margin: 0;
+  }
+
+  .button-container .copy-magnets-button {
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 576px) {
+  .container:has(table.torrent-list) {
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+
+  .table-responsive:has(table.torrent-list) {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  table.torrent-list > thead > tr > th,
+  table.torrent-list > tbody > tr > td {
+    padding: 2px 1px;
+    font-size: 11px;
+  }
+
+  table.torrent-list > thead > tr > th {
+    font-size: 10px;
+  }
+
+  .magnet-checkbox-column {
+    width: 22px;
+  }
+}

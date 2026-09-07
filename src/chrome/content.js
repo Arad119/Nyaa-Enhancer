@@ -263,16 +263,269 @@ function isSupportedAnimeViewPageCategory() {
   return isAnime && hasSubcategory;
 }
 
-function insertAtCellBeforeMagnetOrCheckbox(row, atCell) {
-  const magnetCell = row.querySelector(".magnet-column");
-  const checkboxCell = row.querySelector(".magnet-checkbox")?.closest("td");
-  if (magnetCell) {
-    row.insertBefore(atCell, magnetCell);
-  } else if (checkboxCell) {
-    row.insertBefore(atCell, checkboxCell);
-  } else {
-    row.appendChild(atCell);
+function getTorrentLinkCell(row) {
+  return row.querySelector('td:has(a[href^="magnet:"])');
+}
+
+function getNextLinkActionSibling(anchor) {
+  let next = anchor.nextSibling;
+  if (next?.nodeType === Node.TEXT_NODE && /^\s+$/.test(next.textContent)) {
+    next = next.nextSibling;
   }
+  return next;
+}
+
+function hasSpaceBefore(node) {
+  const prev = node?.previousSibling;
+  return prev?.nodeType === Node.TEXT_NODE && /^\s+$/.test(prev.textContent);
+}
+
+function areLinkActionsOrdered(linkCell) {
+  const magnetLink = linkCell.querySelector('a[href^="magnet:"]');
+  if (!magnetLink) return true;
+
+  const actions = [
+    linkCell.querySelector(".link-action-copy"),
+    linkCell.querySelector(".link-action-send"),
+    linkCell.querySelector(".link-action-at"),
+  ].filter(Boolean);
+
+  if (!actions.length) return true;
+
+  let anchor = magnetLink;
+  for (const action of actions) {
+    if (getNextLinkActionSibling(anchor) !== action || !hasSpaceBefore(action)) {
+      return false;
+    }
+    anchor = action;
+  }
+
+  return true;
+}
+
+function insertLinkActionAfter(linkCell, element, afterElement) {
+  if (!afterElement) {
+    linkCell.appendChild(element);
+    return;
+  }
+
+  if (
+    element.parentNode === linkCell &&
+    getNextLinkActionSibling(afterElement) === element &&
+    hasSpaceBefore(element)
+  ) {
+    return;
+  }
+
+  if (element.parentNode) {
+    element.remove();
+  }
+
+  let insertRef = afterElement.nextSibling;
+  if (
+    !(
+      insertRef &&
+      insertRef.nodeType === Node.TEXT_NODE &&
+      /^\s+$/.test(insertRef.textContent)
+    )
+  ) {
+    const space = document.createTextNode(" ");
+    linkCell.insertBefore(space, insertRef);
+    insertRef = space;
+  }
+
+  linkCell.insertBefore(element, insertRef.nextSibling);
+}
+
+function removeLinkAction(element) {
+  if (!element?.parentNode) return;
+
+  const prev = element.previousSibling;
+  element.remove();
+
+  if (prev?.nodeType === Node.TEXT_NODE && /^\s+$/.test(prev.textContent)) {
+    const before = prev.previousSibling;
+    if (
+      before?.matches?.(
+        'a[href^="magnet:"], a[href*="/download/"], .link-action-copy, .link-action-send, .link-action-at',
+      )
+    ) {
+      prev.remove();
+    }
+  }
+}
+
+function reorderLinkActionsInCell(linkCell) {
+  if (areLinkActionsOrdered(linkCell)) return;
+
+  const magnetLink = linkCell.querySelector('a[href^="magnet:"]');
+  if (!magnetLink) return;
+
+  const actions = [
+    linkCell.querySelector(".link-action-copy"),
+    linkCell.querySelector(".link-action-send"),
+    linkCell.querySelector(".link-action-at"),
+  ].filter(Boolean);
+
+  if (!actions.length) return;
+
+  actions.forEach(removeLinkAction);
+
+  let anchor = magnetLink;
+  for (const action of actions) {
+    insertLinkActionAfter(linkCell, action, anchor);
+    anchor = action;
+  }
+}
+
+function removeLegacyTorrentListActionColumns() {
+  document
+    .querySelectorAll(
+      'th.text-center[title="AT"], th.text-center[title="Magnet"], th.text-center[title="Send"]',
+    )
+    .forEach((header) => header.remove());
+  document
+    .querySelectorAll(".at-column, .magnet-column, .send-column")
+    .forEach((cell) => cell.remove());
+  document.querySelectorAll(".torrent-link-actions").forEach((container) => {
+    while (container.firstChild) {
+      container.parentNode.insertBefore(container.firstChild, container);
+    }
+    container.remove();
+  });
+  document
+    .querySelectorAll(".link-action-copy.magnet-button, .link-action-send.magnet-button")
+    .forEach((el) => el.remove());
+}
+
+function createMagnetCopyLink(magnetLink) {
+  const copyLink = document.createElement("a");
+  copyLink.href = "#";
+  copyLink.className = "link-action-copy";
+  copyLink.title = "Copy magnet link to clipboard";
+  copyLink.innerHTML = '<i class="fa fa-fw fa-clipboard"></i>';
+  copyLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    navigator.clipboard
+      .writeText(magnetLink.href)
+      .then(() => {
+        showNotification("Magnet link copied to clipboard!", true);
+      })
+      .catch((err) => {
+        console.error("Failed to copy magnet:", err);
+        showNotification("Failed to copy magnet link", false);
+      });
+  });
+  return copyLink;
+}
+
+function createMagnetCopyButton(magnetLink, { extraStyles = {} } = {}) {
+  const magnetButton = document.createElement("button");
+  magnetButton.className = "magnet-button";
+  magnetButton.title = "Copy magnet link to clipboard";
+  magnetButton.innerHTML = '<i class="fa fa-clipboard"></i> Copy';
+  magnetButton.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
+  magnetButton.style.fontWeight = "500";
+  Object.assign(magnetButton.style, extraStyles);
+  magnetButton.addEventListener("click", () => {
+    navigator.clipboard
+      .writeText(magnetLink.href)
+      .then(() => {
+        showNotification("Magnet link copied to clipboard!", true);
+      })
+      .catch((err) => {
+        console.error("Failed to copy magnet:", err);
+        showNotification("Failed to copy magnet link", false);
+      });
+  });
+  return magnetButton;
+}
+
+function updateTorrentRowLinkActions(row, prefs) {
+  const linkCell = getTorrentLinkCell(row);
+  if (!linkCell) return;
+
+  const magnetLink = linkCell.querySelector('a[href^="magnet:"]');
+  if (!magnetLink) return;
+
+  const showAtLink =
+    prefs.showATLinks && isAnimetoshoListCategoryRow(row);
+  const needsAny =
+    prefs.showMagnetButtons || prefs.showSendButtons || showAtLink;
+
+  linkCell.querySelector(".torrent-link-actions")?.remove();
+
+  let atLink = linkCell.querySelector(".link-action-at");
+  let copyLink = linkCell.querySelector(".link-action-copy");
+  let sendLink = linkCell.querySelector(".link-action-send");
+  let changed = false;
+
+  if (!needsAny) {
+    if (atLink) {
+      removeLinkAction(atLink);
+      changed = true;
+    }
+    if (copyLink) {
+      removeLinkAction(copyLink);
+      changed = true;
+    }
+    if (sendLink) {
+      removeLinkAction(sendLink);
+      changed = true;
+    }
+    return;
+  }
+
+  if (prefs.showMagnetButtons) {
+    if (!copyLink) {
+      copyLink = createMagnetCopyLink(magnetLink);
+      linkCell.appendChild(copyLink);
+      changed = true;
+    }
+  } else if (copyLink) {
+    removeLinkAction(copyLink);
+    changed = true;
+  }
+
+  if (prefs.showSendButtons) {
+    if (!sendLink) {
+      sendLink = createSendListLink(magnetLink.href);
+      linkCell.appendChild(sendLink);
+      changed = true;
+    }
+  } else if (sendLink) {
+    removeLinkAction(sendLink);
+    changed = true;
+  }
+
+  if (showAtLink) {
+    const infoHash = getTorrentInfoHashFromRow(row);
+    if (infoHash) {
+      if (!atLink) {
+        atLink = createAnimetoshoListAnchor(infoHash, prefs.useNewATDomain);
+        linkCell.appendChild(atLink);
+        changed = true;
+      }
+    } else if (atLink) {
+      removeLinkAction(atLink);
+      changed = true;
+    }
+  } else if (atLink) {
+    removeLinkAction(atLink);
+    changed = true;
+  }
+
+  if (changed || !areLinkActionsOrdered(linkCell)) {
+    reorderLinkActionsInCell(linkCell);
+  }
+}
+
+async function updateAllTorrentListLinkActions(overrides = {}) {
+  const prefs = { ...(await loadStoredPreferences()), ...overrides };
+  removeLegacyTorrentListActionColumns();
+  document.querySelectorAll("table.torrent-list tbody tr").forEach((row) => {
+    updateTorrentRowLinkActions(row, prefs);
+  });
 }
 
 // Function to add a checkbox column to the torrent table
@@ -280,68 +533,13 @@ function insertAtCellBeforeMagnetOrCheckbox(row, atCell) {
 async function addCheckboxColumn() {
   const prefs = await loadStoredPreferences();
 
-  // Add new column headers to the table
-  const headerRow = document.querySelector("table.torrent-list thead tr");
-  if (!headerRow) return;
-
-  // Add AT column header if enabled and doesn't exist
-  if (
-    prefs.showATLinks &&
-    !headerRow.querySelector('th.text-center[title="AT"]')
-  ) {
-    const atHeader = document.createElement("th");
-    atHeader.className = "text-center";
-    atHeader.style.width = "70px";
-    atHeader.textContent = "AT";
-    atHeader.title = "AT"; // Add title for identification
-    const checkboxHeader = headerRow.querySelector(".magnet-checkbox-column");
-    headerRow.insertBefore(atHeader, checkboxHeader);
-  }
-
-  // Add Magnet column header if enabled and doesn't exist
-  if (
-    prefs.showMagnetButtons &&
-    !headerRow.querySelector('th.text-center[title="Magnet"]')
-  ) {
-    const magnetHeader = document.createElement("th");
-    magnetHeader.className = "text-center";
-    magnetHeader.style.width = "70px";
-    magnetHeader.textContent = "Magnet";
-    magnetHeader.title = "Magnet"; // Add title for identification
-    const checkboxHeader = headerRow.querySelector(".magnet-checkbox-column");
-    const atHeader = Array.from(
-      headerRow.querySelectorAll("th.text-center"),
-    ).find((header) => header.textContent === "AT");
-
-    if (atHeader) {
-      headerRow.insertBefore(magnetHeader, atHeader.nextSibling);
-    } else if (checkboxHeader) {
-      headerRow.insertBefore(magnetHeader, checkboxHeader);
-    } else {
-      headerRow.appendChild(magnetHeader);
-    }
-  }
-
-  // Add Send column header if enabled and doesn't exist
-  if (
-    prefs.showSendButtons &&
-    !headerRow.querySelector('th.text-center[title="Send"]')
-  ) {
-    const sendHeader = document.createElement("th");
-    sendHeader.className = "text-center";
-    sendHeader.style.width = "70px";
-    sendHeader.textContent = "Client";
-    sendHeader.title = "Send";
-    const checkboxHeader = headerRow.querySelector(".magnet-checkbox-column");
-    if (checkboxHeader) {
-      headerRow.insertBefore(sendHeader, checkboxHeader);
-    } else {
-      headerRow.appendChild(sendHeader);
-    }
-  }
+  removeLegacyTorrentListActionColumns();
+  await updateAllTorrentListLinkActions(prefs);
 
   // Add checkbox column header only if buttons are enabled and doesn't exist
+  const headerRow = document.querySelector("table.torrent-list thead tr");
   if (
+    headerRow &&
     prefs.showButtons &&
     !headerRow.querySelector(".magnet-checkbox-column")
   ) {
@@ -356,77 +554,6 @@ async function addCheckboxColumn() {
   // Add cells only if they don't exist
   const rows = document.querySelectorAll("table.torrent-list tbody tr");
   rows.forEach((row) => {
-    // Add AT cell if enabled and doesn't exist
-    if (prefs.showATLinks && !row.querySelector(".at-column")) {
-      const atCell = document.createElement("td");
-      atCell.className = "text-center at-column";
-
-      populateAnimetoshoListCell(row, atCell, prefs.useNewATDomain);
-      insertAtCellBeforeMagnetOrCheckbox(row, atCell);
-    }
-
-    // Add magnet cell if enabled and doesn't exist
-    if (prefs.showMagnetButtons && !row.querySelector(".magnet-column")) {
-      const magnetCell = document.createElement("td");
-      magnetCell.className = "text-center magnet-column";
-
-      const linkCell = row.querySelector('td:has(a[href^="magnet:"])');
-      if (linkCell) {
-        const magnetLink = linkCell.querySelector('a[href^="magnet:"]');
-        if (magnetLink) {
-          const magnetButton = document.createElement("button");
-          magnetButton.className = "magnet-button";
-          magnetButton.innerHTML = '<i class="fa fa-magnet"></i> Copy';
-          magnetButton.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
-          magnetButton.style.fontWeight = "500";
-          magnetButton.addEventListener("click", () => {
-            navigator.clipboard
-              .writeText(magnetLink.href)
-              .then(() => {
-                showNotification("Magnet link copied to clipboard!", true);
-              })
-              .catch((err) => {
-                console.error("Failed to copy magnet:", err);
-                showNotification("Failed to copy magnet link", false);
-              });
-          });
-          magnetCell.appendChild(magnetButton);
-        }
-      }
-
-      const checkboxCell = row.querySelector(".magnet-checkbox")?.closest("td");
-      const atCell = row.querySelector(".at-column");
-
-      if (atCell) {
-        row.insertBefore(magnetCell, atCell.nextSibling);
-      } else if (checkboxCell) {
-        row.insertBefore(magnetCell, checkboxCell);
-      } else {
-        row.appendChild(magnetCell);
-      }
-    }
-
-    // Add Send cell if enabled and doesn't exist
-    if (prefs.showSendButtons && !row.querySelector(".send-column")) {
-      const sendCell = document.createElement("td");
-      sendCell.className = "text-center send-column";
-
-      const linkCell = row.querySelector('td:has(a[href^="magnet:"])');
-      if (linkCell) {
-        const magnetLink = linkCell.querySelector('a[href^="magnet:"]');
-        if (magnetLink) {
-          sendCell.appendChild(createSendButton(magnetLink.href));
-        }
-      }
-
-      const checkboxCell = row.querySelector(".magnet-checkbox")?.closest("td");
-      if (checkboxCell) {
-        row.insertBefore(sendCell, checkboxCell);
-      } else {
-        row.appendChild(sendCell);
-      }
-    }
-
     // Add checkbox cell only if buttons are enabled and doesn't exist
     if (prefs.showButtons && !row.querySelector(".magnet-checkbox")) {
       const checkboxCell = document.createElement("td");
@@ -1022,128 +1149,22 @@ async function handleSettingChange(setting, value) {
       }
       break;
     case "showMagnetButtons":
-      if (!value) {
-        // Remove magnet header and cells immediately if disabled
-        const magnetHeaders = document.querySelectorAll("th.text-center");
-        magnetHeaders.forEach((header) => {
-          if (header.textContent === "Magnet") {
-            header.remove();
-          }
-        });
-
-        // Remove all magnet cells
-        document.querySelectorAll(".magnet-column").forEach((cell) => {
-          cell.remove();
-        });
-
-        // Remove magnet button from view page if it exists
-        if (window.location.pathname.startsWith("/view/")) {
-          const magnetButton = document.querySelector(".magnet-button");
-          if (magnetButton) {
-            magnetButton.remove();
-          }
-        }
-      } else {
-        // Add only the magnet column
-        const headerRow = document.querySelector("table.torrent-list thead tr");
-        if (headerRow) {
-          const magnetHeader = document.createElement("th");
-          magnetHeader.className = "text-center";
-          magnetHeader.style.width = "70px";
-          magnetHeader.textContent = "Magnet";
-
-          // Find the correct position to insert the magnet header
-          const checkboxHeader = headerRow.querySelector(
-            ".magnet-checkbox-column",
-          );
-          const atHeader = Array.from(
-            headerRow.querySelectorAll("th.text-center"),
-          ).find((header) => header.textContent === "AT");
-
-          if (atHeader) {
-            // If AT column exists, insert after it
-            headerRow.insertBefore(magnetHeader, atHeader.nextSibling);
-          } else if (checkboxHeader) {
-            // If no AT column, insert before checkbox
-            headerRow.insertBefore(magnetHeader, checkboxHeader);
-          } else {
-            // If neither exists, append to end
-            headerRow.appendChild(magnetHeader);
-          }
-        }
-
-        // Add magnet cells
-        const rows = document.querySelectorAll("table.torrent-list tbody tr");
-        rows.forEach((row) => {
-          const magnetCell = document.createElement("td");
-          magnetCell.className = "text-center magnet-column";
-
-          const linkCell = row.querySelector('td:has(a[href^="magnet:"])');
-          if (linkCell) {
-            const magnetLink = linkCell.querySelector('a[href^="magnet:"]');
-            if (magnetLink) {
-              const magnetButton = document.createElement("button");
-              magnetButton.className = "magnet-button";
-              magnetButton.innerHTML = '<i class="fa fa-magnet"></i> Copy';
-              magnetButton.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
-              magnetButton.style.fontWeight = "500";
-              magnetButton.addEventListener("click", () => {
-                navigator.clipboard
-                  .writeText(magnetLink.href)
-                  .then(() => {
-                    showNotification("Magnet link copied to clipboard!", true);
-                  })
-                  .catch((err) => {
-                    console.error("Failed to copy magnet:", err);
-                    showNotification("Failed to copy magnet link", false);
-                  });
-              });
-              magnetCell.appendChild(magnetButton);
-            }
-          }
-
-          // Find the correct position to insert the magnet cell
-          const checkboxCell = row
-            .querySelector(".magnet-checkbox")
-            ?.closest("td");
-          const atCell = row.querySelector(".at-column");
-
-          if (atCell) {
-            // If AT cell exists, insert after it
-            row.insertBefore(magnetCell, atCell.nextSibling);
-          } else if (checkboxCell) {
-            // If no AT cell, insert before checkbox
-            row.insertBefore(magnetCell, checkboxCell);
-          } else {
-            // If neither exists, append to end
-            row.appendChild(magnetCell);
-          }
-        });
-
-        // Add magnet button to view page if we're on one
-        if (window.location.pathname.startsWith("/view/")) {
-          // Remove and re-add send button so it stays to the right of Copy
+      if (window.location.pathname.startsWith("/view/")) {
+        if (!value) {
+          document
+            .querySelector(".magnet-button:not(.send-torrent-button)")
+            ?.remove();
+        } else {
           document.querySelector(".send-torrent-button")?.remove();
           addMagnetButtonToViewPage();
           addSendButtonToViewPage();
         }
+      } else {
+        await updateAllTorrentListLinkActions({ showMagnetButtons: value });
       }
       break;
     case "showATLinks":
       if (!value) {
-        // Remove AT header and cells immediately if disabled
-        const atHeaders = document.querySelectorAll("th.text-center");
-        atHeaders.forEach((header) => {
-          if (header.textContent === "AT") {
-            header.remove();
-          }
-        });
-
-        // Remove all AT cells
-        document.querySelectorAll(".at-column").forEach((cell) => {
-          cell.remove();
-        });
-
         // Remove Animetosho row from view page if it exists
         const animeRow = Array.from(document.querySelectorAll(".row")).find(
           (row) => row.textContent.includes("Animetosho:"),
@@ -1161,44 +1182,14 @@ async function handleSettingChange(setting, value) {
             animeRow.replaceWith(newRow);
           }
         }
-      } else {
-        // Add AT column to table
-        const headerRow = document.querySelector("table.torrent-list thead tr");
-        if (headerRow) {
-          const atHeader = document.createElement("th");
-          atHeader.className = "text-center";
-          atHeader.style.width = "70px";
-          atHeader.textContent = "AT";
 
-          // Always insert AT before Magnet and Checkbox
-          const magnetHeader = Array.from(
-            headerRow.querySelectorAll("th.text-center"),
-          ).find((header) => header.textContent === "Magnet");
-          const checkboxHeader = headerRow.querySelector(
-            ".magnet-checkbox-column",
-          );
-
-          if (magnetHeader) {
-            headerRow.insertBefore(atHeader, magnetHeader);
-          } else if (checkboxHeader) {
-            headerRow.insertBefore(atHeader, checkboxHeader);
-          } else {
-            headerRow.appendChild(atHeader);
-          }
+        if (!window.location.pathname.startsWith("/view/")) {
+          await updateAllTorrentListLinkActions({ showATLinks: false });
         }
-
-        // Add AT cells
-        const atPrefs = await loadStoredPreferences();
-        const rows = document.querySelectorAll("table.torrent-list tbody tr");
-        rows.forEach((row) => {
-          const atCell = document.createElement("td");
-          atCell.className = "text-center at-column";
-
-          populateAnimetoshoListCell(row, atCell, atPrefs.useNewATDomain);
-          insertAtCellBeforeMagnetOrCheckbox(row, atCell);
-        });
-
-        // Add Animetosho link to view page
+      } else {
+        if (!window.location.pathname.startsWith("/view/")) {
+          await updateAllTorrentListLinkActions({ showATLinks: true });
+        }
         addAnimetoshoToViewPage();
       }
       break;
@@ -1425,20 +1416,7 @@ async function handleSettingChange(setting, value) {
           document.querySelector(".send-torrent-button")?.remove();
         }
       } else {
-        if (!value) {
-          // Remove Send column header
-          const sendHeaders = document.querySelectorAll("th.text-center");
-          sendHeaders.forEach((th) => {
-            if (th.title === "Send") th.remove();
-          });
-          // Remove all Send cells
-          document
-            .querySelectorAll(".send-column")
-            .forEach((cell) => cell.remove());
-        } else {
-          // Re-add Send column via addCheckboxColumn (it guards against duplicates)
-          addCheckboxColumn();
-        }
+        await updateAllTorrentListLinkActions({ showSendButtons: value });
       }
       break;
   }
@@ -1519,9 +1497,10 @@ async function resolveAnimetoshoViewLink(infoHash, useNewATDomain) {
 
 function createAnimetoshoListAnchor(infoHash, useNewATDomain) {
   const atLink = document.createElement("a");
+  atLink.className = "link-action-at";
   atLink.target = "_blank";
-  atLink.innerHTML = '<i class="fa fa-external-link"></i>';
-  atLink.style.color = "#337ab7";
+  atLink.title = "Open on Animetosho";
+  atLink.innerHTML = '<i class="fa fa-fw fa-external-link"></i>';
   atLink.style.visibility = "hidden";
   resolveAnimetoshoViewLink(infoHash, useNewATDomain).then((viewUrl) => {
     if (viewUrl) {
@@ -1532,28 +1511,51 @@ function createAnimetoshoListAnchor(infoHash, useNewATDomain) {
   return atLink;
 }
 
-function populateAnimetoshoListCell(row, atCell, useNewATDomain) {
-  if (!isAnimetoshoListCategoryRow(row)) return;
-  const infoHash = getTorrentInfoHashFromRow(row);
-  if (!infoHash) return;
-  if (atCell.querySelector("a")) return;
-  atCell.appendChild(createAnimetoshoListAnchor(infoHash, useNewATDomain));
+async function patchTorrentListLinkActionsForNewRows() {
+  const prefs = await loadStoredPreferences();
+  document.querySelectorAll("table.torrent-list tbody tr").forEach((row) => {
+    const linkCell = getTorrentLinkCell(row);
+    if (!linkCell) return;
+
+    const showAtLink =
+      prefs.showATLinks && isAnimetoshoListCategoryRow(row);
+    const needsCopy =
+      prefs.showMagnetButtons && !linkCell.querySelector(".link-action-copy");
+    const needsSend =
+      prefs.showSendButtons && !linkCell.querySelector(".link-action-send");
+    const needsAt =
+      showAtLink &&
+      getTorrentInfoHashFromRow(row) &&
+      !linkCell.querySelector(".link-action-at");
+
+    if (needsCopy || needsSend || needsAt || !areLinkActionsOrdered(linkCell)) {
+      updateTorrentRowLinkActions(row, prefs);
+    }
+  });
 }
 
-async function patchAnimetoshoListLinksForNewRows() {
-  const prefs = await loadStoredPreferences();
-  if (!prefs.showATLinks) return;
-  if (!document.querySelector('table.torrent-list thead th[title="AT"]')) {
-    return;
+function isLinkActionMutationNode(node) {
+  if (!node) return false;
+  if (node.nodeType === Node.TEXT_NODE) {
+    return /^\s+$/.test(node.textContent);
   }
+  if (node.nodeType !== Node.ELEMENT_NODE) return false;
+  return node.matches?.(
+    ".link-action-copy, .link-action-send, .link-action-at, .torrent-link-actions",
+  );
+}
 
-  document.querySelectorAll("table.torrent-list tbody tr").forEach((row) => {
-    if (row.querySelector(".at-column")) return;
-    const atCell = document.createElement("td");
-    atCell.className = "text-center at-column";
-    populateAnimetoshoListCell(row, atCell, prefs.useNewATDomain);
-    insertAtCellBeforeMagnetOrCheckbox(row, atCell);
-  });
+function mutationsIncludeNonLinkActionChanges(mutations) {
+  for (const mutation of mutations) {
+    if (mutation.type !== "childList") continue;
+    for (const node of mutation.addedNodes) {
+      if (!isLinkActionMutationNode(node)) return true;
+    }
+    for (const node of mutation.removedNodes) {
+      if (!isLinkActionMutationNode(node)) return true;
+    }
+  }
+  return false;
 }
 
 async function refreshAnimetoshoViewPageLink() {
@@ -1588,7 +1590,7 @@ async function refreshAnimetoshoViewPageLink() {
 
 async function refreshAnimetoshoListLinks() {
   const prefs = await loadStoredPreferences();
-  document.querySelectorAll(".at-column a").forEach((link) => {
+  document.querySelectorAll(".link-action-at").forEach((link) => {
     const row = link.closest("tr");
     const infoHash = row ? getTorrentInfoHashFromRow(row) : "";
     if (!infoHash) return;
@@ -6263,7 +6265,9 @@ function observeTableChanges() {
     }
     filterDeadTorrents();
     filterByCompletedDownloads();
-    patchAnimetoshoListLinksForNewRows();
+    if (mutationsIncludeNonLinkActionChanges(mutations)) {
+      patchTorrentListLinkActionsForNewRows();
+    }
   });
 
   observer.observe(tableBody, {
@@ -6445,41 +6449,24 @@ async function addMagnetButtonToViewPage() {
   const magnetLink = document.querySelector('a[href^="magnet:"]');
   if (!magnetLink) return;
 
-  // Create the magnet button
-  const magnetButton = document.createElement("button");
-  magnetButton.className = "magnet-button";
-  magnetButton.innerHTML = '<i class="fa fa-magnet"></i> Copy';
-  magnetButton.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
-  magnetButton.style.fontWeight = "500";
-  magnetButton.style.marginLeft = "10px";
+  if (magnetLink.parentNode.querySelector(".magnet-button:not(.send-torrent-button)")) {
+    return;
+  }
 
-  // Add click handler
-  magnetButton.addEventListener("click", () => {
-    navigator.clipboard
-      .writeText(magnetLink.href)
-      .then(() => {
-        showNotification("Magnet link copied to clipboard!", true);
-      })
-      .catch((err) => {
-        console.error("Failed to copy magnet:", err);
-        showNotification("Failed to copy magnet link", false);
-      });
+  // Create the magnet button
+  const magnetButton = createMagnetCopyButton(magnetLink, {
+    extraStyles: { marginLeft: "10px" },
   });
 
   // Insert the button after the magnet link
   magnetLink.parentNode.insertBefore(magnetButton, magnetLink.nextSibling);
 }
 
-// Shared helper: creates a send button and wires up the click → qBittorrent flow
-function createSendButton(magnetUrl, extraStyles = {}) {
-  const sendButton = document.createElement("button");
-  sendButton.className = "magnet-button send-torrent-button";
-  sendButton.innerHTML = '<i class="fa fa-cloud-upload"></i> Send';
-  sendButton.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
-  sendButton.style.fontWeight = "500";
-  Object.assign(sendButton.style, extraStyles);
+// Shared helper: wires up the click → torrent client flow
+function wireSendTorrentAction(element, magnetUrl) {
+  element.addEventListener("click", async (e) => {
+    e.preventDefault();
 
-  sendButton.addEventListener("click", async () => {
     const currentPrefs = await loadStoredPreferences();
 
     if (!currentPrefs.torrentClientUrl) {
@@ -6490,7 +6477,6 @@ function createSendButton(magnetUrl, extraStyles = {}) {
       return;
     }
 
-    // Pick credentials for the active client
     let username = "",
       password = "";
     if (currentPrefs.torrentClient === "transmission") {
@@ -6510,8 +6496,17 @@ function createSendButton(magnetUrl, extraStyles = {}) {
       (currentPrefs.qbtCategories.length > 0 ||
         currentPrefs.qbtTags.length > 0);
 
+    const setBusy = (busy) => {
+      if (element instanceof HTMLButtonElement) {
+        element.disabled = busy;
+      } else {
+        element.style.pointerEvents = busy ? "none" : "";
+        element.style.opacity = busy ? "0.5" : "";
+      }
+    };
+
     const doSend = async (category, tags) => {
-      sendButton.disabled = true;
+      setBusy(true);
 
       const msg = {
         type: "sendTorrent",
@@ -6524,7 +6519,6 @@ function createSendButton(magnetUrl, extraStyles = {}) {
       if (isQbt) {
         msg.category = category || "";
         msg.tags = tags || [];
-        // Save last selection
         chrome.storage.sync.set({
           qbtLastCategory: category || "",
           qbtLastTags: tags || [],
@@ -6535,7 +6529,7 @@ function createSendButton(magnetUrl, extraStyles = {}) {
         chrome.runtime.sendMessage(msg, resolve);
       });
 
-      sendButton.disabled = false;
+      setBusy(false);
 
       if (!result || !result.ok) {
         const msgTxt =
@@ -6560,9 +6554,7 @@ function createSendButton(magnetUrl, extraStyles = {}) {
       return;
     }
 
-    // For qBittorrent, decide category and tags
     if (!needsPrompt) {
-      // Use global defaults directly
       await doSend(
         currentPrefs.qbtDefaultCategory || "",
         currentPrefs.qbtDefaultTags || [],
@@ -6570,10 +6562,30 @@ function createSendButton(magnetUrl, extraStyles = {}) {
       return;
     }
 
-    // Show category/tag selection modal
     openQbtCategoryTagModal(currentPrefs, doSend);
   });
+}
 
+function createSendListLink(magnetUrl) {
+  const sendLink = document.createElement("a");
+  sendLink.href = "#";
+  sendLink.className = "link-action-send";
+  sendLink.title = "Send to torrent client";
+  sendLink.innerHTML = '<i class="fa fa-fw fa-cloud-upload"></i>';
+  wireSendTorrentAction(sendLink, magnetUrl);
+  return sendLink;
+}
+
+// Shared helper: creates a send button and wires up the click → qBittorrent flow
+function createSendButton(magnetUrl, extraStyles = {}) {
+  const sendButton = document.createElement("button");
+  sendButton.className = "magnet-button send-torrent-button";
+  sendButton.title = "Send to torrent client";
+  sendButton.innerHTML = '<i class="fa fa-cloud-upload"></i> Send';
+  sendButton.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
+  sendButton.style.fontWeight = "500";
+  Object.assign(sendButton.style, extraStyles);
+  wireSendTorrentAction(sendButton, magnetUrl);
   return sendButton;
 }
 

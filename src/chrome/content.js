@@ -20,7 +20,8 @@ function loadStoredPreferences() {
         // - hideComments: whether to hide comments on view pages
         // - improvedFileList: whether to show file counts on view page file lists
         // - fileSizeFilterEnabled: whether to enable file size filtering
-        // - fileSizeRange: the range for file size filtering
+        // - fileSizeMinBytes: minimum file size for filtering (bytes)
+        // - fileSizeMaxBytes: maximum file size for filtering (bytes)
         // - completedDownloadsFilterEnabled: torrent list completed downloads filter
         // - completedDownloadsFilterOperator: gt, eq, or lt
         // - completedDownloadsFilterValue: threshold for completed downloads filter
@@ -63,6 +64,8 @@ function loadStoredPreferences() {
         hideComments: false,
         improvedFileList: true,
         fileSizeFilterEnabled: false,
+        fileSizeMinBytes: 500 * 1024 * 1024,
+        fileSizeMaxBytes: 4 * 1024 * 1024 * 1024,
         fileSizeRange: "less_than_1gb",
         completedDownloadsFilterEnabled: false,
         completedDownloadsFilterOperator: "gt",
@@ -450,8 +453,12 @@ function updateTorrentRowLinkActions(row, prefs) {
 
   const showAtLink =
     prefs.showATLinks && isAnimetoshoListCategoryRow(row);
+  const needsAtSlot = prefs.showATLinks;
   const needsAny =
-    prefs.showMagnetButtons || prefs.showSendButtons || showAtLink;
+    prefs.showMagnetButtons ||
+    prefs.showSendButtons ||
+    showAtLink ||
+    needsAtSlot;
 
   linkCell.querySelector(".torrent-link-actions")?.remove();
 
@@ -501,6 +508,10 @@ function updateTorrentRowLinkActions(row, prefs) {
   if (showAtLink) {
     const infoHash = getTorrentInfoHashFromRow(row);
     if (infoHash) {
+      if (atLink?.classList.contains("link-action-at-placeholder")) {
+        removeLinkAction(atLink);
+        atLink = null;
+      }
       if (!atLink) {
         atLink = createAnimetoshoListAnchor(infoHash, prefs.useNewATDomain);
         linkCell.appendChild(atLink);
@@ -508,6 +519,16 @@ function updateTorrentRowLinkActions(row, prefs) {
       }
     } else if (atLink) {
       removeLinkAction(atLink);
+      changed = true;
+    }
+  } else if (needsAtSlot) {
+    if (atLink && !atLink.classList.contains("link-action-at-placeholder")) {
+      removeLinkAction(atLink);
+      atLink = null;
+    }
+    if (!atLink) {
+      atLink = createAnimetoshoListPlaceholder();
+      linkCell.appendChild(atLink);
       changed = true;
     }
   } else if (atLink) {
@@ -1243,7 +1264,7 @@ async function handleSettingChange(setting, value) {
         const isDead = value && seeders === 0 && leechers === 0;
         const wrongSize =
           prefs.fileSizeFilterEnabled &&
-          !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+          !isInFileSizeFilterRange(sizeInBytes, prefs);
         const wrongDownloads = failsCompletedDownloadsFilter(
           prefs,
           getCompletedDownloadsFromRow(row),
@@ -1291,7 +1312,8 @@ async function handleSettingChange(setting, value) {
     case "fileSizeFilterEnabled":
       filterByFileSize();
       break;
-    case "fileSizeRange":
+    case "fileSizeMinBytes":
+    case "fileSizeMaxBytes":
       filterByFileSize();
       break;
     case "completedDownloadsFilterEnabled":
@@ -1511,6 +1533,14 @@ function createAnimetoshoListAnchor(infoHash, useNewATDomain) {
   return atLink;
 }
 
+function createAnimetoshoListPlaceholder() {
+  const placeholder = document.createElement("span");
+  placeholder.className = "link-action-at link-action-at-placeholder";
+  placeholder.setAttribute("aria-hidden", "true");
+  placeholder.innerHTML = '<i class="fa fa-fw fa-external-link"></i>';
+  return placeholder;
+}
+
 async function patchTorrentListLinkActionsForNewRows() {
   const prefs = await loadStoredPreferences();
   document.querySelectorAll("table.torrent-list tbody tr").forEach((row) => {
@@ -1524,9 +1554,9 @@ async function patchTorrentListLinkActionsForNewRows() {
     const needsSend =
       prefs.showSendButtons && !linkCell.querySelector(".link-action-send");
     const needsAt =
-      showAtLink &&
-      getTorrentInfoHashFromRow(row) &&
-      !linkCell.querySelector(".link-action-at");
+      prefs.showATLinks &&
+      !linkCell.querySelector(".link-action-at") &&
+      (showAtLink ? !!getTorrentInfoHashFromRow(row) : true);
 
     if (needsCopy || needsSend || needsAt || !areLinkActionsOrdered(linkCell)) {
       updateTorrentRowLinkActions(row, prefs);
@@ -1590,20 +1620,22 @@ async function refreshAnimetoshoViewPageLink() {
 
 async function refreshAnimetoshoListLinks() {
   const prefs = await loadStoredPreferences();
-  document.querySelectorAll(".link-action-at").forEach((link) => {
-    const row = link.closest("tr");
-    const infoHash = row ? getTorrentInfoHashFromRow(row) : "";
-    if (!infoHash) return;
-    link.style.visibility = "hidden";
-    resolveAnimetoshoViewLink(infoHash, prefs.useNewATDomain).then(
-      (viewUrl) => {
-        if (viewUrl) {
-          link.href = viewUrl;
-          link.style.visibility = "";
-        }
-      },
-    );
-  });
+  document
+    .querySelectorAll(".link-action-at:not(.link-action-at-placeholder)")
+    .forEach((link) => {
+      const row = link.closest("tr");
+      const infoHash = row ? getTorrentInfoHashFromRow(row) : "";
+      if (!infoHash) return;
+      link.style.visibility = "hidden";
+      resolveAnimetoshoViewLink(infoHash, prefs.useNewATDomain).then(
+        (viewUrl) => {
+          if (viewUrl) {
+            link.href = viewUrl;
+            link.style.visibility = "";
+          }
+        },
+      );
+    });
 }
 
 // Function to add Animetosho link to torrent view pages
@@ -6230,7 +6262,7 @@ async function filterDeadTorrents(isInitialLoad = false) {
             );
           const showBySize =
             !prefs.fileSizeFilterEnabled ||
-            isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+            isInFileSizeFilterRange(sizeInBytes, prefs);
           const showByDownloads = !failsCompletedDownloadsFilter(
             prefs,
             getCompletedDownloadsFromRow(row),
@@ -6300,7 +6332,7 @@ async function filterByKeywords(isInitialLoad = false) {
         );
         const showBySize =
           !prefs.fileSizeFilterEnabled ||
-          isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+          isInFileSizeFilterRange(sizeInBytes, prefs);
         const showByDownloads = !failsCompletedDownloadsFilter(
           prefs,
           getCompletedDownloadsFromRow(row),
@@ -6336,7 +6368,7 @@ async function filterByKeywords(isInitialLoad = false) {
     const isDead = seeders === 0 && leechers === 0 && prefs.hideDeadTorrents;
     const wrongSize =
       prefs.fileSizeFilterEnabled &&
-      !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+      !isInFileSizeFilterRange(sizeInBytes, prefs);
     const wrongDownloads = failsCompletedDownloadsFilter(
       prefs,
       getCompletedDownloadsFromRow(row),
@@ -6907,6 +6939,7 @@ function convertToBytes(sizeStr) {
   const numValue = parseFloat(value);
 
   switch (unit) {
+    case "B":
     case "Bytes":
       return numValue;
     case "KiB":
@@ -6923,27 +6956,56 @@ function convertToBytes(sizeStr) {
 }
 
 // Function to check if size is within selected range
-function isInSizeRange(sizeInBytes, range) {
-  switch (range) {
-    case "less_than_256mb":
-      return sizeInBytes < 256 * 1024 * 1024;
-    case "less_than_512mb":
-      return sizeInBytes < 512 * 1024 * 1024;
-    case "less_than_768mb":
-      return sizeInBytes < 768 * 1024 * 1024;
-    case "less_than_1gb":
-      return sizeInBytes < 1024 * 1024 * 1024;
-    case "greater_than_1gb":
-      return sizeInBytes > 1024 * 1024 * 1024;
-    case "greater_than_5gb":
-      return sizeInBytes > 5 * 1024 * 1024 * 1024;
-    case "greater_than_10gb":
-      return sizeInBytes > 10 * 1024 * 1024 * 1024;
-    case "greater_than_20gb":
-      return sizeInBytes > 20 * 1024 * 1024 * 1024;
-    default:
-      return true;
+const FILE_SIZE_FILTER_ABSOLUTE_MAX_BYTES = 51200 * 1024 * 1024;
+const FILE_SIZE_FILTER_DEFAULT_MIN_BYTES = 500 * 1024 * 1024;
+const FILE_SIZE_FILTER_DEFAULT_MAX_BYTES = 4 * 1024 * 1024 * 1024;
+
+const LEGACY_FILE_SIZE_RANGE_MAP = {
+  less_than_256mb: { min: 0, max: 256 * 1024 * 1024 },
+  less_than_512mb: { min: 0, max: 512 * 1024 * 1024 },
+  less_than_768mb: { min: 0, max: 768 * 1024 * 1024 },
+  less_than_1gb: { min: 0, max: 1024 * 1024 * 1024 },
+  greater_than_1gb: {
+    min: 1024 * 1024 * 1024,
+    max: FILE_SIZE_FILTER_ABSOLUTE_MAX_BYTES,
+  },
+  greater_than_5gb: {
+    min: 5 * 1024 * 1024 * 1024,
+    max: FILE_SIZE_FILTER_ABSOLUTE_MAX_BYTES,
+  },
+  greater_than_10gb: {
+    min: 10 * 1024 * 1024 * 1024,
+    max: FILE_SIZE_FILTER_ABSOLUTE_MAX_BYTES,
+  },
+  greater_than_20gb: {
+    min: 20 * 1024 * 1024 * 1024,
+    max: FILE_SIZE_FILTER_ABSOLUTE_MAX_BYTES,
+  },
+};
+
+function getFileSizeFilterBounds(prefs) {
+  if (
+    typeof prefs.fileSizeMinBytes === "number" &&
+    typeof prefs.fileSizeMaxBytes === "number"
+  ) {
+    return {
+      min: prefs.fileSizeMinBytes,
+      max: prefs.fileSizeMaxBytes,
+    };
   }
+
+  const legacy = LEGACY_FILE_SIZE_RANGE_MAP[prefs.fileSizeRange];
+  if (legacy) return legacy;
+
+  return {
+    min: FILE_SIZE_FILTER_DEFAULT_MIN_BYTES,
+    max: FILE_SIZE_FILTER_DEFAULT_MAX_BYTES,
+  };
+}
+
+function isInFileSizeFilterRange(sizeInBytes, prefs) {
+  const { min, max } = getFileSizeFilterBounds(prefs);
+  return sizeInBytes >= min && sizeInBytes <= max;
 }
 
 async function filterByCompletedDownloads() {
@@ -6977,7 +7039,7 @@ async function filterByCompletedDownloads() {
           );
         const showBySize =
           !prefs.fileSizeFilterEnabled ||
-          isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+          isInFileSizeFilterRange(sizeInBytes, prefs);
 
         if (showByDead && showByKeyword && showBySize) {
           row.style.display = "";
@@ -7010,7 +7072,7 @@ async function filterByCompletedDownloads() {
       );
     const wrongSize =
       prefs.fileSizeFilterEnabled &&
-      !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+      !isInFileSizeFilterRange(sizeInBytes, prefs);
 
     if (wrongDownloads || isDead || containsKeyword || wrongSize) {
       if (row.style.display !== "none") {
@@ -7084,7 +7146,7 @@ async function filterByFileSize() {
     const leechers = leechersCell ? parseInt(leechersCell.textContent) : 0;
     const sizeInBytes = convertToBytes(sizeCell.textContent);
 
-    const wrongSize = !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
+    const wrongSize = !isInFileSizeFilterRange(sizeInBytes, prefs);
     const isDead = seeders === 0 && leechers === 0 && prefs.hideDeadTorrents;
     const containsKeyword =
       prefs.keywordFilterEnabled &&

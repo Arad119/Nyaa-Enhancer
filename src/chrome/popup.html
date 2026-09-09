@@ -732,23 +732,74 @@
           </div>
 
           <div
-            class="setting-item size-range-container"
+            class="file-size-range-container"
+            id="fileSizeRangeContainer"
             style="margin-top: 8px"
           >
-            <select
-              id="sizeRangeSelect"
-              style="width: 100%; padding: 5px; border-radius: 4px"
-              disabled
-            >
-              <option value="less_than_256mb">Less than 256 MB</option>
-              <option value="less_than_512mb">Less than 512 MB</option>
-              <option value="less_than_768mb">Less than 768 MB</option>
-              <option value="less_than_1gb">Less than 1 GiB</option>
-              <option value="greater_than_1gb">Greater than 1 GiB</option>
-              <option value="greater_than_5gb">Greater than 5 GiB</option>
-              <option value="greater_than_10gb">Greater than 10 GiB</option>
-              <option value="greater_than_20gb">Greater than 20 GiB</option>
-            </select>
+            <div class="file-size-range-inputs">
+              <div class="file-size-range-field">
+                <label for="fileSizeMinInput">Minimum</label>
+                <div class="file-size-range-value-row">
+                  <input
+                    type="number"
+                    id="fileSizeMinInput"
+                    min="0"
+                    step="any"
+                    disabled
+                  />
+                  <select id="fileSizeMinUnit" disabled>
+                    <option value="B">B</option>
+                    <option value="KiB">KiB</option>
+                    <option value="MiB" selected>MiB</option>
+                    <option value="GiB">GiB</option>
+                    <option value="TiB">TiB</option>
+                  </select>
+                </div>
+              </div>
+              <div class="file-size-range-field">
+                <label for="fileSizeMaxInput">Maximum</label>
+                <div class="file-size-range-value-row">
+                  <input
+                    type="number"
+                    id="fileSizeMaxInput"
+                    min="0"
+                    step="any"
+                    disabled
+                  />
+                  <select id="fileSizeMaxUnit" disabled>
+                    <option value="B">B</option>
+                    <option value="KiB">KiB</option>
+                    <option value="MiB">MiB</option>
+                    <option value="GiB" selected>GiB</option>
+                    <option value="TiB">TiB</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="file-size-range-slider">
+              <div class="file-size-range-track">
+                <div class="file-size-range-fill" id="fileSizeRangeFill"></div>
+              </div>
+              <input
+                type="range"
+                id="fileSizeMinSlider"
+                min="0"
+                max="51200"
+                step="1"
+                disabled
+              />
+              <input
+                type="range"
+                id="fileSizeMaxSlider"
+                min="0"
+                max="51200"
+                step="1"
+                disabled
+              />
+            </div>
+            <div class="file-size-range-summary" id="fileSizeRangeSummary">
+              500 MiB – 4 GiB
+            </div>
           </div>
 
           <div class="setting-item">

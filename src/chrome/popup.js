@@ -128,6 +128,8 @@ chrome.storage.sync.get(
     hideComments: false,
     improvedFileList: true,
     fileSizeFilterEnabled: false,
+    fileSizeMinBytes: 500 * 1024 * 1024,
+    fileSizeMaxBytes: 4 * 1024 * 1024 * 1024,
     fileSizeRange: "less_than_256mb",
     completedDownloadsFilterEnabled: false,
     completedDownloadsFilterOperator: "gt",
@@ -286,9 +288,7 @@ chrome.storage.sync.get(
     displayKeywords(items.keywords);
     displayMonitoredKeywords(items.monitoredKeywords || []);
 
-    const sizeSelect = document.getElementById("sizeRangeSelect");
-    sizeSelect.value = items.fileSizeRange;
-    sizeSelect.disabled = !items.fileSizeFilterEnabled;
+    initFileSizeRangeControls(items);
 
     document
       .querySelector('[data-toggle="completedDownloadsFilterToggle"]')
@@ -317,6 +317,274 @@ function setCompletedDownloadsFilterControlsEnabled(enabled) {
   const valueInput = document.getElementById("completedDownloadsValueInput");
   if (operatorSelect) operatorSelect.disabled = !enabled;
   if (valueInput) valueInput.disabled = !enabled;
+}
+
+const FILE_SIZE_SLIDER_MAX_MB = 51200;
+const FILE_SIZE_DEFAULT_MIN_BYTES = 500 * 1024 * 1024;
+const FILE_SIZE_DEFAULT_MAX_BYTES = 4 * 1024 * 1024 * 1024;
+const FILE_SIZE_ABSOLUTE_MAX_BYTES = FILE_SIZE_SLIDER_MAX_MB * 1024 * 1024;
+const FILE_SIZE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB"];
+const FILE_SIZE_UNIT_MULTIPLIERS = {
+  B: 1,
+  KiB: 1024,
+  MiB: 1024 * 1024,
+  GiB: 1024 * 1024 * 1024,
+  TiB: 1024 * 1024 * 1024 * 1024,
+};
+
+const LEGACY_FILE_SIZE_RANGE_MAP = {
+  less_than_256mb: { min: 0, max: 256 * 1024 * 1024 },
+  less_than_512mb: { min: 0, max: 512 * 1024 * 1024 },
+  less_than_768mb: { min: 0, max: 768 * 1024 * 1024 },
+  less_than_1gb: { min: 0, max: 1024 * 1024 * 1024 },
+  greater_than_1gb: {
+    min: 1024 * 1024 * 1024,
+    max: FILE_SIZE_ABSOLUTE_MAX_BYTES,
+  },
+  greater_than_5gb: {
+    min: 5 * 1024 * 1024 * 1024,
+    max: FILE_SIZE_ABSOLUTE_MAX_BYTES,
+  },
+  greater_than_10gb: {
+    min: 10 * 1024 * 1024 * 1024,
+    max: FILE_SIZE_ABSOLUTE_MAX_BYTES,
+  },
+  greater_than_20gb: {
+    min: 20 * 1024 * 1024 * 1024,
+    max: FILE_SIZE_ABSOLUTE_MAX_BYTES,
+  },
+};
+
+function resolveFileSizeFilterBounds(items) {
+  if (
+    typeof items.fileSizeMinBytes === "number" &&
+    typeof items.fileSizeMaxBytes === "number"
+  ) {
+    return {
+      min: items.fileSizeMinBytes,
+      max: items.fileSizeMaxBytes,
+    };
+  }
+
+  const legacy = LEGACY_FILE_SIZE_RANGE_MAP[items.fileSizeRange];
+  if (legacy) return legacy;
+
+  return {
+    min: FILE_SIZE_DEFAULT_MIN_BYTES,
+    max: FILE_SIZE_DEFAULT_MAX_BYTES,
+  };
+}
+
+function formatFileSizeDisplayValue(value, unit) {
+  if (unit === "B") {
+    return String(Math.round(value));
+  }
+  if (value >= 100) {
+    return String(Math.round(value));
+  }
+  if (value >= 10) {
+    return String(Math.round(value * 10) / 10);
+  }
+  return String(Math.round(value * 100) / 100);
+}
+
+function bytesToDisplayValue(bytes, preferredUnit) {
+  if (
+    preferredUnit &&
+    FILE_SIZE_UNIT_MULTIPLIERS[preferredUnit] !== undefined
+  ) {
+    const value = bytes / FILE_SIZE_UNIT_MULTIPLIERS[preferredUnit];
+    return {
+      value: formatFileSizeDisplayValue(value, preferredUnit),
+      unit: preferredUnit,
+    };
+  }
+
+  let unitIndex = 0;
+  let value = bytes;
+  while (value >= 1024 && unitIndex < FILE_SIZE_UNITS.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  const unit = FILE_SIZE_UNITS[unitIndex];
+  return {
+    value: formatFileSizeDisplayValue(value, unit),
+    unit,
+  };
+}
+
+function displayValueToBytes(value, unit) {
+  const num = parseFloat(value);
+  const multiplier = FILE_SIZE_UNIT_MULTIPLIERS[unit];
+  if (!Number.isFinite(num) || num < 0 || multiplier === undefined) {
+    return 0;
+  }
+  return Math.round(num * multiplier);
+}
+
+function clampFileSizeBounds(minBytes, maxBytes) {
+  let min = Math.max(0, Math.min(minBytes, FILE_SIZE_ABSOLUTE_MAX_BYTES));
+  let max = Math.max(0, Math.min(maxBytes, FILE_SIZE_ABSOLUTE_MAX_BYTES));
+  if (min > max) [min, max] = [max, min];
+  return { min, max };
+}
+
+function bytesToSliderMb(bytes) {
+  return Math.round(bytes / (1024 * 1024));
+}
+
+function sliderMbToBytes(mb) {
+  return mb * 1024 * 1024;
+}
+
+function formatFileSizeRangeSummary(minBytes, maxBytes) {
+  const minDisp = bytesToDisplayValue(minBytes);
+  const maxDisp = bytesToDisplayValue(maxBytes);
+  return `${minDisp.value} ${minDisp.unit} – ${maxDisp.value} ${maxDisp.unit}`;
+}
+
+function setFileSizeRangeControlsEnabled(enabled) {
+  const container = document.getElementById("fileSizeRangeContainer");
+  if (!container) return;
+
+  container.querySelectorAll("input, select").forEach((el) => {
+    el.disabled = !enabled;
+  });
+  container.classList.toggle("disabled", !enabled);
+}
+
+function updateFileSizeRangeFill() {
+  const minSlider = document.getElementById("fileSizeMinSlider");
+  const maxSlider = document.getElementById("fileSizeMaxSlider");
+  const fill = document.getElementById("fileSizeRangeFill");
+  if (!minSlider || !maxSlider || !fill) return;
+
+  const minVal = parseInt(minSlider.value, 10);
+  const maxVal = parseInt(maxSlider.value, 10);
+  const minPercent = (minVal / FILE_SIZE_SLIDER_MAX_MB) * 100;
+  const maxPercent = (maxVal / FILE_SIZE_SLIDER_MAX_MB) * 100;
+  fill.style.left = `${minPercent}%`;
+  fill.style.width = `${maxPercent - minPercent}%`;
+}
+
+function readFileSizeBoundsFromControls() {
+  const minInput = document.getElementById("fileSizeMinInput");
+  const maxInput = document.getElementById("fileSizeMaxInput");
+  const minUnit = document.getElementById("fileSizeMinUnit").value;
+  const maxUnit = document.getElementById("fileSizeMaxUnit").value;
+  const minBytes = displayValueToBytes(minInput.value, minUnit);
+  const maxBytes = displayValueToBytes(maxInput.value, maxUnit);
+  return clampFileSizeBounds(minBytes, maxBytes);
+}
+
+function syncFileSizeControlsFromBounds(
+  minBytes,
+  maxBytes,
+  { updateStorage = false } = {},
+) {
+  const bounds = clampFileSizeBounds(minBytes, maxBytes);
+  const minUnitSelect = document.getElementById("fileSizeMinUnit");
+  const maxUnitSelect = document.getElementById("fileSizeMaxUnit");
+  const minDisp = bytesToDisplayValue(bounds.min, minUnitSelect.value);
+  const maxDisp = bytesToDisplayValue(bounds.max, maxUnitSelect.value);
+
+  document.getElementById("fileSizeMinInput").value = String(minDisp.value);
+  minUnitSelect.value = minDisp.unit;
+  document.getElementById("fileSizeMaxInput").value = String(maxDisp.value);
+  maxUnitSelect.value = maxDisp.unit;
+  document.getElementById("fileSizeMinSlider").value = String(
+    bytesToSliderMb(bounds.min),
+  );
+  document.getElementById("fileSizeMaxSlider").value = String(
+    bytesToSliderMb(bounds.max),
+  );
+  document.getElementById("fileSizeRangeSummary").textContent =
+    formatFileSizeRangeSummary(bounds.min, bounds.max);
+  updateFileSizeRangeFill();
+
+  if (updateStorage) {
+    chrome.storage.sync.set({
+      fileSizeMinBytes: bounds.min,
+      fileSizeMaxBytes: bounds.max,
+    });
+    notifyContentScriptSetting("fileSizeMinBytes", bounds.min);
+    notifyContentScriptSetting("fileSizeMaxBytes", bounds.max);
+  }
+}
+
+function initFileSizeRangeControls(items) {
+  const bounds = resolveFileSizeFilterBounds(items);
+
+  if (
+    typeof items.fileSizeMinBytes !== "number" ||
+    typeof items.fileSizeMaxBytes !== "number"
+  ) {
+    chrome.storage.sync.set({
+      fileSizeMinBytes: bounds.min,
+      fileSizeMaxBytes: bounds.max,
+    });
+  }
+
+  syncFileSizeControlsFromBounds(bounds.min, bounds.max);
+  setFileSizeRangeControlsEnabled(items.fileSizeFilterEnabled);
+}
+
+function persistFileSizeBoundsFromControls() {
+  const bounds = readFileSizeBoundsFromControls();
+  syncFileSizeControlsFromBounds(bounds.min, bounds.max, {
+    updateStorage: true,
+  });
+}
+
+let fileSizeInputDebounceTimer = null;
+
+function scheduleFileSizePersistFromControls() {
+  clearTimeout(fileSizeInputDebounceTimer);
+  fileSizeInputDebounceTimer = setTimeout(() => {
+    persistFileSizeBoundsFromControls();
+  }, 250);
+}
+
+function handleFileSizeSliderInput(isMinSlider) {
+  const minSlider = document.getElementById("fileSizeMinSlider");
+  const maxSlider = document.getElementById("fileSizeMaxSlider");
+  let minMb = parseInt(minSlider.value, 10);
+  let maxMb = parseInt(maxSlider.value, 10);
+
+  if (isMinSlider && minMb > maxMb) {
+    minMb = maxMb;
+    minSlider.value = String(minMb);
+  } else if (!isMinSlider && maxMb < minMb) {
+    maxMb = minMb;
+    maxSlider.value = String(maxMb);
+  }
+
+  syncFileSizeControlsFromBounds(
+    sliderMbToBytes(minMb),
+    sliderMbToBytes(maxMb),
+  );
+}
+
+function handleFileSizeSliderCommit(isMinSlider) {
+  const minSlider = document.getElementById("fileSizeMinSlider");
+  const maxSlider = document.getElementById("fileSizeMaxSlider");
+  let minMb = parseInt(minSlider.value, 10);
+  let maxMb = parseInt(maxSlider.value, 10);
+
+  if (isMinSlider && minMb > maxMb) {
+    minMb = maxMb;
+    minSlider.value = String(minMb);
+  } else if (!isMinSlider && maxMb < minMb) {
+    maxMb = minMb;
+    maxSlider.value = String(maxMb);
+  }
+
+  syncFileSizeControlsFromBounds(
+    sliderMbToBytes(minMb),
+    sliderMbToBytes(maxMb),
+    { updateStorage: true },
+  );
 }
 
 function notifyContentScriptSetting(setting, value) {
@@ -1472,7 +1740,7 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
         break;
       case "fileSizeFilterToggle":
         setting = "fileSizeFilterEnabled";
-        document.getElementById("sizeRangeSelect").disabled = !newState;
+        setFileSizeRangeControlsEnabled(newState);
         notifyContentScriptSetting("fileSizeFilterEnabled", newState);
         break;
       case "completedDownloadsFilterToggle":
@@ -1848,11 +2116,44 @@ document
   .getElementById("unmonitor-all-keywords")
   .addEventListener("click", removeAllMonitoredKeywords);
 
-// Add size range change handler
-document.getElementById("sizeRangeSelect").addEventListener("change", (e) => {
-  const newValue = e.target.value;
-  chrome.storage.sync.set({ fileSizeRange: newValue });
-  notifyContentScriptSetting("fileSizeRange", newValue);
+// File size range controls
+document
+  .getElementById("fileSizeMinSlider")
+  .addEventListener("input", () => {
+    handleFileSizeSliderInput(true);
+  });
+
+document
+  .getElementById("fileSizeMinSlider")
+  .addEventListener("change", () => {
+    handleFileSizeSliderCommit(true);
+  });
+
+document
+  .getElementById("fileSizeMaxSlider")
+  .addEventListener("input", () => {
+    handleFileSizeSliderInput(false);
+  });
+
+document
+  .getElementById("fileSizeMaxSlider")
+  .addEventListener("change", () => {
+    handleFileSizeSliderCommit(false);
+  });
+
+["fileSizeMinInput", "fileSizeMaxInput"].forEach((id) => {
+  const input = document.getElementById(id);
+  input.addEventListener("input", scheduleFileSizePersistFromControls);
+  input.addEventListener("change", () => {
+    clearTimeout(fileSizeInputDebounceTimer);
+    persistFileSizeBoundsFromControls();
+  });
+});
+
+["fileSizeMinUnit", "fileSizeMaxUnit"].forEach((id) => {
+  document.getElementById(id).addEventListener("change", () => {
+    persistFileSizeBoundsFromControls();
+  });
 });
 
 document

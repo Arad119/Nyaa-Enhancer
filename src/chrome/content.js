@@ -5759,315 +5759,398 @@ function filterByLast30Days() {
   );
 }
 
+const QS_FILE_SIZE_SLIDER_MAX_MB = 51200;
+const QS_FILE_SIZE_ABSOLUTE_MAX_BYTES = QS_FILE_SIZE_SLIDER_MAX_MB * 1024 * 1024;
+const QS_FILE_SIZE_UNIT_MULTIPLIERS = {
+  B: 1,
+  KiB: 1024,
+  MiB: 1024 * 1024,
+  GiB: 1024 * 1024 * 1024,
+  TiB: 1024 * 1024 * 1024 * 1024,
+};
+
+function formatQuickSearchFileSizeValue(value, unit) {
+  if (unit === "B") {
+    return String(Math.round(value));
+  }
+  if (value >= 100) {
+    return String(Math.round(value));
+  }
+  if (value >= 10) {
+    return String(Math.round(value * 10) / 10);
+  }
+  return String(Math.round(value * 100) / 100);
+}
+
+function bytesToQuickSearchDisplay(bytes, preferredUnit) {
+  if (
+    preferredUnit &&
+    QS_FILE_SIZE_UNIT_MULTIPLIERS[preferredUnit] !== undefined
+  ) {
+    const value = bytes / QS_FILE_SIZE_UNIT_MULTIPLIERS[preferredUnit];
+    return {
+      value: formatQuickSearchFileSizeValue(value, preferredUnit),
+      unit: preferredUnit,
+    };
+  }
+
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let unitIndex = 0;
+  let value = bytes;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  const unit = units[unitIndex];
+  return {
+    value: formatQuickSearchFileSizeValue(value, unit),
+    unit,
+  };
+}
+
+function quickSearchDisplayToBytes(value, unit) {
+  const num = parseFloat(value);
+  const multiplier = QS_FILE_SIZE_UNIT_MULTIPLIERS[unit];
+  if (!Number.isFinite(num) || num < 0 || multiplier === undefined) {
+    return 0;
+  }
+  return Math.round(num * multiplier);
+}
+
+function clampQuickSearchFileSizeBounds(minBytes, maxBytes) {
+  let min = Math.max(0, Math.min(minBytes, QS_FILE_SIZE_ABSOLUTE_MAX_BYTES));
+  let max = Math.max(0, Math.min(maxBytes, QS_FILE_SIZE_ABSOLUTE_MAX_BYTES));
+  if (min > max) {
+    if (minBytes > maxBytes) {
+      min = max;
+    } else {
+      max = min;
+    }
+  }
+  return { min, max };
+}
+
+function formatQuickSearchFileSizeSummary(minBytes, maxBytes) {
+  if (minBytes <= 0 && maxBytes >= QS_FILE_SIZE_ABSOLUTE_MAX_BYTES) {
+    return "Any size";
+  }
+  return `${formatNekoBTBytes(minBytes)} – ${formatNekoBTBytes(maxBytes)}`;
+}
+
+function updateQuickSearchFileSizeFill() {
+  const minSlider = document.getElementById("qs-file-size-min-slider");
+  const maxSlider = document.getElementById("qs-file-size-max-slider");
+  const fill = document.getElementById("qs-file-size-fill");
+  if (!minSlider || !maxSlider || !fill) return;
+
+  const minVal = parseInt(minSlider.value, 10);
+  const maxVal = parseInt(maxSlider.value, 10);
+  const minPercent = (minVal / QS_FILE_SIZE_SLIDER_MAX_MB) * 100;
+  const maxPercent = (maxVal / QS_FILE_SIZE_SLIDER_MAX_MB) * 100;
+  fill.style.left = `${minPercent}%`;
+  fill.style.width = `${maxPercent - minPercent}%`;
+}
+
+function syncQuickSearchFileSizeControls(minBytes, maxBytes) {
+  const bounds = clampQuickSearchFileSizeBounds(minBytes, maxBytes);
+  const minUnitSelect = document.getElementById("qs-file-size-min-unit");
+  const maxUnitSelect = document.getElementById("qs-file-size-max-unit");
+  const minDisp = bytesToQuickSearchDisplay(bounds.min, minUnitSelect?.value);
+  const maxDisp = bytesToQuickSearchDisplay(bounds.max, maxUnitSelect?.value);
+
+  if (minUnitSelect) minUnitSelect.value = minDisp.unit;
+  if (maxUnitSelect) maxUnitSelect.value = maxDisp.unit;
+
+  document.getElementById("qs-file-size-min-input").value = String(
+    minDisp.value,
+  );
+  document.getElementById("qs-file-size-max-input").value = String(
+    maxDisp.value,
+  );
+  document.getElementById("qs-file-size-min-slider").value = String(
+    Math.round(bounds.min / (1024 * 1024)),
+  );
+  document.getElementById("qs-file-size-max-slider").value = String(
+    Math.round(bounds.max / (1024 * 1024)),
+  );
+  document.getElementById("qs-file-size-summary").textContent =
+    formatQuickSearchFileSizeSummary(bounds.min, bounds.max);
+  updateQuickSearchFileSizeFill();
+  return bounds;
+}
+
+function readQuickSearchFileSizeBounds() {
+  const minBytes = quickSearchDisplayToBytes(
+    document.getElementById("qs-file-size-min-input").value,
+    document.getElementById("qs-file-size-min-unit").value,
+  );
+  const maxBytes = quickSearchDisplayToBytes(
+    document.getElementById("qs-file-size-max-input").value,
+    document.getElementById("qs-file-size-max-unit").value,
+  );
+  return clampQuickSearchFileSizeBounds(minBytes, maxBytes);
+}
+
+function isQuickSearchFileSizeFilterActive(enabled, minBytes, maxBytes) {
+  return (
+    enabled &&
+    (minBytes > 0 || maxBytes < QS_FILE_SIZE_ABSOLUTE_MAX_BYTES)
+  );
+}
+
+function initQuickSearchFileSizeControls() {
+  syncQuickSearchFileSizeControls(0, QS_FILE_SIZE_ABSOLUTE_MAX_BYTES);
+
+  const sizeSection = document.getElementById("qs-file-size-section");
+  const sizeEnabledCheckbox = document.getElementById("qs-file-size-enabled");
+
+  sizeEnabledCheckbox.addEventListener("change", () => {
+    sizeSection.hidden = !sizeEnabledCheckbox.checked;
+    if (sizeEnabledCheckbox.checked) {
+      syncQuickSearchFileSizeControls(
+        500 * 1024 * 1024,
+        4 * 1024 * 1024 * 1024,
+      );
+    }
+  });
+
+  const handleSliderInput = (isMinSlider) => {
+    const minSlider = document.getElementById("qs-file-size-min-slider");
+    const maxSlider = document.getElementById("qs-file-size-max-slider");
+    let minMb = parseInt(minSlider.value, 10);
+    let maxMb = parseInt(maxSlider.value, 10);
+
+    if (isMinSlider && minMb > maxMb) {
+      maxMb = minMb;
+      maxSlider.value = String(maxMb);
+    } else if (!isMinSlider && maxMb < minMb) {
+      minMb = maxMb;
+      minSlider.value = String(minMb);
+    }
+
+    syncQuickSearchFileSizeControls(
+      minMb * 1024 * 1024,
+      maxMb * 1024 * 1024,
+    );
+  };
+
+  document
+    .getElementById("qs-file-size-min-slider")
+    .addEventListener("input", () => handleSliderInput(true));
+  document
+    .getElementById("qs-file-size-max-slider")
+    .addEventListener("input", () => handleSliderInput(false));
+
+  ["qs-file-size-min-input", "qs-file-size-max-input"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", () => {
+      const bounds = readQuickSearchFileSizeBounds();
+      syncQuickSearchFileSizeControls(bounds.min, bounds.max);
+    });
+  });
+
+  ["qs-file-size-min-unit", "qs-file-size-max-unit"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", () => {
+      const bounds = readQuickSearchFileSizeBounds();
+      syncQuickSearchFileSizeControls(bounds.min, bounds.max);
+    });
+  });
+}
+
+function applyQuickSearchClientFilters(options) {
+  const rows = document.querySelectorAll("table.torrent-list tbody tr");
+  const now = Date.now() / 1000;
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60;
+  let hiddenCount = 0;
+  let visibleCount = 0;
+  const filterParts = [];
+
+  rows.forEach((row) => {
+    let visible = true;
+
+    if (options.last30Days) {
+      const dateCell = row.querySelector("td[data-timestamp]");
+      if (dateCell) {
+        const timestamp = parseInt(dateCell.getAttribute("data-timestamp"), 10);
+        if (timestamp < thirtyDaysAgo) {
+          visible = false;
+        }
+      }
+    }
+
+    if (visible && options.sizeEnabled) {
+      const sizeCell = row.querySelector("td:nth-of-type(4)");
+      if (sizeCell) {
+        const sizeInBytes = convertToBytes(sizeCell.textContent);
+        if (
+          sizeInBytes < options.sizeMin ||
+          sizeInBytes > options.sizeMax
+        ) {
+          visible = false;
+        }
+      }
+    }
+
+    row.style.display = visible ? "" : "none";
+    if (visible) visibleCount++;
+    else hiddenCount++;
+  });
+
+  if (options.last30Days) filterParts.push("last 30 days");
+  if (options.sizeEnabled) {
+    filterParts.push(
+      `size ${formatNekoBTBytes(options.sizeMin)} – ${formatNekoBTBytes(options.sizeMax)}`,
+    );
+  }
+
+  const filterLabel = filterParts.length
+    ? ` filtered by ${filterParts.join(" and ")}`
+    : "";
+
+  showNotification(
+    `Showing ${visibleCount} torrents (${hiddenCount} hidden)${filterLabel}`,
+    true,
+  );
+}
+
 // Function to show Quick Filter popup
 function showQuickFilterPopup() {
   const popup = document.createElement("div");
   popup.className = "quick-filter-popup";
-  popup.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: white;
-    padding: 25px;
-    border-radius: 12px;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
-    z-index: 1001;
-    min-width: 320px;
-    max-width: 400px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  `;
 
-  const content = `
-    <h3 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Quick Search</h3>
-    
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Anime Name:</label>
-      <input type="text" id="anime-name" class="filter-input" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-    </div>
+  popup.innerHTML = `
+    <h3 class="qf-title">Quick Search</h3>
 
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Encoder:</label>
-      <input type="text" id="encoder-name" class="filter-input" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-    </div>
+    <div class="qf-body">
+      <div class="qf-grid qf-grid--2">
+        <div class="qf-field">
+          <label class="qf-label" for="anime-name">Anime Name</label>
+          <input type="text" id="anime-name" class="qf-input" placeholder="Search by title…">
+        </div>
+        <div class="qf-field">
+          <label class="qf-label" for="encoder-name">Encoder</label>
+          <input type="text" id="encoder-name" class="qf-input" placeholder="e.g. SubsPlease">
+        </div>
+      </div>
 
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Quality:</label>
-      <select id="quality" class="filter-select" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        background-color: white;
-        cursor: pointer;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-        <option value="">Select Quality</option>
-        <option value="480p">480p</option>
-        <option value="720p">720p</option>
-        <option value="1080p">1080p</option>
-        <option value="2160p">2160p (4K)</option>
-      </select>
-    </div>
+      <div class="qf-grid qf-grid--3">
+        <div class="qf-field">
+          <label class="qf-label" for="quality">Quality</label>
+          <select id="quality" class="qf-select">
+            <option value="">Any quality</option>
+            <option value="480p">480p</option>
+            <option value="720p">720p</option>
+            <option value="1080p">1080p</option>
+            <option value="2160p">2160p (4K)</option>
+          </select>
+        </div>
+        <div class="qf-field">
+          <label class="qf-label" for="format">Format</label>
+          <select id="format" class="qf-select">
+            <option value="">Any format</option>
+            <option value="264">H264/AVC</option>
+            <option value="x265">x265/HEVC</option>
+            <option value="AV1">AV1</option>
+            <option value="VP9">VP9</option>
+          </select>
+        </div>
+        <div class="qf-field">
+          <label class="qf-label" for="source">Source</label>
+          <select id="source" class="qf-select">
+            <option value="">Any source</option>
+            <option value="BD">BD (Blu-ray)</option>
+            <option value="Web">Web (Streaming Service)</option>
+            <option value="DVD">DVD</option>
+          </select>
+        </div>
+      </div>
 
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Format:</label>
-      <select id="format" class="filter-select" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        background-color: white;
-        cursor: pointer;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-        <option value="">Select Format</option>
-        <option value="264">H264/AVC</option>
-        <option value="x265">x265/HEVC</option>
-        <option value="AV1">AV1</option>
-        <option value="VP9">VP9</option>
-      </select>
-    </div>
+      <div class="qf-field">
+        <label class="qf-label" for="category">Category</label>
+        <select id="category" class="qf-select">
+          <option value="0">All categories</option>
+          <option value="1">Anime Music Video</option>
+          <option value="2">English-translated</option>
+          <option value="3">Non-English-translated</option>
+          <option value="4">Raw</option>
+        </select>
+      </div>
 
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Source:</label>
-      <select id="source" class="filter-select" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        background-color: white;
-        cursor: pointer;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-        <option value="">Select Source</option>
-        <option value="BD">BD (Blu-ray)</option>
-        <option value="Web">Web (Streaming Service)</option>
-        <option value="DVD">DVD</option>
-      </select>
-    </div>
-
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Category:</label>
-      <select id="category" class="filter-select" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        background-color: white;
-        cursor: pointer;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-        <option value="0">All categories</option>
-        <option value="1">Anime Music Video</option>
-        <option value="2">English-translated</option>
-        <option value="3">Non-English-translated</option>
-        <option value="4">Raw</option>
-      </select>
-    </div>
-
-    <div class="filter-group" style="margin-bottom: 25px;">
-      <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-        <label style="display: flex; align-items: center; font-size: 14px; cursor: pointer;">
-          <input type="checkbox" id="dual-audio" style="
-            margin: 0;
-            margin-right: 8px;
-            cursor: pointer;
-          ">
-          <span style="font-weight: 500;">Dual Audio</span>
+      <div class="qf-options">
+        <label class="qf-checkbox">
+          <input type="checkbox" id="dual-audio">
+          <span>Dual Audio</span>
         </label>
-        <label style="display: flex; align-items: center; font-size: 14px; cursor: pointer;">
-          <input type="checkbox" id="season-pack" style="
-            margin: 0;
-            margin-right: 8px;
-            cursor: pointer;
-          ">
-          <span style="font-weight: 500;">Season Pack</span>
+        <label class="qf-checkbox">
+          <input type="checkbox" id="season-pack">
+          <span>Season Pack</span>
         </label>
-        <label style="display: flex; align-items: center; font-size: 14px; cursor: pointer;">
-          <input type="checkbox" id="last-30-days" style="
-            margin: 0;
-            margin-right: 8px;
-            cursor: pointer;
-          ">
-          <span style="font-weight: 500;">Last 30 Days</span>
+        <label class="qf-checkbox">
+          <input type="checkbox" id="last-30-days">
+          <span>Last 30 Days</span>
         </label>
+        <label class="qf-checkbox">
+          <input type="checkbox" id="qs-file-size-enabled">
+          <span>File Size</span>
+        </label>
+      </div>
+
+      <div class="qf-size-filter" id="qs-file-size-section" hidden>
+        <div class="qf-size-inputs">
+          <div class="qf-size-field">
+            <label for="qs-file-size-min-input">Minimum</label>
+            <div class="qf-size-value-row">
+              <input type="number" id="qs-file-size-min-input" min="0" step="any">
+              <select id="qs-file-size-min-unit">
+                <option value="B">B</option>
+                <option value="KiB">KiB</option>
+                <option value="MiB" selected>MiB</option>
+                <option value="GiB">GiB</option>
+                <option value="TiB">TiB</option>
+              </select>
+            </div>
+          </div>
+          <div class="qf-size-field">
+            <label for="qs-file-size-max-input">Maximum</label>
+            <div class="qf-size-value-row">
+              <input type="number" id="qs-file-size-max-input" min="0" step="any">
+              <select id="qs-file-size-max-unit">
+                <option value="B">B</option>
+                <option value="KiB">KiB</option>
+                <option value="MiB">MiB</option>
+                <option value="GiB" selected>GiB</option>
+                <option value="TiB">TiB</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="qf-size-slider">
+          <div class="qf-size-track">
+            <div class="qf-size-fill" id="qs-file-size-fill"></div>
+          </div>
+          <input type="range" id="qs-file-size-min-slider" min="0" max="51200" step="1">
+          <input type="range" id="qs-file-size-max-slider" min="0" max="51200" step="1">
+        </div>
+        <div class="qf-size-summary" id="qs-file-size-summary">Any size</div>
       </div>
     </div>
 
-    <div style="display: flex; justify-content: flex-end; gap: 10px;">
-      <button id="reset-filter" class="copy-magnets-button clear-button" style="
-        padding: 8px 16px;
-        border: none;
-        border-radius: 8px;
-        color: white;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.2s;
-      ">Reset</button>
-      <button id="cancel-filter" class="copy-magnets-button" style="
-        padding: 8px 16px;
-        border: none;
-        background: #337ab7;
-        border-radius: 8px;
-        color: white;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.2s;
-      ">Cancel</button>
-      <button id="apply-filter" class="copy-magnets-button" style="
-        padding: 8px 16px;
-        border: none;
-        background: #337ab7;
-        border-radius: 8px;
-        color: white;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.2s;
-      ">Search</button>
+    <div class="qf-actions">
+      <button id="reset-filter" type="button" class="qf-btn qf-btn--ghost">Reset</button>
+      <button id="cancel-filter" type="button" class="qf-btn qf-btn--secondary">Cancel</button>
+      <button id="apply-filter" type="button" class="qf-btn qf-btn--primary">Search</button>
     </div>
   `;
 
-  popup.innerHTML = content;
-
-  // Create overlay
   const overlay = document.createElement("div");
   overlay.className = "quick-filter-overlay";
-  overlay.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-  `;
 
   document.body.appendChild(overlay);
   document.body.appendChild(popup);
   document.body.style.overflow = "hidden";
 
-  // Add hover effects for inputs and buttons
-  const style = document.createElement("style");
-  style.textContent = `
-    .quick-filter-popup {
-      animation: popupFadeIn 0.3s ease;
-    }
+  initQuickSearchFileSizeControls();
 
-    .quick-filter-overlay {
-      animation: overlayFadeIn 0.3s ease;
-    }
-
-    @keyframes popupFadeIn {
-      from {
-        opacity: 0;
-        transform: translate(-50%, -48%) scale(0.96);
-      }
-      to {
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-      }
-    }
-
-    @keyframes overlayFadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    .quick-filter-popup.hiding {
-      animation: popupFadeOut 0.3s ease;
-    }
-
-    .quick-filter-overlay.hiding {
-      animation: overlayFadeOut 0.3s ease;
-    }
-
-    @keyframes popupFadeOut {
-      from {
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-      }
-      to {
-        opacity: 0;
-        transform: translate(-50%, -48%) scale(0.96);
-      }
-    }
-
-    @keyframes overlayFadeOut {
-      from { opacity: 1; }
-      to { opacity: 0; }
-    }
-
-    .quick-filter-popup input:focus,
-    .quick-filter-popup select:focus {
-      outline: none;
-      border-color: #337ab7;
-      box-shadow: 0 0 0 3px rgba(51, 122, 183, 0.1);
-    }
-    .quick-filter-popup input:hover,
-    .quick-filter-popup select:hover {
-      border-color: #337ab7;
-    }
-    #cancel-filter:hover,
-    #apply-filter:hover {
-      background-color: #286090;
-    }
-  `;
-  document.head.appendChild(style);
-
-  // Dark mode styles
-  if (document.body.classList.contains("dark")) {
-    popup.style.background = "#34353b";
-    popup.style.color = "#ffffff";
-    const inputs = popup.querySelectorAll("input, select");
-    inputs.forEach((input) => {
-      input.style.background = "#232327";
-      input.style.color = "#ffffff";
-      input.style.border = "1px solid #666";
-    });
-
-    // Update dark mode specific hover styles
-    const darkStyle = document.createElement("style");
-    darkStyle.textContent = `
-      .dark .quick-filter-popup input:hover,
-      .dark .quick-filter-popup select:hover {
-        border-color: #4a89dc;
-      }
-      .dark #cancel-filter,
-      .dark #apply-filter {
-        color: #ffffff;
-        background: #337ab7;
-      }
-      .dark #cancel-filter:hover,
-      .dark #apply-filter:hover {
-        background-color: #286090;
-      }
-    `;
-    document.head.appendChild(darkStyle);
-  }
-
-  // Add Enter key handler for text inputs
   const textInputs = [
     document.getElementById("anime-name"),
     document.getElementById("encoder-name"),
@@ -6076,16 +6159,29 @@ function showQuickFilterPopup() {
   textInputs.forEach((input) => {
     input.addEventListener("keypress", (event) => {
       if (event.key === "Enter") {
-        event.preventDefault(); // Prevent default form submission
+        event.preventDefault();
         document.getElementById("apply-filter").click();
       }
     });
   });
 
-  // Handle reset
-  document.getElementById("reset-filter").addEventListener("click", () => {
-    // Check if any filters are active before resetting
-    const hasActiveFilters =
+  const resetQuickSearchFileSizeControls = () => {
+    document.getElementById("qs-file-size-enabled").checked = false;
+    document.getElementById("qs-file-size-section").hidden = true;
+    syncQuickSearchFileSizeControls(0, QS_FILE_SIZE_ABSOLUTE_MAX_BYTES);
+  };
+
+  const hasActiveQuickSearchFilters = () => {
+    const sizeBounds = readQuickSearchFileSizeBounds();
+    const fileSizeEnabled = document.getElementById("qs-file-size-enabled")
+      .checked;
+    const fileSizeActive = isQuickSearchFileSizeFilterActive(
+      fileSizeEnabled,
+      sizeBounds.min,
+      sizeBounds.max,
+    );
+
+    return (
       document.getElementById("anime-name").value.trim() ||
       document.getElementById("encoder-name").value.trim() ||
       document.getElementById("quality").value ||
@@ -6094,10 +6190,13 @@ function showQuickFilterPopup() {
       document.getElementById("category").value !== "0" ||
       document.getElementById("dual-audio").checked ||
       document.getElementById("season-pack").checked ||
-      document.getElementById("last-30-days").checked;
+      document.getElementById("last-30-days").checked ||
+      fileSizeActive
+    );
+  };
 
-    // Only show reset notification if there were active filters
-    if (hasActiveFilters) {
+  document.getElementById("reset-filter").addEventListener("click", () => {
+    if (hasActiveQuickSearchFilters()) {
       document.getElementById("anime-name").value = "";
       document.getElementById("encoder-name").value = "";
       document.getElementById("quality").value = "";
@@ -6107,13 +6206,13 @@ function showQuickFilterPopup() {
       document.getElementById("dual-audio").checked = false;
       document.getElementById("season-pack").checked = false;
       document.getElementById("last-30-days").checked = false;
+      resetQuickSearchFileSizeControls();
       showNotification("All filters have been reset", true);
     } else {
       showNotification("No active filters to reset", false);
     }
   });
 
-  // Handle search
   document.getElementById("apply-filter").addEventListener("click", () => {
     const searchParams = [];
     const category = document.getElementById("category").value;
@@ -6126,6 +6225,14 @@ function showQuickFilterPopup() {
     const dualAudio = document.getElementById("dual-audio").checked;
     const seasonPack = document.getElementById("season-pack").checked;
     const last30Days = document.getElementById("last-30-days").checked;
+    const fileSizeEnabled = document.getElementById("qs-file-size-enabled")
+      .checked;
+    const sizeBounds = readQuickSearchFileSizeBounds();
+    const fileSizeActive = isQuickSearchFileSizeFilterActive(
+      fileSizeEnabled,
+      sizeBounds.min,
+      sizeBounds.max,
+    );
 
     if (animeName) searchParams.push(animeName);
     if (encoder) searchParams.push(encoder);
@@ -6135,7 +6242,6 @@ function showQuickFilterPopup() {
     if (dualAudio) searchParams.push("Dual");
     if (seasonPack) searchParams.push("Season");
 
-    // Check if any filter option is selected (excluding last30Days for URL search)
     const hasSearchFilters =
       animeName ||
       encoder ||
@@ -6146,8 +6252,8 @@ function showQuickFilterPopup() {
       seasonPack ||
       category !== "0";
 
-    // Check if any filter option is selected at all
-    const hasAnyFilters = hasSearchFilters || last30Days;
+    const hasClientFilters = last30Days || fileSizeActive;
+    const hasAnyFilters = hasSearchFilters || hasClientFilters;
 
     if (!hasAnyFilters) {
       showNotification(
@@ -6157,35 +6263,38 @@ function showQuickFilterPopup() {
       return;
     }
 
-    // If only last30Days is checked, filter the current page
-    if (last30Days && !hasSearchFilters) {
+    if (!hasSearchFilters && hasClientFilters) {
       closePopup();
-      filterByLast30Days();
+      applyQuickSearchClientFilters({
+        last30Days,
+        sizeEnabled: fileSizeActive,
+        sizeMin: sizeBounds.min,
+        sizeMax: sizeBounds.max,
+      });
       return;
     }
 
-    // If other filters are present, navigate to search results
     const searchQuery = searchParams.join(" ");
     const categoryParam = category === "0" ? "0_0" : `1_${category}`;
     let targetUrl = `${
       window.location.origin
     }/?f=0&c=${categoryParam}&q=${encodeURIComponent(searchQuery)}`;
 
-    // Add date filter parameter if checked
     if (last30Days) {
       targetUrl += "&dateFilter=30days";
+    }
+    if (fileSizeActive) {
+      targetUrl += `&sizeMin=${sizeBounds.min}&sizeMax=${sizeBounds.max}`;
     }
 
     window.location.href = targetUrl;
   });
 
-  // Handle cancel
   const closePopup = () => {
     popup.classList.add("hiding");
     overlay.classList.add("hiding");
     document.body.style.overflow = "";
 
-    // Wait for animations to finish before removing elements
     popup.addEventListener(
       "animationend",
       () => {
@@ -6431,15 +6540,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Function to check URL for date filter parameter and apply it
-function checkAndApplyDateFilter() {
+// Function to check URL for Quick Search client-side filter parameters
+function checkAndApplyQuickSearchFilters() {
   const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get("dateFilter") === "30days") {
-    // Wait a bit for the page to fully load before filtering
-    setTimeout(() => {
-      filterByLast30Days();
-    }, 500);
-  }
+  const last30Days = urlParams.get("dateFilter") === "30days";
+  const sizeMinParam = urlParams.get("sizeMin");
+  const sizeMaxParam = urlParams.get("sizeMax");
+  const sizeEnabled = sizeMinParam !== null && sizeMaxParam !== null;
+
+  if (!last30Days && !sizeEnabled) return;
+
+  setTimeout(() => {
+    applyQuickSearchClientFilters({
+      last30Days,
+      sizeEnabled,
+      sizeMin: sizeEnabled ? parseInt(sizeMinParam, 10) : 0,
+      sizeMax: sizeEnabled
+        ? parseInt(sizeMaxParam, 10)
+        : QS_FILE_SIZE_ABSOLUTE_MAX_BYTES,
+    });
+  }, 500);
 }
 
 async function initializeExtension(isInitialLoad = false) {
@@ -6467,7 +6587,7 @@ async function initializeExtension(isInitialLoad = false) {
   addChangelogNavItem();
   addMonitorButton();
   checkMonitoredUsers();
-  checkAndApplyDateFilter();
+  checkAndApplyQuickSearchFilters();
 }
 
 async function addMagnetButtonToViewPage() {

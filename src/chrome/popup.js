@@ -194,12 +194,6 @@ chrome.storage.sync.get(
       .querySelector('[data-toggle="changelogToggle"]')
       .setAttribute("aria-checked", !items.changelogDismissed);
     document
-      .querySelector('[data-toggle="hideDeadTorrentsToggle"]')
-      .setAttribute("aria-checked", items.hideDeadTorrents);
-    document
-      .querySelector('[data-toggle="keywordFilterToggle"]')
-      .setAttribute("aria-checked", items.keywordFilterEnabled);
-    document
       .querySelector('[data-toggle="showFilterNotificationsToggle"]')
       .setAttribute("aria-checked", items.showFilterNotifications);
     document
@@ -208,9 +202,6 @@ chrome.storage.sync.get(
     document
       .querySelector('[data-toggle="improvedFileListToggle"]')
       .setAttribute("aria-checked", items.improvedFileList);
-    document
-      .querySelector('[data-toggle="fileSizeFilterToggle"]')
-      .setAttribute("aria-checked", items.fileSizeFilterEnabled);
     document
       .querySelector('[data-toggle="showChangelogNavToggle"]')
       .setAttribute("aria-checked", items.showChangelogNav);
@@ -285,307 +276,9 @@ chrome.storage.sync.get(
     // Initialize dependent toggles state
     updateDependentToggles(items.showButtons);
 
-    displayKeywords(items.keywords);
     displayMonitoredKeywords(items.monitoredKeywords || []);
-
-    initFileSizeRangeControls(items);
-
-    document
-      .querySelector('[data-toggle="completedDownloadsFilterToggle"]')
-      .setAttribute("aria-checked", items.completedDownloadsFilterEnabled);
-    const completedDownloadsOperatorSelect = document.getElementById(
-      "completedDownloadsOperatorSelect",
-    );
-    const completedDownloadsValueInput = document.getElementById(
-      "completedDownloadsValueInput",
-    );
-    completedDownloadsOperatorSelect.value =
-      items.completedDownloadsFilterOperator || "gt";
-    completedDownloadsValueInput.value = String(
-      items.completedDownloadsFilterValue ?? 0,
-    );
-    setCompletedDownloadsFilterControlsEnabled(
-      items.completedDownloadsFilterEnabled,
-    );
   },
 );
-
-function setCompletedDownloadsFilterControlsEnabled(enabled) {
-  const operatorSelect = document.getElementById(
-    "completedDownloadsOperatorSelect",
-  );
-  const valueInput = document.getElementById("completedDownloadsValueInput");
-  if (operatorSelect) operatorSelect.disabled = !enabled;
-  if (valueInput) valueInput.disabled = !enabled;
-}
-
-const FILE_SIZE_SLIDER_MAX_MB = 51200;
-const FILE_SIZE_DEFAULT_MIN_BYTES = 500 * 1024 * 1024;
-const FILE_SIZE_DEFAULT_MAX_BYTES = 4 * 1024 * 1024 * 1024;
-const FILE_SIZE_ABSOLUTE_MAX_BYTES = FILE_SIZE_SLIDER_MAX_MB * 1024 * 1024;
-const FILE_SIZE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB"];
-const FILE_SIZE_UNIT_MULTIPLIERS = {
-  B: 1,
-  KiB: 1024,
-  MiB: 1024 * 1024,
-  GiB: 1024 * 1024 * 1024,
-  TiB: 1024 * 1024 * 1024 * 1024,
-};
-
-const LEGACY_FILE_SIZE_RANGE_MAP = {
-  less_than_256mb: { min: 0, max: 256 * 1024 * 1024 },
-  less_than_512mb: { min: 0, max: 512 * 1024 * 1024 },
-  less_than_768mb: { min: 0, max: 768 * 1024 * 1024 },
-  less_than_1gb: { min: 0, max: 1024 * 1024 * 1024 },
-  greater_than_1gb: {
-    min: 1024 * 1024 * 1024,
-    max: FILE_SIZE_ABSOLUTE_MAX_BYTES,
-  },
-  greater_than_5gb: {
-    min: 5 * 1024 * 1024 * 1024,
-    max: FILE_SIZE_ABSOLUTE_MAX_BYTES,
-  },
-  greater_than_10gb: {
-    min: 10 * 1024 * 1024 * 1024,
-    max: FILE_SIZE_ABSOLUTE_MAX_BYTES,
-  },
-  greater_than_20gb: {
-    min: 20 * 1024 * 1024 * 1024,
-    max: FILE_SIZE_ABSOLUTE_MAX_BYTES,
-  },
-};
-
-function resolveFileSizeFilterBounds(items) {
-  if (
-    typeof items.fileSizeMinBytes === "number" &&
-    typeof items.fileSizeMaxBytes === "number"
-  ) {
-    return {
-      min: items.fileSizeMinBytes,
-      max: items.fileSizeMaxBytes,
-    };
-  }
-
-  const legacy = LEGACY_FILE_SIZE_RANGE_MAP[items.fileSizeRange];
-  if (legacy) return legacy;
-
-  return {
-    min: FILE_SIZE_DEFAULT_MIN_BYTES,
-    max: FILE_SIZE_DEFAULT_MAX_BYTES,
-  };
-}
-
-function formatFileSizeDisplayValue(value, unit) {
-  if (unit === "B") {
-    return String(Math.round(value));
-  }
-  if (value >= 100) {
-    return String(Math.round(value));
-  }
-  if (value >= 10) {
-    return String(Math.round(value * 10) / 10);
-  }
-  return String(Math.round(value * 100) / 100);
-}
-
-function bytesToDisplayValue(bytes, preferredUnit) {
-  if (
-    preferredUnit &&
-    FILE_SIZE_UNIT_MULTIPLIERS[preferredUnit] !== undefined
-  ) {
-    const value = bytes / FILE_SIZE_UNIT_MULTIPLIERS[preferredUnit];
-    return {
-      value: formatFileSizeDisplayValue(value, preferredUnit),
-      unit: preferredUnit,
-    };
-  }
-
-  let unitIndex = 0;
-  let value = bytes;
-  while (value >= 1024 && unitIndex < FILE_SIZE_UNITS.length - 1) {
-    value /= 1024;
-    unitIndex++;
-  }
-
-  const unit = FILE_SIZE_UNITS[unitIndex];
-  return {
-    value: formatFileSizeDisplayValue(value, unit),
-    unit,
-  };
-}
-
-function displayValueToBytes(value, unit) {
-  const num = parseFloat(value);
-  const multiplier = FILE_SIZE_UNIT_MULTIPLIERS[unit];
-  if (!Number.isFinite(num) || num < 0 || multiplier === undefined) {
-    return 0;
-  }
-  return Math.round(num * multiplier);
-}
-
-function clampFileSizeBounds(minBytes, maxBytes) {
-  let min = Math.max(0, Math.min(minBytes, FILE_SIZE_ABSOLUTE_MAX_BYTES));
-  let max = Math.max(0, Math.min(maxBytes, FILE_SIZE_ABSOLUTE_MAX_BYTES));
-  if (min > max) [min, max] = [max, min];
-  return { min, max };
-}
-
-function bytesToSliderMb(bytes) {
-  return Math.round(bytes / (1024 * 1024));
-}
-
-function sliderMbToBytes(mb) {
-  return mb * 1024 * 1024;
-}
-
-function formatFileSizeRangeSummary(minBytes, maxBytes) {
-  const minDisp = bytesToDisplayValue(minBytes);
-  const maxDisp = bytesToDisplayValue(maxBytes);
-  return `${minDisp.value} ${minDisp.unit} – ${maxDisp.value} ${maxDisp.unit}`;
-}
-
-function setFileSizeRangeControlsEnabled(enabled) {
-  const container = document.getElementById("fileSizeRangeContainer");
-  if (!container) return;
-
-  container.querySelectorAll("input, select").forEach((el) => {
-    el.disabled = !enabled;
-  });
-  container.classList.toggle("disabled", !enabled);
-}
-
-function updateFileSizeRangeFill() {
-  const minSlider = document.getElementById("fileSizeMinSlider");
-  const maxSlider = document.getElementById("fileSizeMaxSlider");
-  const fill = document.getElementById("fileSizeRangeFill");
-  if (!minSlider || !maxSlider || !fill) return;
-
-  const minVal = parseInt(minSlider.value, 10);
-  const maxVal = parseInt(maxSlider.value, 10);
-  const minPercent = (minVal / FILE_SIZE_SLIDER_MAX_MB) * 100;
-  const maxPercent = (maxVal / FILE_SIZE_SLIDER_MAX_MB) * 100;
-  fill.style.left = `${minPercent}%`;
-  fill.style.width = `${maxPercent - minPercent}%`;
-}
-
-function readFileSizeBoundsFromControls() {
-  const minInput = document.getElementById("fileSizeMinInput");
-  const maxInput = document.getElementById("fileSizeMaxInput");
-  const minUnit = document.getElementById("fileSizeMinUnit").value;
-  const maxUnit = document.getElementById("fileSizeMaxUnit").value;
-  const minBytes = displayValueToBytes(minInput.value, minUnit);
-  const maxBytes = displayValueToBytes(maxInput.value, maxUnit);
-  return clampFileSizeBounds(minBytes, maxBytes);
-}
-
-function syncFileSizeControlsFromBounds(
-  minBytes,
-  maxBytes,
-  { updateStorage = false } = {},
-) {
-  const bounds = clampFileSizeBounds(minBytes, maxBytes);
-  const minUnitSelect = document.getElementById("fileSizeMinUnit");
-  const maxUnitSelect = document.getElementById("fileSizeMaxUnit");
-  const minDisp = bytesToDisplayValue(bounds.min, minUnitSelect.value);
-  const maxDisp = bytesToDisplayValue(bounds.max, maxUnitSelect.value);
-
-  document.getElementById("fileSizeMinInput").value = String(minDisp.value);
-  minUnitSelect.value = minDisp.unit;
-  document.getElementById("fileSizeMaxInput").value = String(maxDisp.value);
-  maxUnitSelect.value = maxDisp.unit;
-  document.getElementById("fileSizeMinSlider").value = String(
-    bytesToSliderMb(bounds.min),
-  );
-  document.getElementById("fileSizeMaxSlider").value = String(
-    bytesToSliderMb(bounds.max),
-  );
-  document.getElementById("fileSizeRangeSummary").textContent =
-    formatFileSizeRangeSummary(bounds.min, bounds.max);
-  updateFileSizeRangeFill();
-
-  if (updateStorage) {
-    chrome.storage.sync.set({
-      fileSizeMinBytes: bounds.min,
-      fileSizeMaxBytes: bounds.max,
-    });
-    notifyContentScriptSetting("fileSizeMinBytes", bounds.min);
-    notifyContentScriptSetting("fileSizeMaxBytes", bounds.max);
-  }
-}
-
-function initFileSizeRangeControls(items) {
-  const bounds = resolveFileSizeFilterBounds(items);
-
-  if (
-    typeof items.fileSizeMinBytes !== "number" ||
-    typeof items.fileSizeMaxBytes !== "number"
-  ) {
-    chrome.storage.sync.set({
-      fileSizeMinBytes: bounds.min,
-      fileSizeMaxBytes: bounds.max,
-    });
-  }
-
-  syncFileSizeControlsFromBounds(bounds.min, bounds.max);
-  setFileSizeRangeControlsEnabled(items.fileSizeFilterEnabled);
-}
-
-function persistFileSizeBoundsFromControls() {
-  const bounds = readFileSizeBoundsFromControls();
-  syncFileSizeControlsFromBounds(bounds.min, bounds.max, {
-    updateStorage: true,
-  });
-}
-
-let fileSizeInputDebounceTimer = null;
-
-function scheduleFileSizePersistFromControls() {
-  clearTimeout(fileSizeInputDebounceTimer);
-  fileSizeInputDebounceTimer = setTimeout(() => {
-    persistFileSizeBoundsFromControls();
-  }, 250);
-}
-
-function handleFileSizeSliderInput(isMinSlider) {
-  const minSlider = document.getElementById("fileSizeMinSlider");
-  const maxSlider = document.getElementById("fileSizeMaxSlider");
-  let minMb = parseInt(minSlider.value, 10);
-  let maxMb = parseInt(maxSlider.value, 10);
-
-  if (isMinSlider && minMb > maxMb) {
-    minMb = maxMb;
-    minSlider.value = String(minMb);
-  } else if (!isMinSlider && maxMb < minMb) {
-    maxMb = minMb;
-    maxSlider.value = String(maxMb);
-  }
-
-  syncFileSizeControlsFromBounds(
-    sliderMbToBytes(minMb),
-    sliderMbToBytes(maxMb),
-  );
-}
-
-function handleFileSizeSliderCommit(isMinSlider) {
-  const minSlider = document.getElementById("fileSizeMinSlider");
-  const maxSlider = document.getElementById("fileSizeMaxSlider");
-  let minMb = parseInt(minSlider.value, 10);
-  let maxMb = parseInt(maxSlider.value, 10);
-
-  if (isMinSlider && minMb > maxMb) {
-    minMb = maxMb;
-    minSlider.value = String(minMb);
-  } else if (!isMinSlider && maxMb < minMb) {
-    maxMb = minMb;
-    maxSlider.value = String(maxMb);
-  }
-
-  syncFileSizeControlsFromBounds(
-    sliderMbToBytes(minMb),
-    sliderMbToBytes(maxMb),
-    { updateStorage: true },
-  );
-}
 
 function notifyContentScriptSetting(setting, value) {
   chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
@@ -1682,32 +1375,6 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
           },
         );
         break;
-      case "hideDeadTorrentsToggle":
-        setting = "hideDeadTorrents";
-        chrome.tabs.query(
-          { active: true, currentWindow: true },
-          function (tabs) {
-            chrome.tabs.sendMessage(tabs[0].id, {
-              type: "settingChanged",
-              setting: "hideDeadTorrents",
-              value: newState,
-            });
-          },
-        );
-        break;
-      case "keywordFilterToggle":
-        setting = "keywordFilterEnabled";
-        chrome.tabs.query(
-          { active: true, currentWindow: true },
-          function (tabs) {
-            chrome.tabs.sendMessage(tabs[0].id, {
-              type: "settingChanged",
-              setting: "keywordFilterEnabled",
-              value: newState,
-            });
-          },
-        );
-        break;
       case "showFilterNotificationsToggle":
         setting = "showFilterNotifications";
         chrome.storage.sync.set({ [setting]: newState });
@@ -1737,16 +1404,6 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
             });
           },
         );
-        break;
-      case "fileSizeFilterToggle":
-        setting = "fileSizeFilterEnabled";
-        setFileSizeRangeControlsEnabled(newState);
-        notifyContentScriptSetting("fileSizeFilterEnabled", newState);
-        break;
-      case "completedDownloadsFilterToggle":
-        setting = "completedDownloadsFilterEnabled";
-        setCompletedDownloadsFilterControlsEnabled(newState);
-        notifyContentScriptSetting("completedDownloadsFilterEnabled", newState);
         break;
       case "showChangelogNavToggle":
         setting = "showChangelogNav";
@@ -1875,83 +1532,6 @@ fetch(chrome.runtime.getURL("manifest.json"))
   .then((manifest) => {
     document.querySelector(".version-number").textContent = manifest.version;
   });
-
-function displayKeywords(keywords) {
-  const keywordsList = document.getElementById("keywords-list");
-  keywordsList.innerHTML = "";
-
-  keywords.forEach((keyword) => {
-    const item = document.createElement("div");
-    item.className = "keyword-item";
-    item.innerHTML = `
-      <span>${keyword}</span>
-      <button class="keyword-remove">Remove</button>
-    `;
-
-    item.querySelector(".keyword-remove").addEventListener("click", () => {
-      removeKeyword(keyword);
-    });
-
-    keywordsList.appendChild(item);
-  });
-}
-
-function addKeyword() {
-  const input = document.getElementById("keyword-input");
-  const keyword = input.value.trim();
-
-  if (keyword) {
-    chrome.storage.sync.get({ keywords: [] }, (items) => {
-      const keywords = items.keywords;
-      if (!keywords.includes(keyword)) {
-        keywords.push(keyword);
-        chrome.storage.sync.set({ keywords }, () => {
-          displayKeywords(keywords);
-          input.value = "";
-
-          // Notify content script to update filters
-          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            chrome.tabs.sendMessage(tabs[0].id, {
-              type: "keywordsUpdated",
-              keywords,
-            });
-          });
-        });
-      }
-    });
-  }
-}
-
-function removeKeyword(keywordToRemove) {
-  chrome.storage.sync.get({ keywords: [] }, (items) => {
-    const keywords = items.keywords.filter((k) => k !== keywordToRemove);
-    chrome.storage.sync.set({ keywords }, () => {
-      displayKeywords(keywords);
-
-      // Notify content script to update filters
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        chrome.tabs.sendMessage(tabs[0].id, {
-          type: "keywordsUpdated",
-          keywords,
-        });
-      });
-    });
-  });
-}
-
-function removeAllKeywords() {
-  chrome.storage.sync.set({ keywords: [] }, () => {
-    displayKeywords([]);
-
-    // Notify content script to update filters
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      chrome.tabs.sendMessage(tabs[0].id, {
-        type: "keywordsUpdated",
-        keywords: [],
-      });
-    });
-  });
-}
 
 // Function to display monitored keywords
 function displayMonitoredKeywords(monitoredKeywords) {
@@ -2100,79 +1680,10 @@ function removeAllMonitoredKeywords() {
   });
 }
 
-// Add event listeners
-document.getElementById("add-keyword").addEventListener("click", addKeyword);
-document.getElementById("keyword-input").addEventListener("keypress", (e) => {
-  if (e.key === "Enter") {
-    addKeyword();
-  }
-});
-document
-  .getElementById("remove-all-keywords")
-  .addEventListener("click", removeAllKeywords);
-
 // Monitored Keywords functionality
 document
   .getElementById("unmonitor-all-keywords")
   .addEventListener("click", removeAllMonitoredKeywords);
-
-// File size range controls
-document
-  .getElementById("fileSizeMinSlider")
-  .addEventListener("input", () => {
-    handleFileSizeSliderInput(true);
-  });
-
-document
-  .getElementById("fileSizeMinSlider")
-  .addEventListener("change", () => {
-    handleFileSizeSliderCommit(true);
-  });
-
-document
-  .getElementById("fileSizeMaxSlider")
-  .addEventListener("input", () => {
-    handleFileSizeSliderInput(false);
-  });
-
-document
-  .getElementById("fileSizeMaxSlider")
-  .addEventListener("change", () => {
-    handleFileSizeSliderCommit(false);
-  });
-
-["fileSizeMinInput", "fileSizeMaxInput"].forEach((id) => {
-  const input = document.getElementById(id);
-  input.addEventListener("input", scheduleFileSizePersistFromControls);
-  input.addEventListener("change", () => {
-    clearTimeout(fileSizeInputDebounceTimer);
-    persistFileSizeBoundsFromControls();
-  });
-});
-
-["fileSizeMinUnit", "fileSizeMaxUnit"].forEach((id) => {
-  document.getElementById(id).addEventListener("change", () => {
-    persistFileSizeBoundsFromControls();
-  });
-});
-
-document
-  .getElementById("completedDownloadsOperatorSelect")
-  .addEventListener("change", (e) => {
-    const newValue = e.target.value;
-    chrome.storage.sync.set({ completedDownloadsFilterOperator: newValue });
-    notifyContentScriptSetting("completedDownloadsFilterOperator", newValue);
-  });
-
-document
-  .getElementById("completedDownloadsValueInput")
-  .addEventListener("change", (e) => {
-    const parsed = parseInt(e.target.value, 10);
-    const newValue = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-    e.target.value = String(newValue);
-    chrome.storage.sync.set({ completedDownloadsFilterValue: newValue });
-    notifyContentScriptSetting("completedDownloadsFilterValue", newValue);
-  });
 
 // Monitored Users Functions
 function displayMonitoredUsers(monitoredUsers) {

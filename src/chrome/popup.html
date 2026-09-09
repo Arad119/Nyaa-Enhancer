@@ -9,7 +9,6 @@
       <button class="nav-button" data-tab="torrent-client">
         Torrent Client
       </button>
-      <button class="nav-button" data-tab="keyword-filter">Keywords</button>
       <button class="nav-button" data-tab="monitored-users">Monitoring</button>
       <button class="nav-button active" data-tab="settings">Settings</button>
       <button class="nav-button" data-tab="about">About</button>
@@ -431,36 +430,6 @@
         </div>
       </div>
 
-      <div id="keyword-filter" class="tab-content">
-        <div class="keyword-info">
-          <p class="keyword-explanation">
-            Keywords added here will hide torrents that contain these words in
-            their titles.
-          </p>
-          <p class="keyword-hint">
-            ⚠️ To activate filtering, enable "Enable keyword filtering" in the
-            Settings tab.
-          </p>
-        </div>
-        <div class="keyword-input-container">
-          <input
-            type="text"
-            id="keyword-input"
-            placeholder="Enter keyword to filter"
-            class="keyword-input"
-          />
-          <button id="add-keyword" class="keyword-add-button">Add</button>
-        </div>
-        <div class="keyword-actions">
-          <button id="remove-all-keywords" class="keyword-remove-all">
-            Remove All
-          </button>
-        </div>
-        <div id="keywords-list" class="keywords-list">
-          <!-- Keywords will be added here dynamically -->
-        </div>
-      </div>
-
       <div id="monitored-users" class="tab-content">
         <!-- Monitoring Sub-Navigation -->
         <div class="monitoring-nav">
@@ -686,7 +655,7 @@
           </div>
         </div>
 
-        <!-- Filter Settings (Add this before Additional Features) -->
+        <!-- Filter Settings -->
         <div class="settings-category">
           <h3 class="category-title">Filter Settings</h3>
           <div class="setting-item">
@@ -699,135 +668,6 @@
                 <span class="toggle-indicator"></span>
               </button>
             </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Hide dead torrents (0 S/L)</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="hideDeadTorrentsToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Enable keyword filtering</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="keywordFilterToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Filter by file size</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="fileSizeFilterToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div
-            class="file-size-range-container"
-            id="fileSizeRangeContainer"
-            style="margin-top: 8px"
-          >
-            <div class="file-size-range-inputs">
-              <div class="file-size-range-field">
-                <label for="fileSizeMinInput">Minimum</label>
-                <div class="file-size-range-value-row">
-                  <input
-                    type="number"
-                    id="fileSizeMinInput"
-                    min="0"
-                    step="any"
-                    disabled
-                  />
-                  <select id="fileSizeMinUnit" disabled>
-                    <option value="B">B</option>
-                    <option value="KiB">KiB</option>
-                    <option value="MiB" selected>MiB</option>
-                    <option value="GiB">GiB</option>
-                    <option value="TiB">TiB</option>
-                  </select>
-                </div>
-              </div>
-              <div class="file-size-range-field">
-                <label for="fileSizeMaxInput">Maximum</label>
-                <div class="file-size-range-value-row">
-                  <input
-                    type="number"
-                    id="fileSizeMaxInput"
-                    min="0"
-                    step="any"
-                    disabled
-                  />
-                  <select id="fileSizeMaxUnit" disabled>
-                    <option value="B">B</option>
-                    <option value="KiB">KiB</option>
-                    <option value="MiB">MiB</option>
-                    <option value="GiB" selected>GiB</option>
-                    <option value="TiB">TiB</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div class="file-size-range-slider">
-              <div class="file-size-range-track">
-                <div class="file-size-range-fill" id="fileSizeRangeFill"></div>
-              </div>
-              <input
-                type="range"
-                id="fileSizeMinSlider"
-                min="0"
-                max="51200"
-                step="1"
-                disabled
-              />
-              <input
-                type="range"
-                id="fileSizeMaxSlider"
-                min="0"
-                max="51200"
-                step="1"
-                disabled
-              />
-            </div>
-            <div class="file-size-range-summary" id="fileSizeRangeSummary">
-              500 MiB – 4 GiB
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Filter completed downloads</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="completedDownloadsFilterToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item completed-downloads-filter-container">
-            <select id="completedDownloadsOperatorSelect" disabled>
-              <option value="gt">Greater than</option>
-              <option value="eq">Equal to</option>
-              <option value="lt">Less than</option>
-            </select>
-            <input
-              type="number"
-              id="completedDownloadsValueInput"
-              min="0"
-              step="1"
-              placeholder="Count"
-              disabled
-            />
           </div>
         </div>
 

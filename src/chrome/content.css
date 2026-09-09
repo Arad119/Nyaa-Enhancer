@@ -2982,14 +2982,40 @@ body:not(.dark) .ne-filters-panel__completed-row input {
   text-align: center;
 }
 
-.qf-actions {
+.qf-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 10px 12px;
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid #eee;
+}
+
+.qf-footer-spacer {
+  flex: 1 1 auto;
+  min-width: 12px;
+}
+
+.qf-remember-selection {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  color: #444;
+}
+
+.qf-remember-selection input[type="checkbox"] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.qf-remember-selection span {
+  line-height: 1;
 }
 
 .qf-btn {
@@ -3027,6 +3053,25 @@ body:not(.dark) .ne-filters-panel__completed-row input {
 
 .qf-btn--ghost:hover {
   background: #5a6268;
+}
+
+.qf-btn--outline {
+  background: #fff;
+  color: #555;
+  border: 1px solid #d5dbe3;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+
+.qf-btn--outline:hover {
+  background: #fff;
+  color: #333;
+  border-color: #b8c2ce;
+}
+
+.qf-btn--compact {
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .dark .quick-filter-popup {
@@ -3085,8 +3130,25 @@ body:not(.dark) .ne-filters-panel__completed-row input {
   border-color: #4a89dc;
 }
 
-.dark .qf-actions {
+.dark .qf-footer {
   border-top-color: #555;
+}
+
+.dark .qf-remember-selection {
+  color: #ccc;
+}
+
+.dark .qf-btn--outline {
+  background: #2d2d2d;
+  color: #ccc;
+  border-color: #666;
+  box-shadow: none;
+}
+
+.dark .qf-btn--outline:hover {
+  background: #3a3a3a;
+  color: #fff;
+  border-color: #777;
 }
 
 .qf-field--anime-name {
@@ -3199,11 +3261,6 @@ body:not(.dark) .ne-filters-panel__completed-row input {
   color: #444;
 }
 
-.qf-btn--compact {
-  padding: 6px 10px;
-  font-size: 12px;
-}
-
 .qf-anime-aliases-list {
   display: flex;
   flex-direction: column;
@@ -3302,12 +3359,21 @@ body:not(.dark) .ne-filters-panel__completed-row input {
     grid-template-columns: 1fr;
   }
 
-  .qf-actions {
-    flex-direction: column-reverse;
+  .qf-footer {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .qf-actions .qf-btn {
+  .qf-footer-spacer {
+    display: none;
+  }
+
+  .qf-footer .qf-btn {
     width: 100%;
     text-align: center;
+  }
+
+  .qf-remember-selection {
+    justify-content: center;
   }
 }

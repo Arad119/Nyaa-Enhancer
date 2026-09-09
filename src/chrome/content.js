@@ -6621,18 +6621,28 @@ function applyQuickSearchFormState(state) {
   );
 }
 
-function loadQuickSearchState() {
+function loadQuickSearchPreferences() {
   return new Promise((resolve) => {
     chrome.storage.sync.get(
-      { quickSearchState: getDefaultQuickSearchState() },
+      {
+        quickSearchRememberSelection: true,
+        quickSearchState: getDefaultQuickSearchState(),
+      },
       (items) => {
         resolve({
-          ...getDefaultQuickSearchState(),
-          ...(items.quickSearchState || {}),
+          rememberSelection: items.quickSearchRememberSelection !== false,
+          state: {
+            ...getDefaultQuickSearchState(),
+            ...(items.quickSearchState || {}),
+          },
         });
       },
     );
   });
+}
+
+function loadQuickSearchState() {
+  return loadQuickSearchPreferences().then((prefs) => prefs.state);
 }
 
 function saveQuickSearchState(state) {
@@ -6779,8 +6789,13 @@ function showQuickFilterPopup() {
       </div>
     </div>
 
-    <div class="qf-actions">
-      <button id="reset-filter" type="button" class="qf-btn qf-btn--ghost">Reset</button>
+    <div class="qf-footer">
+      <button id="reset-filter" type="button" class="qf-btn qf-btn--outline qf-btn--compact">Reset filters</button>
+      <label class="qf-checkbox qf-remember-selection" for="qs-remember-selection">
+        <input type="checkbox" id="qs-remember-selection" checked>
+        <span>Remember selection</span>
+      </label>
+      <div class="qf-footer-spacer" aria-hidden="true"></div>
       <button id="cancel-filter" type="button" class="qf-btn qf-btn--secondary">Cancel</button>
       <button id="apply-filter" type="button" class="qf-btn qf-btn--primary">Search</button>
     </div>
@@ -6797,8 +6812,21 @@ function showQuickFilterPopup() {
 
   let resetAnimeAutocomplete = initQuickSearchAnimeAutocomplete(popup);
 
-  loadQuickSearchState().then((state) => {
-    applyQuickSearchFormState(state);
+  const rememberSelectionCheckbox = document.getElementById(
+    "qs-remember-selection",
+  );
+
+  loadQuickSearchPreferences().then(({ rememberSelection, state }) => {
+    rememberSelectionCheckbox.checked = rememberSelection;
+    if (rememberSelection) {
+      applyQuickSearchFormState(state);
+    }
+  });
+
+  rememberSelectionCheckbox.addEventListener("change", () => {
+    chrome.storage.sync.set({
+      quickSearchRememberSelection: rememberSelectionCheckbox.checked,
+    });
   });
 
   const textInputs = [
@@ -6858,7 +6886,9 @@ function showQuickFilterPopup() {
       document.getElementById("season-pack").checked = false;
       document.getElementById("last-30-days").checked = false;
       resetQuickSearchFileSizeControls();
-      await clearQuickSearchState();
+      if (rememberSelectionCheckbox.checked) {
+        await clearQuickSearchState();
+      }
       showNotification("All filters have been reset", true);
     } else {
       showNotification("No active filters to reset", false);
@@ -6915,7 +6945,9 @@ function showQuickFilterPopup() {
       return;
     }
 
-    await saveQuickSearchState(readQuickSearchFormState());
+    if (rememberSelectionCheckbox.checked) {
+      await saveQuickSearchState(readQuickSearchFormState());
+    }
 
     if (!hasSearchFilters && hasClientFilters) {
       closePopup();

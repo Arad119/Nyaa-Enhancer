@@ -1474,6 +1474,18 @@ function getAnimetoshoDomain(useNewATDomain) {
   return useNewATDomain ? "animetosho.xyz" : "animetosho.org";
 }
 
+function getAnimetoshoStorageDomain(useNewATDomain) {
+  return useNewATDomain ? "storage.animetosho.xyz" : "storage.animetosho.org";
+}
+
+function normalizeATScreenshotStorageUrl(url, useNewATDomain) {
+  if (!url || !url.includes("/sframes/")) return url;
+  const storageDomain = getAnimetoshoStorageDomain(useNewATDomain);
+  return url
+    .replace(/.*\/sframes\//, `https://${storageDomain}/sframes/`)
+    .replace(/&amp;/g, "&");
+}
+
 function normalizeAnimetoshoViewUrl(url, atDomain) {
   if (!url) return null;
   return url.replace(/animetosho\.(org|xyz)/, atDomain);
@@ -2755,7 +2767,7 @@ function setAnimetoshoTabStatus(body, message) {
   body.appendChild(status);
 }
 
-function collectATScreenshotsFromRoot(root) {
+function collectATScreenshotsFromRoot(root, useNewATDomain) {
   const screenshots = [];
 
   root.querySelectorAll("a.screenthumb").forEach((a) => {
@@ -2764,16 +2776,8 @@ function collectATScreenshotsFromRoot(root) {
     const img = a.querySelector("img");
     const src = img?.getAttribute("src") || href;
 
-    const storageUrl = href.includes("/sframes/")
-      ? href
-          .replace(/.*\/sframes\//, "https://storage.animetosho.org/sframes/")
-          .replace(/&amp;/g, "&")
-      : href;
-    const thumbnailUrl = src.includes("/sframes/")
-      ? src
-          .replace(/.*\/sframes\//, "https://storage.animetosho.org/sframes/")
-          .replace(/&amp;/g, "&")
-      : src;
+    const storageUrl = normalizeATScreenshotStorageUrl(href, useNewATDomain);
+    const thumbnailUrl = normalizeATScreenshotStorageUrl(src, useNewATDomain);
 
     screenshots.push({
       url: storageUrl,
@@ -2785,7 +2789,7 @@ function collectATScreenshotsFromRoot(root) {
   return screenshots;
 }
 
-function extractATScreenshotsFromHtml(html) {
+function extractATScreenshotsFromHtml(html, useNewATDomain) {
   try {
     const doc = new DOMParser().parseFromString(html, "text/html");
 
@@ -2796,11 +2800,11 @@ function extractATScreenshotsFromHtml(html) {
         /^Screenshots$/i.test(normalizeATAttachmentLabel(th.textContent))
       ) {
         const td = row.querySelector("td");
-        return td ? collectATScreenshotsFromRoot(td) : [];
+        return td ? collectATScreenshotsFromRoot(td, useNewATDomain) : [];
       }
     }
 
-    return collectATScreenshotsFromRoot(doc);
+    return collectATScreenshotsFromRoot(doc, useNewATDomain);
   } catch (error) {
     console.error("Error parsing AnimeTosho screenshots:", error);
     return [];
@@ -2941,7 +2945,7 @@ function extractATAttachmentsFromHtml(html) {
 
 function getATScreenshotDisplayUrl(url) {
   if (!url) return url;
-  if (url.includes("/sframes/") || url.includes("storage.animetosho.org")) {
+  if (url.includes("/sframes/") || url.includes("storage.animetosho.")) {
     return url.replace(/\.png$/i, ".jpg");
   }
   return url;
@@ -3503,7 +3507,10 @@ async function refreshAnimetoshoEpisodeFeatures(prefs, options = {}) {
       );
       if (fetchId !== atEpisodeFetchId) return;
 
-      const screenshots = extractATScreenshotsFromHtml(screenshotHtml);
+      const screenshots = extractATScreenshotsFromHtml(
+        screenshotHtml,
+        record.useNewATDomain,
+      );
       if (!screenshots.length) {
         setAnimetoshoTabStatus(
           screenshotBody,

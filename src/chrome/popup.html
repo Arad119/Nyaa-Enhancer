@@ -872,6 +872,82 @@
           </div>
         </div>
 
+        <!-- TMDB Settings -->
+        <div class="settings-category">
+          <h3 class="category-title">TMDB</h3>
+          <div
+            class="setting-item"
+            style="flex-direction: column; align-items: stretch; gap: 8px"
+          >
+            <span>API Key</span>
+            <span style="color: #999; font-size: 12px"
+              >Used for anime title autocomplete in Quick Search. Create a free
+              key at
+              <a
+                href="https://www.themoviedb.org/settings/api"
+                target="_blank"
+                style="color: #337ab7"
+                >themoviedb.org/settings/api</a
+              >.</span
+            >
+            <div class="api-key-wrapper">
+              <input
+                type="password"
+                id="tmdbApiKey"
+                placeholder="Enter your TMDB API key"
+                class="api-key-input"
+              />
+              <button
+                type="button"
+                id="tmdbApiKeyToggle"
+                class="api-key-eye"
+                title="Show/hide API key"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="15"
+                  height="15"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
+            <div class="api-key-actions">
+              <button
+                type="button"
+                id="tmdbApiKeyTest"
+                class="api-key-action-btn api-key-test-btn"
+              >
+                Test
+              </button>
+              <button
+                type="button"
+                id="tmdbApiKeyClear"
+                class="api-key-action-btn api-key-clear-btn"
+              >
+                Clear
+              </button>
+              <span id="tmdbTestStatus" class="api-key-test-status"></span>
+            </div>
+          </div>
+          <div
+            class="setting-item"
+            style="flex-direction: column; align-items: flex-start; gap: 4px"
+          >
+            <span style="color: #999; font-size: 12px"
+              >Alternative release titles are resolved via TheXEM using TVDB and
+              AniDB mappings.</span
+            >
+          </div>
+        </div>
+
         <!-- nekoBT Settings -->
         <div class="settings-category">
           <h3 class="category-title">nekoBT</h3>

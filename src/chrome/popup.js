@@ -108,6 +108,7 @@ chrome.storage.sync.get(
     showATFileInfoSection: true,
     showATAttachmentsSection: true,
     ameNZBApiKey: "",
+    tmdbApiKey: "",
     showAmeNZBLinks: false,
     showAmeNZBSection: false,
     ameNZBRequestCount: 0,
@@ -239,6 +240,11 @@ chrome.storage.sync.get(
       items.ameNZBRequestDate === todayUTC ? items.ameNZBRequestCount : 0;
     document.getElementById("ameNZBRequestCount").textContent =
       `${todayCount.toLocaleString()} / 10,000`;
+
+    const tmdbApiKeyInput = document.getElementById("tmdbApiKey");
+    if (tmdbApiKeyInput) {
+      tmdbApiKeyInput.value = items.tmdbApiKey || "";
+    }
 
     document
       .querySelector('[data-toggle="showNekoBTLinksToggle"]')
@@ -421,6 +427,108 @@ document.getElementById("ameNZBApiKeyClear").addEventListener("click", () => {
       setting: "showAmeNZBSection",
       value: false,
     });
+  });
+});
+
+// TMDB API key visibility toggle
+document.getElementById("tmdbApiKeyToggle").addEventListener("click", () => {
+  const input = document.getElementById("tmdbApiKey");
+  const btn = document.getElementById("tmdbApiKeyToggle");
+  if (input.type === "password") {
+    input.type = "text";
+    btn.innerHTML = EYE_SLASH_SVG;
+  } else {
+    input.type = "password";
+    btn.innerHTML = EYE_SVG;
+  }
+});
+
+// TMDB Test button — validate the API key
+document.getElementById("tmdbApiKeyTest").addEventListener("click", async () => {
+  const key = document.getElementById("tmdbApiKey").value.trim();
+  const statusEl = document.getElementById("tmdbTestStatus");
+  const testBtn = document.getElementById("tmdbApiKeyTest");
+
+  if (!key) {
+    statusEl.textContent = "Enter an API key first.";
+    statusEl.style.color = "#999";
+    return;
+  }
+
+  testBtn.disabled = true;
+  statusEl.textContent = "Testing…";
+  statusEl.style.color = "#999";
+
+  const result = await new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      {
+        type: "fetchUrl",
+        url: `https://api.themoviedb.org/3/configuration?api_key=${encodeURIComponent(key)}`,
+      },
+      resolve,
+    );
+  });
+
+  testBtn.disabled = false;
+
+  if (!result?.ok) {
+    statusEl.textContent = "✗ Request failed.";
+    statusEl.style.color = "#ff4444";
+    return;
+  }
+
+  try {
+    const json = JSON.parse(result.text);
+    if (json.success === false || json.status_code) {
+      statusEl.textContent = `✗ ${json.status_message || "Invalid API key."}`;
+      statusEl.style.color = "#ff4444";
+      return;
+    }
+    if (json.images || json.change_keys) {
+      statusEl.textContent = "✓ API key is valid.";
+      statusEl.style.color = "#4caf50";
+    } else {
+      statusEl.textContent = "✗ Unexpected response.";
+      statusEl.style.color = "#ff4444";
+    }
+  } catch {
+    statusEl.textContent = "✗ Could not parse response.";
+    statusEl.style.color = "#ff4444";
+  }
+});
+
+// TMDB Clear button
+document.getElementById("tmdbApiKeyClear").addEventListener("click", () => {
+  const input = document.getElementById("tmdbApiKey");
+  input.value = "";
+  input.type = "password";
+  document.getElementById("tmdbApiKeyToggle").innerHTML = EYE_SVG;
+  document.getElementById("tmdbTestStatus").textContent = "";
+
+  chrome.storage.sync.set({ tmdbApiKey: "" });
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]?.id) {
+      chrome.tabs.sendMessage(tabs[0].id, {
+        type: "settingChanged",
+        setting: "tmdbApiKey",
+        value: "",
+      });
+    }
+  });
+});
+
+// TMDB API key input — persist key
+document.getElementById("tmdbApiKey").addEventListener("input", (e) => {
+  const key = e.target.value.trim();
+  chrome.storage.sync.set({ tmdbApiKey: key });
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]?.id) {
+      chrome.tabs.sendMessage(tabs[0].id, {
+        type: "settingChanged",
+        setting: "tmdbApiKey",
+        value: key,
+      });
+    }
   });
 });
 

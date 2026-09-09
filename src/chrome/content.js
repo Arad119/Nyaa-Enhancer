@@ -31,6 +31,7 @@ function loadStoredPreferences() {
         // - showATFileInfoSection: whether to show AnimeTosho FileInfo tab on view pages
         // - showATAttachmentsSection: whether to show AnimeTosho downloads tab on view pages
         // - ameNZBApiKey: the user's ameNZB API key
+        // - tmdbApiKey: the user's TMDB API key for Quick Search autocomplete
         // - showAmeNZBLinks: whether to show ameNZB links on supported view pages
         useDisplayName: true,
         useZip: true,
@@ -42,6 +43,7 @@ function loadStoredPreferences() {
         showATFileInfoSection: true,
         showATAttachmentsSection: true,
         ameNZBApiKey: "",
+        tmdbApiKey: "",
         showAmeNZBLinks: false,
         showAmeNZBSection: false,
         showNekoBTLinks: false,
@@ -1383,6 +1385,9 @@ async function handleSettingChange(setting, value) {
       removeAmeNZBRow();
       addAmeNZBToViewPage();
       updateAmeNZBDescriptionSection();
+      break;
+    case "tmdbApiKey":
+      clearQuickSearchAnimeCaches();
       break;
     case "showNekoBTLinks":
       if (value) {
@@ -3911,6 +3916,18 @@ function fetchUrlViaBackground(url) {
   });
 }
 
+async function fetchJsonViaBackground(url) {
+  const result = await fetchUrlViaBackground(url);
+  if (!result?.ok) {
+    return { ok: false, error: result?.error || "Request failed" };
+  }
+  try {
+    return { ok: true, data: JSON.parse(result.text) };
+  } catch {
+    return { ok: false, error: "Invalid JSON response" };
+  }
+}
+
 function isNekoBTSupportedViewPage() {
   return isSupportedAnimeViewPageCategory();
 }
@@ -6032,6 +6049,595 @@ function applyQuickSearchClientFilters(options) {
   );
 }
 
+const XEM_ALL_NAMES_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const TMDB_SEARCH_DEBOUNCE_MS = 500;
+const TMDB_SEARCH_MIN_INTERVAL_MS = 600;
+let tmdbSearchThrottleChain = Promise.resolve();
+let tmdbSearchNextAllowedAt = 0;
+const quickSearchAnimeMemoryCache = {
+  tmdbSearch: new Map(),
+  tmdbExternalIds: new Map(),
+  tmdbAltTitles: new Map(),
+  xemShowNames: new Map(),
+  xemAllNames: { tvdb: null, anidb: null },
+  xemAllNamesPromises: { tvdb: null, anidb: null },
+};
+
+function clearQuickSearchAnimeCaches() {
+  quickSearchAnimeMemoryCache.tmdbSearch.clear();
+  quickSearchAnimeMemoryCache.tmdbExternalIds.clear();
+  quickSearchAnimeMemoryCache.tmdbAltTitles.clear();
+  quickSearchAnimeMemoryCache.xemShowNames.clear();
+  quickSearchAnimeMemoryCache.xemAllNames.tvdb = null;
+  quickSearchAnimeMemoryCache.xemAllNames.anidb = null;
+  quickSearchAnimeMemoryCache.xemAllNamesPromises.tvdb = null;
+  quickSearchAnimeMemoryCache.xemAllNamesPromises.anidb = null;
+  tmdbSearchThrottleChain = Promise.resolve();
+  tmdbSearchNextAllowedAt = 0;
+}
+
+function normalizeAnimeAliasName(name) {
+  return String(name || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function flattenXemNamesPayload(payload) {
+  const names = new Set();
+  if (!payload || typeof payload !== "object") return [];
+
+  for (const value of Object.values(payload)) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) names.add(trimmed);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        const trimmed = String(entry || "").trim();
+        if (trimmed) names.add(trimmed);
+      });
+      continue;
+    }
+    if (value && typeof value === "object") {
+      Object.values(value).forEach((entry) => {
+        if (Array.isArray(entry)) {
+          entry.forEach((name) => {
+            const trimmed = String(name || "").trim();
+            if (trimmed) names.add(trimmed);
+          });
+        }
+      });
+    }
+  }
+
+  return [...names];
+}
+
+function addAnimeAliasNames(targetSet, names) {
+  names.forEach((name) => {
+    const trimmed = String(name || "").trim();
+    if (!trimmed) return;
+    targetSet.add(trimmed);
+  });
+}
+
+function dedupeAnimeAliasNames(names, preferredFirst = []) {
+  const seen = new Set();
+  const ordered = [];
+
+  const pushName = (name) => {
+    const trimmed = String(name || "").trim();
+    if (!trimmed) return;
+    const key = normalizeAnimeAliasName(trimmed);
+    if (seen.has(key)) return;
+    seen.add(key);
+    ordered.push(trimmed);
+  };
+
+  preferredFirst.forEach(pushName);
+  names.forEach(pushName);
+  return ordered;
+}
+
+async function getXemAllNames(origin) {
+  if (quickSearchAnimeMemoryCache.xemAllNames[origin]) {
+    return quickSearchAnimeMemoryCache.xemAllNames[origin];
+  }
+
+  const storageKey = `xemAllNames_${origin}`;
+  const stored = await chrome.storage.local.get({ [storageKey]: null });
+  const cached = stored[storageKey];
+  if (
+    cached?.data &&
+    cached.fetchedAt &&
+    Date.now() - cached.fetchedAt < XEM_ALL_NAMES_TTL_MS
+  ) {
+    quickSearchAnimeMemoryCache.xemAllNames[origin] = cached.data;
+    return cached.data;
+  }
+
+  if (!quickSearchAnimeMemoryCache.xemAllNamesPromises[origin]) {
+    quickSearchAnimeMemoryCache.xemAllNamesPromises[origin] = (async () => {
+      const url = `https://thexem.info/map/allNames?origin=${encodeURIComponent(origin)}&defaultNames=1`;
+      const result = await fetchJsonViaBackground(url);
+      if (!result.ok || result.data?.result !== "success") {
+        throw new Error(
+          result.data?.message || result.error || "TheXEM request failed",
+        );
+      }
+      quickSearchAnimeMemoryCache.xemAllNames[origin] = result.data.data || {};
+      await chrome.storage.local.set({
+        [storageKey]: {
+          fetchedAt: Date.now(),
+          data: result.data.data || {},
+        },
+      });
+      return result.data.data || {};
+    })().finally(() => {
+      quickSearchAnimeMemoryCache.xemAllNamesPromises[origin] = null;
+    });
+  }
+
+  return quickSearchAnimeMemoryCache.xemAllNamesPromises[origin];
+}
+
+async function fetchXemShowNames(origin, entityId) {
+  const cacheKey = `${origin}:${entityId}`;
+  if (quickSearchAnimeMemoryCache.xemShowNames.has(cacheKey)) {
+    return quickSearchAnimeMemoryCache.xemShowNames.get(cacheKey);
+  }
+
+  const url = `https://thexem.info/map/names?origin=${encodeURIComponent(origin)}&id=${encodeURIComponent(entityId)}&defaultNames=1`;
+  const result = await fetchJsonViaBackground(url);
+  if (!result.ok || result.data?.result !== "success") {
+    quickSearchAnimeMemoryCache.xemShowNames.set(cacheKey, []);
+    return [];
+  }
+
+  const names = flattenXemNamesPayload(result.data.data);
+  quickSearchAnimeMemoryCache.xemShowNames.set(cacheKey, names);
+  return names;
+}
+
+function getAllNamesEntryNames(allNamesData, entityId) {
+  const entry = allNamesData?.[String(entityId)];
+  if (!entry) return [];
+  return Array.isArray(entry) ? entry.filter(Boolean) : [];
+}
+
+function findLinkedAnidbIds(names, anidbAllNames) {
+  const normalizedNames = new Set(
+    names.map((name) => normalizeAnimeAliasName(name)).filter(Boolean),
+  );
+  if (!normalizedNames.size || !anidbAllNames) return [];
+
+  const linkedIds = new Set();
+  for (const [anidbId, entries] of Object.entries(anidbAllNames)) {
+    if (!Array.isArray(entries)) continue;
+    const hasOverlap = entries.some((name) =>
+      normalizedNames.has(normalizeAnimeAliasName(name)),
+    );
+    if (hasOverlap) linkedIds.add(String(anidbId));
+  }
+  return [...linkedIds];
+}
+
+async function fetchTmdbJson(url) {
+  return new Promise((resolve, reject) => {
+    tmdbSearchThrottleChain = tmdbSearchThrottleChain
+      .then(async () => {
+        const waitMs = Math.max(0, tmdbSearchNextAllowedAt - Date.now());
+        if (waitMs > 0) {
+          await new Promise((delayResolve) => setTimeout(delayResolve, waitMs));
+        }
+
+        const result = await fetchJsonViaBackground(url);
+        tmdbSearchNextAllowedAt = Date.now() + TMDB_SEARCH_MIN_INTERVAL_MS;
+
+        if (result.ok && result.data?.status_code === 429) {
+          tmdbSearchNextAllowedAt = Date.now() + 2000;
+          resolve({
+            ok: false,
+            error: "rate_limited",
+            data: result.data,
+          });
+          return;
+        }
+
+        resolve(result);
+      })
+      .catch(reject);
+  });
+}
+
+async function searchTmdbAnime(query, apiKey) {
+  const cacheKey = `${apiKey}:${query.toLowerCase()}`;
+  if (quickSearchAnimeMemoryCache.tmdbSearch.has(cacheKey)) {
+    return quickSearchAnimeMemoryCache.tmdbSearch.get(cacheKey);
+  }
+
+  const url = `https://api.themoviedb.org/3/search/tv?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US`;
+  const result = await fetchTmdbJson(url);
+  if (!result.ok || !Array.isArray(result.data?.results)) {
+    if (result.error === "rate_limited") {
+      throw new Error("rate_limited");
+    }
+    quickSearchAnimeMemoryCache.tmdbSearch.set(cacheKey, []);
+    return [];
+  }
+
+  const shows = result.data.results
+    .filter((entry) => entry?.id && entry?.name)
+    .slice(0, 8)
+    .map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      originalName: entry.original_name || "",
+      firstAirDate: entry.first_air_date || "",
+      overview: entry.overview || "",
+    }));
+
+  quickSearchAnimeMemoryCache.tmdbSearch.set(cacheKey, shows);
+  return shows;
+}
+
+async function getTmdbTvdbId(tmdbId, apiKey) {
+  const cacheKey = `${apiKey}:${tmdbId}`;
+  if (quickSearchAnimeMemoryCache.tmdbExternalIds.has(cacheKey)) {
+    return quickSearchAnimeMemoryCache.tmdbExternalIds.get(cacheKey);
+  }
+
+  const url = `https://api.themoviedb.org/3/tv/${encodeURIComponent(tmdbId)}/external_ids?api_key=${encodeURIComponent(apiKey)}`;
+  const result = await fetchTmdbJson(url);
+  const tvdbId = result.ok ? result.data?.tvdb_id || null : null;
+  quickSearchAnimeMemoryCache.tmdbExternalIds.set(cacheKey, tvdbId);
+  return tvdbId;
+}
+
+async function getTmdbAlternativeTitles(tmdbId, apiKey) {
+  const cacheKey = `${apiKey}:${tmdbId}`;
+  if (quickSearchAnimeMemoryCache.tmdbAltTitles.has(cacheKey)) {
+    return quickSearchAnimeMemoryCache.tmdbAltTitles.get(cacheKey);
+  }
+
+  const url = `https://api.themoviedb.org/3/tv/${encodeURIComponent(tmdbId)}/alternative_titles?api_key=${encodeURIComponent(apiKey)}`;
+  const result = await fetchTmdbJson(url);
+  const titles = result.ok
+    ? (result.data?.results || [])
+        .map((entry) => entry?.title)
+        .filter(Boolean)
+    : [];
+  quickSearchAnimeMemoryCache.tmdbAltTitles.set(cacheKey, titles);
+  return titles;
+}
+
+async function resolveAnimeAliasesForSelection(selection, apiKey) {
+  const aliasSet = new Set();
+  addAnimeAliasNames(aliasSet, [selection.name, selection.originalName]);
+
+  const [tvdbId, tmdbAltTitles] = await Promise.all([
+    getTmdbTvdbId(selection.id, apiKey),
+    getTmdbAlternativeTitles(selection.id, apiKey),
+  ]);
+  addAnimeAliasNames(aliasSet, tmdbAltTitles);
+
+  let tvdbAllNames = null;
+  let anidbAllNames = null;
+
+  try {
+    [tvdbAllNames, anidbAllNames] = await Promise.all([
+      getXemAllNames("tvdb"),
+      getXemAllNames("anidb"),
+    ]);
+  } catch {
+    tvdbAllNames = null;
+    anidbAllNames = null;
+  }
+
+  const tvdbNames = [];
+  if (tvdbId) {
+    const [xemTvdbNames, cachedTvdbNames] = await Promise.all([
+      fetchXemShowNames("tvdb", tvdbId),
+      Promise.resolve(getAllNamesEntryNames(tvdbAllNames, tvdbId)),
+    ]);
+    tvdbNames.push(...xemTvdbNames, ...cachedTvdbNames);
+    addAnimeAliasNames(aliasSet, tvdbNames);
+  }
+
+  if (tvdbId && anidbAllNames) {
+    const linkedAnidbIds = findLinkedAnidbIds([...aliasSet, ...tvdbNames], anidbAllNames);
+    const anidbNameLists = await Promise.all(
+      linkedAnidbIds.map(async (anidbId) => {
+        const [xemAnidbNames, cachedAnidbNames] = await Promise.all([
+          fetchXemShowNames("anidb", anidbId),
+          Promise.resolve(getAllNamesEntryNames(anidbAllNames, anidbId)),
+        ]);
+        return [...xemAnidbNames, ...cachedAnidbNames];
+      }),
+    );
+    anidbNameLists.forEach((names) => addAnimeAliasNames(aliasSet, names));
+  }
+
+  return dedupeAnimeAliasNames([...aliasSet], [selection.name]);
+}
+
+function initQuickSearchAnimeAutocomplete(popup) {
+  const animeInput = popup.querySelector("#anime-name");
+  const suggestionsEl = popup.querySelector("#anime-name-suggestions");
+  const aliasesPanel = popup.querySelector("#anime-name-aliases");
+  const aliasesListEl = popup.querySelector("#anime-aliases-list");
+  const aliasesPreviewEl = popup.querySelector("#anime-aliases-preview");
+  const aliasesApplyBtn = popup.querySelector("#anime-aliases-apply");
+  const hintEl = popup.querySelector("#anime-name-hint");
+  let searchTimer = null;
+  let activeSearchToken = 0;
+  let selectedAliases = [];
+
+  const hideSuggestions = () => {
+    suggestionsEl.hidden = true;
+    suggestionsEl.innerHTML = "";
+  };
+
+  const hideAliasesPanel = () => {
+    aliasesPanel.hidden = true;
+    aliasesListEl.innerHTML = "";
+    aliasesPreviewEl.textContent = "";
+    selectedAliases = [];
+  };
+
+  const updateAliasPreview = () => {
+    const checked = [
+      ...aliasesListEl.querySelectorAll('input[type="checkbox"]:checked'),
+    ].map((input) => input.value);
+    aliasesPreviewEl.textContent = checked.length
+      ? checked.join("|")
+      : "Select at least one alias";
+  };
+
+  const renderAliasCheckboxes = (aliases) => {
+    selectedAliases = aliases;
+    aliasesListEl.innerHTML = "";
+    aliases.forEach((alias) => {
+      const label = document.createElement("label");
+      label.className = "qf-anime-alias-item";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = alias;
+      input.checked = true;
+      input.addEventListener("change", updateAliasPreview);
+      const text = document.createElement("span");
+      text.textContent = alias;
+      label.append(input, text);
+      aliasesListEl.appendChild(label);
+    });
+    aliasesPanel.hidden = aliases.length === 0;
+    updateAliasPreview();
+  };
+
+  const applySelectedAliases = () => {
+    const checked = [
+      ...aliasesListEl.querySelectorAll('input[type="checkbox"]:checked'),
+    ].map((input) => input.value.trim());
+    if (!checked.length) {
+      showNotification("Select at least one alias to apply", false);
+      return;
+    }
+    animeInput.value = checked.join("|");
+    hideSuggestions();
+    showNotification("Anime search aliases applied", true);
+  };
+
+  aliasesApplyBtn.addEventListener("click", applySelectedAliases);
+  suggestionsEl.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+
+  loadStoredPreferences().then((prefs) => {
+    if (!prefs.tmdbApiKey) {
+      hintEl.hidden = false;
+      hintEl.textContent =
+        "Add a TMDB API key in extension settings to search anime titles and load aliases.";
+    }
+  });
+
+  animeInput.addEventListener("input", () => {
+    hideAliasesPanel();
+    clearTimeout(searchTimer);
+
+    searchTimer = setTimeout(async () => {
+      const query = animeInput.value.trim();
+      if (query.length < 2) {
+        hideSuggestions();
+        return;
+      }
+
+      const prefs = await loadStoredPreferences();
+      if (!prefs.tmdbApiKey) {
+        hideSuggestions();
+        return;
+      }
+
+      const token = ++activeSearchToken;
+      suggestionsEl.hidden = false;
+      suggestionsEl.innerHTML =
+        '<div class="qf-anime-suggestion qf-anime-suggestion--status">Searching…</div>';
+
+      try {
+        const results = await searchTmdbAnime(query, prefs.tmdbApiKey);
+        if (token !== activeSearchToken) return;
+
+        if (!results.length) {
+          suggestionsEl.innerHTML =
+            '<div class="qf-anime-suggestion qf-anime-suggestion--status">No matches found</div>';
+          return;
+        }
+
+        suggestionsEl.innerHTML = "";
+        results.forEach((result) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "qf-anime-suggestion";
+          const title = document.createElement("span");
+          title.className = "qf-anime-suggestion-title";
+          title.textContent = result.name;
+          button.appendChild(title);
+          const meta = [result.originalName, result.firstAirDate]
+            .filter(Boolean)
+            .join(" · ");
+          if (meta) {
+            const metaEl = document.createElement("span");
+            metaEl.className = "qf-anime-suggestion-meta";
+            metaEl.textContent = meta;
+            button.appendChild(metaEl);
+          }
+          button.addEventListener("click", async () => {
+            hideSuggestions();
+            animeInput.value = result.name;
+            aliasesPanel.hidden = false;
+            aliasesListEl.innerHTML =
+              '<div class="qf-anime-suggestion qf-anime-suggestion--status">Loading aliases…</div>';
+            aliasesPreviewEl.textContent = "";
+
+            try {
+              const aliases = await resolveAnimeAliasesForSelection(
+                result,
+                prefs.tmdbApiKey,
+              );
+              if (!aliases.length) {
+                aliasesListEl.innerHTML =
+                  '<div class="qf-anime-suggestion qf-anime-suggestion--status">No aliases found</div>';
+                return;
+              }
+              renderAliasCheckboxes(aliases);
+            } catch {
+              aliasesListEl.innerHTML =
+                '<div class="qf-anime-suggestion qf-anime-suggestion--status">Failed to load aliases</div>';
+            }
+          });
+          suggestionsEl.appendChild(button);
+        });
+      } catch (error) {
+        if (token !== activeSearchToken) return;
+        suggestionsEl.innerHTML =
+          error?.message === "rate_limited"
+            ? '<div class="qf-anime-suggestion qf-anime-suggestion--status">TMDB rate limit reached — wait a moment</div>'
+            : '<div class="qf-anime-suggestion qf-anime-suggestion--status">Search failed</div>';
+      }
+    }, TMDB_SEARCH_DEBOUNCE_MS);
+  });
+
+  animeInput.addEventListener("blur", () => {
+    setTimeout(hideSuggestions, 150);
+  });
+
+  animeInput.addEventListener("focus", () => {
+    if (suggestionsEl.childElementCount > 0) {
+      suggestionsEl.hidden = false;
+    }
+  });
+
+  return () => {
+    hideSuggestions();
+    hideAliasesPanel();
+  };
+}
+
+function getDefaultQuickSearchState() {
+  return {
+    animeName: "",
+    encoder: "",
+    quality: "",
+    format: "",
+    source: "",
+    category: "0",
+    dualAudio: false,
+    seasonPack: false,
+    last30Days: false,
+    fileSizeEnabled: false,
+    fileSizeMinBytes: 0,
+    fileSizeMaxBytes: QS_FILE_SIZE_ABSOLUTE_MAX_BYTES,
+    fileSizeMinUnit: "MiB",
+    fileSizeMaxUnit: "GiB",
+  };
+}
+
+function readQuickSearchFormState() {
+  const sizeBounds = readQuickSearchFileSizeBounds();
+  return {
+    animeName: document.getElementById("anime-name")?.value || "",
+    encoder: document.getElementById("encoder-name")?.value || "",
+    quality: document.getElementById("quality")?.value || "",
+    format: document.getElementById("format")?.value || "",
+    source: document.getElementById("source")?.value || "",
+    category: document.getElementById("category")?.value || "0",
+    dualAudio: document.getElementById("dual-audio")?.checked || false,
+    seasonPack: document.getElementById("season-pack")?.checked || false,
+    last30Days: document.getElementById("last-30-days")?.checked || false,
+    fileSizeEnabled:
+      document.getElementById("qs-file-size-enabled")?.checked || false,
+    fileSizeMinBytes: sizeBounds.min,
+    fileSizeMaxBytes: sizeBounds.max,
+    fileSizeMinUnit:
+      document.getElementById("qs-file-size-min-unit")?.value || "MiB",
+    fileSizeMaxUnit:
+      document.getElementById("qs-file-size-max-unit")?.value || "GiB",
+  };
+}
+
+function applyQuickSearchFormState(state) {
+  const merged = { ...getDefaultQuickSearchState(), ...state };
+
+  document.getElementById("anime-name").value = merged.animeName;
+  document.getElementById("encoder-name").value = merged.encoder;
+  document.getElementById("quality").value = merged.quality;
+  document.getElementById("format").value = merged.format;
+  document.getElementById("source").value = merged.source;
+  document.getElementById("category").value = merged.category;
+  document.getElementById("dual-audio").checked = merged.dualAudio;
+  document.getElementById("season-pack").checked = merged.seasonPack;
+  document.getElementById("last-30-days").checked = merged.last30Days;
+  document.getElementById("qs-file-size-enabled").checked =
+    merged.fileSizeEnabled;
+  document.getElementById("qs-file-size-section").hidden =
+    !merged.fileSizeEnabled;
+
+  const minUnitSelect = document.getElementById("qs-file-size-min-unit");
+  const maxUnitSelect = document.getElementById("qs-file-size-max-unit");
+  if (minUnitSelect) minUnitSelect.value = merged.fileSizeMinUnit;
+  if (maxUnitSelect) maxUnitSelect.value = merged.fileSizeMaxUnit;
+
+  syncQuickSearchFileSizeControls(
+    merged.fileSizeMinBytes,
+    merged.fileSizeMaxBytes,
+  );
+}
+
+function loadQuickSearchState() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(
+      { quickSearchState: getDefaultQuickSearchState() },
+      (items) => {
+        resolve({
+          ...getDefaultQuickSearchState(),
+          ...(items.quickSearchState || {}),
+        });
+      },
+    );
+  });
+}
+
+function saveQuickSearchState(state) {
+  return new Promise((resolve) => {
+    chrome.storage.sync.set({ quickSearchState: state }, resolve);
+  });
+}
+
+function clearQuickSearchState() {
+  return saveQuickSearchState(getDefaultQuickSearchState());
+}
+
 // Function to show Quick Filter popup
 function showQuickFilterPopup() {
   const popup = document.createElement("div");
@@ -6041,14 +6647,26 @@ function showQuickFilterPopup() {
     <h3 class="qf-title">Quick Search</h3>
 
     <div class="qf-body">
-      <div class="qf-grid qf-grid--2">
-        <div class="qf-field">
+      <div class="qf-grid qf-grid--2 qf-grid--anime-row">
+        <div class="qf-field qf-field--anime-name">
           <label class="qf-label" for="anime-name">Anime Name</label>
-          <input type="text" id="anime-name" class="qf-input" placeholder="Search by title…">
+          <div class="qf-anime-search">
+            <input type="text" id="anime-name" class="qf-input" placeholder="Search by title…" autocomplete="off">
+            <div class="qf-anime-suggestions" id="anime-name-suggestions" hidden></div>
+          </div>
         </div>
         <div class="qf-field">
           <label class="qf-label" for="encoder-name">Encoder</label>
           <input type="text" id="encoder-name" class="qf-input" placeholder="e.g. SubsPlease">
+        </div>
+        <p class="qf-anime-hint" id="anime-name-hint" hidden></p>
+        <div class="qf-anime-aliases" id="anime-name-aliases" hidden>
+          <div class="qf-anime-aliases-header">
+            <span class="qf-anime-aliases-title">Select aliases for search</span>
+            <button type="button" id="anime-aliases-apply" class="qf-btn qf-btn--secondary qf-btn--compact">Apply selected</button>
+          </div>
+          <div class="qf-anime-aliases-list" id="anime-aliases-list"></div>
+          <div class="qf-anime-aliases-preview" id="anime-aliases-preview"></div>
         </div>
       </div>
 
@@ -6170,6 +6788,12 @@ function showQuickFilterPopup() {
 
   initQuickSearchFileSizeControls();
 
+  let resetAnimeAutocomplete = initQuickSearchAnimeAutocomplete(popup);
+
+  loadQuickSearchState().then((state) => {
+    applyQuickSearchFormState(state);
+  });
+
   const textInputs = [
     document.getElementById("anime-name"),
     document.getElementById("encoder-name"),
@@ -6214,9 +6838,10 @@ function showQuickFilterPopup() {
     );
   };
 
-  document.getElementById("reset-filter").addEventListener("click", () => {
+  document.getElementById("reset-filter").addEventListener("click", async () => {
     if (hasActiveQuickSearchFilters()) {
       document.getElementById("anime-name").value = "";
+      if (resetAnimeAutocomplete) resetAnimeAutocomplete();
       document.getElementById("encoder-name").value = "";
       document.getElementById("quality").value = "";
       document.getElementById("format").value = "";
@@ -6226,13 +6851,14 @@ function showQuickFilterPopup() {
       document.getElementById("season-pack").checked = false;
       document.getElementById("last-30-days").checked = false;
       resetQuickSearchFileSizeControls();
+      await clearQuickSearchState();
       showNotification("All filters have been reset", true);
     } else {
       showNotification("No active filters to reset", false);
     }
   });
 
-  document.getElementById("apply-filter").addEventListener("click", () => {
+  document.getElementById("apply-filter").addEventListener("click", async () => {
     const searchParams = [];
     const category = document.getElementById("category").value;
 
@@ -6281,6 +6907,8 @@ function showQuickFilterPopup() {
       );
       return;
     }
+
+    await saveQuickSearchState(readQuickSearchFormState());
 
     if (!hasSearchFilters && hasClientFilters) {
       closePopup();

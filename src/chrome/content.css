@@ -3089,6 +3089,200 @@ body:not(.dark) .ne-filters-panel__completed-row input {
   border-top-color: #555;
 }
 
+.qf-field--anime-name {
+  position: relative;
+}
+
+.qf-grid--anime-row .qf-anime-hint,
+.qf-grid--anime-row .qf-anime-aliases {
+  grid-column: 1 / -1;
+}
+
+.qf-anime-search {
+  position: relative;
+}
+
+.qf-anime-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.qf-anime-suggestions[hidden] {
+  display: none;
+}
+
+.qf-anime-suggestion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.qf-anime-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.qf-anime-suggestion:hover,
+.qf-anime-suggestion:focus {
+  background: #f5f9fd;
+  outline: none;
+}
+
+.qf-anime-suggestion-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.qf-anime-suggestion-meta {
+  font-size: 12px;
+  color: #777;
+}
+
+.qf-anime-suggestion--status {
+  cursor: default;
+  color: #777;
+}
+
+.qf-anime-suggestion--status:hover {
+  background: #fff;
+}
+
+.qf-anime-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.4;
+}
+
+.qf-anime-hint[hidden],
+.qf-anime-aliases[hidden] {
+  display: none;
+}
+
+.qf-anime-aliases {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  background: #f8f9fb;
+}
+
+.qf-anime-aliases-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.qf-anime-aliases-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+}
+
+.qf-btn--compact {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.qf-anime-aliases-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+@media (min-width: 561px) {
+  .qf-anime-aliases-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 14px;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+.qf-anime-alias-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.qf-anime-alias-item input {
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.qf-anime-aliases-preview {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px dashed #ccd7e3;
+  font-size: 12px;
+  color: #555;
+  word-break: break-word;
+}
+
+.dark .qf-anime-suggestions,
+.dark .qf-anime-suggestion {
+  background: #2d2d2d;
+  border-color: #555;
+  color: #eee;
+}
+
+.dark .qf-anime-suggestion:hover,
+.dark .qf-anime-suggestion:focus {
+  background: #3a3a3a;
+}
+
+.dark .qf-anime-suggestion-meta {
+  color: #aaa;
+}
+
+.dark .qf-anime-aliases {
+  background: #333;
+  border-color: #555;
+}
+
+.dark .qf-anime-aliases-title,
+.dark .qf-anime-alias-item {
+  color: #ccc;
+}
+
+.dark .qf-anime-hint {
+  color: #aaa;
+}
+
+.dark .qf-anime-aliases-preview {
+  background: #2d2d2d;
+  border-color: #555;
+  color: #ccc;
+}
+
 @media (max-width: 700px) {
   .qf-grid--3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));

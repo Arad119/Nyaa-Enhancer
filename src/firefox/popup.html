@@ -9,8 +9,6 @@
       <button class="nav-button" data-tab="torrent-client">
         Torrent Client
       </button>
-      <button class="nav-button" data-tab="keyword-filter">Keywords</button>
-      <button class="nav-button" data-tab="monitored-users">Monitoring</button>
       <button class="nav-button active" data-tab="settings">Settings</button>
       <button class="nav-button" data-tab="about">About</button>
     </div>
@@ -120,9 +118,10 @@
                   <strong style="color: #337ab7"
                     >Show Send to Client Button</strong
                   >
-                  is enabled under
-                  <strong>Settings → Interface Settings</strong>, otherwise the
-                  Send button will not appear on Nyaa pages.
+                  is enabled on the
+                  <a href="https://nyaa.si/settings" target="_blank" style="color: #337ab7"
+                    >Settings page</a
+                  >, otherwise the Send button will not appear on Nyaa pages.
                 </p>
               </div>
             </div>
@@ -246,629 +245,23 @@
               networks, leave the credentials fields blank.
             </p>
 
-            <div
-              id="tcQbtCategoriesSection"
-              class="tc-categories-section"
-              style="
-                display: none;
-                margin-top: 18px;
-                padding-top: 18px;
-                border-top: 1px solid #333;
-              "
-            >
-              <h4 style="margin: 0 0 12px 0; color: #ddd; font-size: 14px">
-                qBittorrent Categories & Tags
-              </h4>
-              <p
-                style="
-                  color: #999;
-                  font-size: 11px;
-                  margin: 0 0 14px 0;
-                  line-height: 1.5;
-                "
-              >
-                Define categories and tags to apply when sending torrents. You
-                can set global defaults or choose per-torrent on send.
-              </p>
-
-              <div class="tc-field-group">
-                <label class="tc-label">Prompt on Send</label>
-                <div class="toggle-container" style="margin: 0">
-                  <button
-                    class="toggle-button"
-                    data-toggle="tcPromptCategoriesToggle"
-                    id="tcPromptCategoriesToggle"
-                    aria-checked="true"
-                  >
-                    <span class="toggle-indicator"></span>
-                  </button>
-                </div>
-                <p style="color: #777; font-size: 11px; margin: 4px 0 0 0">
-                  When enabled, a popup lets you pick category & tags each time
-                  you Send. When disabled, global defaults below are used
-                  automatically.
-                </p>
-              </div>
-
-              <div class="tc-field-group">
-                <label class="tc-label">Default Category</label>
-                <select id="tcDefaultCategory" class="tc-select">
-                  <option value="">(none)</option>
-                </select>
-                <p style="color: #777; font-size: 11px; margin: 4px 0 0 0">
-                  Applied when Prompt is off, or used as the pre-selected option
-                  when Prompt is on.
-                </p>
-              </div>
-
-              <div class="tc-field-group">
-                <label class="tc-label">Default Tags</label>
-                <div
-                  id="tcDefaultTagsList"
-                  class="tc-tags-checkboxes"
-                  style="
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 8px;
-                    padding: 8px;
-                    background: #1e1e1e;
-                    border-radius: 4px;
-                    min-height: 32px;
-                  "
-                >
-                  <span style="color: #666; font-size: 12px; font-style: italic"
-                    >No tags defined yet.</span
-                  >
-                </div>
-              </div>
-
-              <div
-                style="
-                  display: grid;
-                  grid-template-columns: 1fr 1fr;
-                  gap: 14px;
-                  margin-top: 16px;
-                "
-              >
-                <div>
-                  <div class="tc-field-group">
-                    <label class="tc-label">Categories</label>
-                    <div style="display: flex; gap: 6px">
-                      <input
-                        type="text"
-                        id="tcNewCategoryInput"
-                        placeholder="New category name"
-                        class="tc-input"
-                        style="flex: 1"
-                      />
-                      <button
-                        type="button"
-                        id="tcAddCategoryBtn"
-                        class="tc-btn tc-btn-save"
-                        style="padding: 6px 10px"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    id="tcCategoriesList"
-                    class="tc-manage-list"
-                    style="
-                      display: flex;
-                      flex-direction: column;
-                      gap: 4px;
-                      max-height: 140px;
-                      overflow-y: auto;
-                      padding: 8px;
-                      background: #1e1e1e;
-                      border-radius: 4px;
-                    "
-                  >
-                    <span
-                      style="color: #666; font-size: 12px; font-style: italic"
-                      >No categories defined.</span
-                    >
-                  </div>
-                </div>
-
-                <div>
-                  <div class="tc-field-group">
-                    <label class="tc-label">Tags</label>
-                    <div style="display: flex; gap: 6px">
-                      <input
-                        type="text"
-                        id="tcNewTagInput"
-                        placeholder="New tag name"
-                        class="tc-input"
-                        style="flex: 1"
-                      />
-                      <button
-                        type="button"
-                        id="tcAddTagBtn"
-                        class="tc-btn tc-btn-save"
-                        style="padding: 6px 10px"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    id="tcTagsList"
-                    class="tc-manage-list"
-                    style="
-                      display: flex;
-                      flex-direction: column;
-                      gap: 4px;
-                      max-height: 140px;
-                      overflow-y: auto;
-                      padding: 8px;
-                      background: #1e1e1e;
-                      border-radius: 4px;
-                    "
-                  >
-                    <span
-                      style="color: #666; font-size: 12px; font-style: italic"
-                      >No tags defined.</span
-                    >
-                  </div>
-                </div>
-              </div>
-
-              <div class="tc-actions" style="margin-top: 18px;">
-                <button
-                  type="button"
-                  id="tcQbtSyncBtn"
-                  class="tc-btn tc-btn-save"
-                >
-                  <span id="tcQbtSyncIcon">↻</span>
-                  Sync from qBittorrent
-                </button>
-                <span id="tcQbtSyncStatus" class="tc-status"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div id="keyword-filter" class="tab-content">
-        <div class="keyword-info">
-          <p class="keyword-explanation">
-            Keywords added here will hide torrents that contain these words in
-            their titles.
-          </p>
-          <p class="keyword-hint">
-            ⚠️ To activate filtering, enable "Enable keyword filtering" in the
-            Settings tab.
-          </p>
-        </div>
-        <div class="keyword-input-container">
-          <input
-            type="text"
-            id="keyword-input"
-            placeholder="Enter keyword to filter"
-            class="keyword-input"
-          />
-          <button id="add-keyword" class="keyword-add-button">Add</button>
-        </div>
-        <div class="keyword-actions">
-          <button id="remove-all-keywords" class="keyword-remove-all">
-            Remove All
-          </button>
-        </div>
-        <div id="keywords-list" class="keywords-list">
-          <!-- Keywords will be added here dynamically -->
-        </div>
-      </div>
-
-      <div id="monitored-users" class="tab-content">
-        <!-- Monitoring Sub-Navigation -->
-        <div class="monitoring-nav">
-          <button
-            class="monitoring-nav-button active"
-            data-monitoring-tab="user-monitoring"
-          >
-            User Monitoring
-          </button>
-          <button
-            class="monitoring-nav-button"
-            data-monitoring-tab="keyword-monitoring"
-          >
-            Keyword Monitoring
-          </button>
-        </div>
-
-        <!-- User Monitoring Content -->
-        <div id="user-monitoring" class="monitoring-tab-content active">
-          <div class="keyword-info">
-            <p class="keyword-explanation">
-              <strong>User Monitoring</strong> lets you track new uploads from
-              your favorite uploaders.
-            </p>
-            <div class="accordion">
-              <div class="accordion-header">
-                <h4 style="margin: 0; color: #337ab7; display: inline-block">
-                  How to monitor a user
-                </h4>
-                <span class="accordion-icon">+</span>
-              </div>
-              <div class="accordion-content">
-                <ol style="margin-top: 10px; padding-left: 20px">
-                  <li>
-                    Visit any user's page on Nyaa (e.g.,
-                    https://nyaa.si/user/username)
-                  </li>
-                  <li>
-                    Click the
-                    <strong style="color: #337ab7"
-                      ><i class="fa fa-bell"></i> Monitor</strong
-                    >
-                    button next to their name
-                  </li>
-                  <li>
-                    You'll receive notifications in the sidebar to the left when
-                    they upload new torrents
-                  </li>
-                </ol>
-                <p style="font-style: italic; margin-top: 10px; color: #666">
-                  The sidebar appears on the left edge of your screen and shows
-                  a notification dot when new uploads are detected.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div
-            class="monitored-users-header"
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin: 15px 0 10px 0;
-            "
-          >
-            <h3 style="margin: 0; font-size: 16px">Currently Monitored</h3>
-            <button
-              id="unmonitor-all-users"
-              class="keyword-remove-all"
-              style="margin: 0"
-            >
-              Unmonitor All
-            </button>
-          </div>
-          <div id="monitored-users-list" class="keywords-list">
-            <!-- Monitored users will be added here dynamically -->
-          </div>
-        </div>
-
-        <!-- Keyword Monitoring Content -->
-        <div id="keyword-monitoring" class="monitoring-tab-content">
-          <div class="keyword-info">
-            <p class="keyword-explanation">
-              <strong>Keyword Monitoring</strong> lets you track new uploads
-              containing specific keywords you're interested in.
-            </p>
-            <div class="accordion">
-              <div class="accordion-header">
-                <h4 style="margin: 0; color: #337ab7; display: inline-block">
-                  How to monitor keywords
-                </h4>
-                <span class="accordion-icon">+</span>
-              </div>
-              <div class="accordion-content">
-                <ol style="margin-top: 10px; padding-left: 20px">
-                  <li>
-                    Visit the homepage of Nyaa or any page that shows the
-                    torrent list (e.g., https://nyaa.si)
-                  </li>
-                  <li>
-                    Click the
-                    <strong style="color: #337ab7"
-                      ><i class="fa fa-bell"></i> Keyword Monitor</strong
-                    >
-                    button to open the monitoring popup
-                  </li>
-                  <li>
-                    Add a keyword you want to monitor by typing it into the
-                    input field and clicking Add Monitor
-                  </li>
-                  <li>
-                    You'll receive notifications in the sidebar when new
-                    torrents containing these keywords are uploaded
-                  </li>
-                </ol>
-                <p style="font-style: italic; margin-top: 10px; color: #666">
-                  The sidebar appears on the left edge of your screen and shows
-                  a notification dot when new uploads are detected.
-                </p>
-              </div>
-            </div>
-          </div>
-          <!-- Keyword input functionality removed as requested -->
-          <div
-            class="monitored-keywords-header"
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin: 15px 0 10px 0;
-            "
-          >
-            <h3 style="margin: 0; font-size: 16px">Currently Monitored</h3>
-            <button
-              id="unmonitor-all-keywords"
-              class="keyword-remove-all"
-              style="margin: 0"
-            >
-              Unmonitor All
-            </button>
-          </div>
-          <div id="monitored-keywords-list" class="keywords-list">
-            <!-- Monitored keywords will be added here dynamically -->
           </div>
         </div>
       </div>
 
       <div id="settings" class="tab-content active">
-        <!-- Download Settings -->
-        <div class="settings-category">
-          <h3 class="category-title">Download Settings</h3>
-          <div class="setting-item">
-            <span>Use display name as filename</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="displayNameToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Combine downloads as ZIP</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="zipToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Interface Settings -->
-        <div class="settings-category">
-          <h3 class="category-title">Interface Settings</h3>
-          <div class="setting-item">
-            <span>Show Button Controls</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="showButtonsToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Show Quick Search Button</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="showQuickFilterToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Show Magnet Copy Buttons</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showMagnetButtonsToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Show Send to Client Button</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="showSendButtonsToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Show Monitor Buttons</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showMonitorButtonsToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Filter Settings (Add this before Additional Features) -->
-        <div class="settings-category">
-          <h3 class="category-title">Filter Settings</h3>
-          <div class="setting-item">
-            <span>Show filter notifications</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showFilterNotificationsToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Hide dead torrents (0 S/L)</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="hideDeadTorrentsToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Enable keyword filtering</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="keywordFilterToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Filter by file size</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="fileSizeFilterToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div
-            class="setting-item size-range-container"
-            style="margin-top: 8px"
-          >
-            <select
-              id="sizeRangeSelect"
-              style="width: 100%; padding: 5px; border-radius: 4px"
-              disabled
+        <div
+          class="keyword-info"
+          style="margin-bottom: 16px; padding: 12px; background: #1e2a3a; border-radius: 6px; border-left: 3px solid #337ab7"
+        >
+          <p style="margin: 0; font-size: 13px; color: #aaa; line-height: 1.6">
+            Most settings and monitoring are available on the
+            <a href="https://nyaa.si/settings" target="_blank" style="color: #337ab7"
+              >Settings page</a
             >
-              <option value="less_than_256mb">Less than 256 MB</option>
-              <option value="less_than_512mb">Less than 512 MB</option>
-              <option value="less_than_768mb">Less than 768 MB</option>
-              <option value="less_than_1gb">Less than 1 GiB</option>
-              <option value="greater_than_1gb">Greater than 1 GiB</option>
-              <option value="greater_than_5gb">Greater than 5 GiB</option>
-              <option value="greater_than_10gb">Greater than 10 GiB</option>
-              <option value="greater_than_20gb">Greater than 20 GiB</option>
-            </select>
-          </div>
-
-          <div class="setting-item">
-            <span>Filter completed downloads</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="completedDownloadsFilterToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item completed-downloads-filter-container">
-            <select id="completedDownloadsOperatorSelect" disabled>
-              <option value="gt">Greater than</option>
-              <option value="eq">Equal to</option>
-              <option value="lt">Less than</option>
-            </select>
-            <input
-              type="number"
-              id="completedDownloadsValueInput"
-              min="0"
-              step="1"
-              placeholder="Count"
-              disabled
-            />
-          </div>
-        </div>
-
-        <!-- View Page Settings -->
-        <div class="settings-category">
-          <h3 class="category-title">Torrent View Page Settings</h3>
-          <div class="setting-item">
-            <span>Hide Comments</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="hideCommentsToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-          <div class="setting-item">
-            <span>Improved File List</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="improvedFileListToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- AnimeTosho Settings -->
-        <div class="settings-category">
-          <h3 class="category-title">AnimeTosho</h3>
-          <div class="setting-item">
-            <span>Show Animetosho Links</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="showATLinksToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>New AnimeTosho Domain</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="useNewATDomainToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Show AnimeTosho Comments</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="showATCommentsToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Show Screenshots Section</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showATScreenshotsSectionToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Show FileInfo Section</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showATFileInfoSectionToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Show Downloads Section</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showATAttachmentsSectionToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
+            in the Nyaa navbar. This tab only contains API keys and credentials
+            that must be configured here.
+          </p>
         </div>
 
         <!-- ameNZB Settings -->
@@ -936,221 +329,84 @@
               <span id="ameNZBTestStatus" class="api-key-test-status"></span>
             </div>
           </div>
-
-          <div class="setting-item">
-            <span>Display ameNZB Links</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showAmeNZBLinksToggle"
-                disabled
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-          <div class="setting-item">
-            <span>Display ameNZB Section</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showAmeNZBSectionToggle"
-                disabled
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-item amenzb-quota-row">
-            <span style="color: #999">API Requests Today</span>
-            <span id="ameNZBRequestCount" style="color: #999; font-size: 13px"
-              >0 / 10,000</span
-            >
-          </div>
-
-          <div
-            class="setting-item"
-            style="flex-direction: column; align-items: flex-start; gap: 4px"
-          >
-            <span style="color: #999; font-size: 12px"
-              >⚠ API calls must come from your pinned IP address (set on ameNZB
-              in Account Settings → IP Security). Requests from other IPs are
-              rejected.</span
-            >
-          </div>
         </div>
 
-        <!-- nekoBT Settings -->
+        <!-- TMDB Settings -->
         <div class="settings-category">
-          <h3 class="category-title">nekoBT</h3>
-          <div class="setting-item">
-            <span>Display nekoBT Links</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="showNekoBTLinksToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-          <div class="setting-item">
-            <span>Display nekoBT Section</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showNekoBTSectionToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-          <div class="setting-item">
-            <span>Full Language Names</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showNekoBTFullLangNamesToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
+          <h3 class="category-title">TMDB</h3>
           <div
             class="setting-item"
-            style="flex-direction: column; align-items: flex-start; gap: 4px"
+            style="flex-direction: column; align-items: stretch; gap: 8px"
           >
+            <span>API Key</span>
             <span style="color: #999; font-size: 12px"
-              >⚠ Rate limits are enforced but not publicly disclosed. If
-              exceeded, requests will silently fail until the limit
-              resets.</span
+              >Used for anime title autocomplete in Quick Search. Create a free
+              key at
+              <a
+                href="https://www.themoviedb.org/settings/api"
+                target="_blank"
+                style="color: #337ab7"
+                >themoviedb.org/settings/api</a
+              >.</span
             >
-          </div>
-        </div>
-
-        <!-- Tsukihime Settings -->
-        <div class="settings-category">
-          <h3 class="category-title">Tsukihime</h3>
-          <div class="setting-item">
-            <span>Display Tsukihime Links</span>
-            <div class="toggle-container">
+            <div class="api-key-wrapper">
+              <input
+                type="password"
+                id="tmdbApiKey"
+                placeholder="Enter your TMDB API key"
+                class="api-key-input"
+              />
               <button
-                class="toggle-button"
-                data-toggle="showTsukihimeLinksToggle"
+                type="button"
+                id="tmdbApiKeyToggle"
+                class="api-key-eye"
+                title="Show/hide API key"
               >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-          <div class="setting-item">
-            <span>Display Tsukihime Section</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="showTsukihimeSectionToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-
-          <div
-            class="setting-item"
-            style="flex-direction: column; align-items: flex-start; gap: 4px"
-          >
-            <span style="color: #999; font-size: 12px"
-              >⚠ Tsukihime API rate limits are currently unknown. Excessive use
-              may trigger rate limiting; if that happens, requests may fail
-              until access is restored.</span
-            >
-          </div>
-        </div>
-
-        <!-- Additional Features -->
-        <div class="settings-category">
-          <h3 class="category-title">Additional Features</h3>
-          <div class="setting-item">
-            <span>Screenshot Preview</span>
-            <div class="toggle-container">
-              <button
-                class="toggle-button"
-                data-toggle="screenshotPreviewToggle"
-              >
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
-          </div>
-          <p class="setting-feature-description">
-            Hover over a torrent link to preview its screenshot images in a
-            floating popup. Images cycle automatically while you keep hovering.
-          </p>
-
-          <div class="setting-item screenshot-preview-options">
-            <p class="sp-disclaimer" id="screenshotPreviewDisclaimer">
-              ⚠ Each hovered link sends a request to Nyaa to fetch its images.
-              Setting the hover delay to 0 sends a request for every link your
-              mouse passes over. Excessive requests may result in rate limiting.
-              Use at your own risk.
-            </p>
-            <div class="sp-options-grid">
-              <div class="sp-option">
-                <label for="screenshotPreviewHoverDelay" class="sp-label"
-                  >Hover delay (seconds)</label
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="15"
+                  height="15"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
                 >
-                <input
-                  type="number"
-                  id="screenshotPreviewHoverDelay"
-                  min="0"
-                  step="0.5"
-                  class="sp-input"
-                  disabled
-                />
-              </div>
-              <div class="sp-option">
-                <label for="screenshotPreviewSlideDelay" class="sp-label"
-                  >Image change interval (seconds)</label
-                >
-                <input
-                  type="number"
-                  id="screenshotPreviewSlideDelay"
-                  min="0.1"
-                  step="0.5"
-                  class="sp-input"
-                  disabled
-                />
-              </div>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Display Best Release (Seadex)</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="showSeaDexToggle">
-                <span class="toggle-indicator"></span>
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
               </button>
             </div>
-          </div>
-
-          <div class="setting-item">
-            <span>Add Changelog Link to Navbar</span>
-            <div class="toggle-container">
+            <div class="api-key-actions">
               <button
-                class="toggle-button"
-                data-toggle="showChangelogNavToggle"
+                type="button"
+                id="tmdbApiKeyTest"
+                class="api-key-action-btn api-key-test-btn"
               >
-                <span class="toggle-indicator"></span>
+                Test
               </button>
+              <button
+                type="button"
+                id="tmdbApiKeyClear"
+                class="api-key-action-btn api-key-clear-btn"
+              >
+                Clear
+              </button>
+              <span id="tmdbTestStatus" class="api-key-test-status"></span>
             </div>
           </div>
-
-          <div class="setting-item">
-            <span>Show Changelogs Popup</span>
-            <div class="toggle-container">
-              <button class="toggle-button" data-toggle="changelogToggle">
-                <span class="toggle-indicator"></span>
-              </button>
-            </div>
+          <div
+            class="setting-item"
+            style="flex-direction: column; align-items: flex-start; gap: 4px"
+          >
+            <span style="color: #999; font-size: 12px"
+              >Alternative release titles are resolved via TheXEM using TVDB and
+              AniDB mappings.</span
+            >
           </div>
         </div>
+
       </div>
 
       <div id="about" class="tab-content">

@@ -1,104 +1,287 @@
-// Function to load user preferences from Firefox's storage
-// This includes settings for filename format and ZIP packaging
-function loadStoredPreferences() {
-  return new Promise((resolve) => {
-    // browser.storage.sync.get allows saving settings across different devices
-    // if the user is signed into Firefox
-    browser.storage.sync.get(
-      {
-        // Default values if no settings are found:
-        // - useDisplayName: whether to use anime titles for filenames
-        // - useZip: whether to combine downloads into a ZIP file
-        // - showButtons: whether to show button controls
-        // - showATLinks: whether to show Animetosho links
-        // - showMagnetButtons: whether to show magnet copy buttons
-        // - showQuickFilter: whether to show the Quick Filter button
-        // - hideDeadTorrents: whether to hide dead torrents
-        // - keywords: array of keywords for filtering
-        // - keywordFilterEnabled: whether keyword filtering is enabled
-        // - showFilterNotifications: whether to show filter notifications
-        // - hideComments: whether to hide comments on view pages
-        // - improvedFileList: whether to show file counts on view page file lists
-        // - fileSizeFilterEnabled: whether to enable file size filtering
-        // - fileSizeRange: the range for file size filtering
-        // - completedDownloadsFilterEnabled: torrent list completed downloads filter
-        // - completedDownloadsFilterOperator: gt, eq, or lt
-        // - completedDownloadsFilterValue: threshold for completed downloads filter
-        // - useNewATDomain: whether to use animetosho.xyz instead of animetosho.org
-        // - showATComments: whether to show AnimeTosho comments on view pages
-        // - showATScreenshotsSection: whether to show AnimeTosho screenshots tab on view pages
-        // - showATFileInfoSection: whether to show AnimeTosho FileInfo tab on view pages
-        // - showATAttachmentsSection: whether to show AnimeTosho downloads tab on view pages
-        // - ameNZBApiKey: the user's ameNZB API key
-        // - showAmeNZBLinks: whether to show ameNZB links on supported view pages
-        useDisplayName: true,
-        useZip: true,
-        showButtons: true,
-        showATLinks: true,
-        useNewATDomain: true,
-        showATComments: false,
-        showATScreenshotsSection: true,
-        showATFileInfoSection: true,
-        showATAttachmentsSection: true,
-        ameNZBApiKey: "",
-        showAmeNZBLinks: false,
-        showAmeNZBSection: false,
-        showNekoBTLinks: false,
-        showNekoBTSection: false,
-        showNekoBTFullLangNames: true,
-        showTsukihimeLinks: false,
-        showTsukihimeSection: false,
-        showSeaDex: false,
-        screenshotPreviewEnabled: false,
-        screenshotPreviewHoverDelay: 3,
-        screenshotPreviewSlideDelay: 3,
-        showMagnetButtons: true,
-        showSendButtons: true,
-        showQuickFilter: true,
-        showMonitorButtons: true,
-        hideDeadTorrents: false,
-        keywords: [],
-        keywordFilterEnabled: false,
-        showFilterNotifications: true,
-        hideComments: false,
-        improvedFileList: true,
-        fileSizeFilterEnabled: false,
-        fileSizeRange: "less_than_1gb",
-        completedDownloadsFilterEnabled: false,
-        completedDownloadsFilterOperator: "gt",
-        completedDownloadsFilterValue: 0,
-        showChangelogNav: true,
-        monitoredUsers: [],
-        monitoredKeywords: [],
-        torrentClient: "qbittorrent",
-        torrentClientUrl: "",
-        qbtUsername: "",
-        qbtPassword: "",
-        transmissionUsername: "",
-        transmissionPassword: "",
-        delugePassword: "",
-        qbtCategories: [],
-        qbtTags: [],
-        qbtDefaultCategory: "",
-        qbtDefaultTags: [],
-        qbtPromptOnSend: true,
-        qbtLastCategory: null,
-        qbtLastTags: null,
-      },
-      (items) => {
-        resolve(items);
-      },
-    );
+﻿// Secrets and large lists stay in browser.storage.local (no 8KB/item sync quota,
+// and credentials are not uploaded to the user's Browser account).
+// Booleans/toggles remain in browser.storage.sync so they follow the user.
+const LOCAL_PREF_KEYS = new Set([
+  "ameNZBApiKey",
+  "tmdbApiKey",
+  "torrentClientUrl",
+  "qbtUsername",
+  "qbtPassword",
+  "transmissionUsername",
+  "transmissionPassword",
+  "delugePassword",
+  "keywords",
+  "monitoredUsers",
+  "monitoredKeywords",
+  "qbtCategories",
+  "qbtTags",
+  "qbtDefaultCategory",
+  "qbtDefaultTags",
+  "qbtLastCategory",
+  "qbtLastTags",
+  "quickSearchState",
+  "ameNZBRequestCount",
+  "ameNZBRequestDate",
+]);
+
+const PREF_DEFAULTS = {
+  useDisplayName: true,
+  useZip: true,
+  showButtons: true,
+  showATLinks: true,
+  useNewATDomain: true,
+  showATComments: false,
+  showATScreenshotsSection: true,
+  showATFileInfoSection: true,
+  showATAttachmentsSection: true,
+  ameNZBApiKey: "",
+  tmdbApiKey: "",
+  showAmeNZBLinks: false,
+  showAmeNZBSection: false,
+  ameNZBRequestCount: 0,
+  ameNZBRequestDate: "",
+  showNekoBTLinks: false,
+  showNekoBTSection: false,
+  showNekoBTFullLangNames: true,
+  showTsukihimeLinks: false,
+  showTsukihimeSection: false,
+  showSeaDex: false,
+  screenshotPreviewEnabled: false,
+  screenshotPreviewHoverDelay: 3,
+  screenshotPreviewSlideDelay: 3,
+  showMagnetButtons: true,
+  showSendButtons: true,
+  showQuickFilter: true,
+  showMonitorButtons: true,
+  hideDeadTorrents: false,
+  keywords: [],
+  keywordFilterEnabled: false,
+  showFilterNotifications: true,
+  hideComments: false,
+  improvedFileList: true,
+  fileSizeFilterEnabled: false,
+  fileSizeMinBytes: 500 * 1024 * 1024,
+  fileSizeMaxBytes: 4 * 1024 * 1024 * 1024,
+  fileSizeRange: "less_than_1gb",
+  completedDownloadsFilterEnabled: false,
+  completedDownloadsFilterOperator: "gt",
+  completedDownloadsFilterValue: 0,
+  showChangelogNav: true,
+  monitoredUsers: [],
+  monitoredKeywords: [],
+  torrentClient: "qbittorrent",
+  torrentClientUrl: "",
+  qbtUsername: "",
+  qbtPassword: "",
+  transmissionUsername: "",
+  transmissionPassword: "",
+  delugePassword: "",
+  qbtCategories: [],
+  qbtTags: [],
+  qbtDefaultCategory: "",
+  qbtDefaultTags: [],
+  qbtPromptOnSend: true,
+  qbtLastCategory: null,
+  qbtLastTags: null,
+};
+
+function notifyStorageSaveError(area, err) {
+  const message = err?.message || String(err);
+  console.error(`Nyaa Enhancer: failed to save to storage.${area}:`, message);
+  if (typeof showNotification === "function") {
+    showNotification(`Failed to save settings: ${message}`, false);
+  }
+}
+
+function areaGet(area, query) {
+  const empty =
+    query == null ||
+    (Array.isArray(query) && query.length === 0) ||
+    (!Array.isArray(query) && Object.keys(query).length === 0);
+  if (empty) return Promise.resolve({});
+  return new Promise((resolve, reject) => {
+    browser.storage[area].get(query, (items) => {
+      const err = browser.runtime.lastError;
+      if (err) {
+        console.error(
+          `Nyaa Enhancer: failed to read storage.${area}:`,
+          err.message,
+        );
+        reject(new Error(err.message));
+        return;
+      }
+      resolve(items || {});
+    });
   });
 }
 
-// Function to save individual preferences to Firefox's storage
-// key: the setting name (useDisplayName or useZip)
-// value: the boolean value of the setting (true/false)
-function savePreference(key, value) {
-  browser.storage.sync.set({
-    [key]: value,
+function areaSet(area, items) {
+  if (!items || !Object.keys(items).length) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    browser.storage[area].set(items, () => {
+      const err = browser.runtime.lastError;
+      if (err) {
+        notifyStorageSaveError(area, err);
+        reject(new Error(err.message));
+        return;
+      }
+      resolve();
+    });
   });
+}
+
+function areaRemove(area, keys) {
+  if (!keys?.length) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    browser.storage[area].remove(keys, () => {
+      const err = browser.runtime.lastError;
+      if (err) {
+        console.error(
+          `Nyaa Enhancer: failed to remove from storage.${area}:`,
+          err.message,
+        );
+        reject(new Error(err.message));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function splitPrefPayload(items) {
+  const localItems = {};
+  const syncItems = {};
+  for (const [key, value] of Object.entries(items || {})) {
+    if (LOCAL_PREF_KEYS.has(key)) localItems[key] = value;
+    else syncItems[key] = value;
+  }
+  return { localItems, syncItems };
+}
+
+function splitPrefQuery(keysOrDefaults) {
+  const isArray = Array.isArray(keysOrDefaults);
+  const keys = isArray ? keysOrDefaults : Object.keys(keysOrDefaults || {});
+  if (isArray) {
+    return {
+      isArray: true,
+      localQuery: keys.filter((key) => LOCAL_PREF_KEYS.has(key)),
+      syncQuery: keys.filter((key) => !LOCAL_PREF_KEYS.has(key)),
+    };
+  }
+  const localQuery = {};
+  const syncQuery = {};
+  for (const key of keys) {
+    if (LOCAL_PREF_KEYS.has(key)) localQuery[key] = keysOrDefaults[key];
+    else syncQuery[key] = keysOrDefaults[key];
+  }
+  return { isArray: false, localQuery, syncQuery };
+}
+
+let localPrefMigrationPromise = null;
+
+function migrateLocalKeysFromSync() {
+  if (localPrefMigrationPromise) return localPrefMigrationPromise;
+  localPrefMigrationPromise = (async () => {
+    try {
+      const { __neLocalMigrated: migrated } = await areaGet("local", {
+        __neLocalMigrated: false,
+      });
+      if (migrated) return;
+
+      const syncItems = await areaGet("sync", [...LOCAL_PREF_KEYS]);
+      const toLocal = {};
+      const toRemove = [];
+      for (const key of LOCAL_PREF_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(syncItems, key)) {
+          toLocal[key] = syncItems[key];
+          toRemove.push(key);
+        }
+      }
+      if (toRemove.length) {
+        await areaSet("local", toLocal);
+        await areaRemove("sync", toRemove);
+      }
+      await areaSet("local", { __neLocalMigrated: true });
+    } catch (err) {
+      console.error("Nyaa Enhancer: storage migration failed:", err);
+      localPrefMigrationPromise = null;
+    }
+  })();
+  return localPrefMigrationPromise;
+}
+
+async function getPreferencesAsync(keysOrDefaults) {
+  await migrateLocalKeysFromSync();
+  const { localQuery, syncQuery } = splitPrefQuery(keysOrDefaults);
+  const [syncItems, localItems] = await Promise.all([
+    areaGet("sync", syncQuery).catch(() =>
+      Array.isArray(syncQuery) ? {} : syncQuery,
+    ),
+    areaGet("local", localQuery).catch(() =>
+      Array.isArray(localQuery) ? {} : localQuery,
+    ),
+  ]);
+  return { ...syncItems, ...localItems };
+}
+
+async function savePreferencesAsync(items) {
+  await migrateLocalKeysFromSync();
+  const { localItems, syncItems } = splitPrefPayload(items);
+  await Promise.all([areaSet("sync", syncItems), areaSet("local", localItems)]);
+}
+
+function getPreferences(keysOrDefaults, callback) {
+  const promise = getPreferencesAsync(keysOrDefaults);
+  if (typeof callback === "function") {
+    promise.then(callback, () => {
+      const fallback =
+        keysOrDefaults &&
+        typeof keysOrDefaults === "object" &&
+        !Array.isArray(keysOrDefaults)
+          ? keysOrDefaults
+          : {};
+      callback(fallback);
+    });
+    return;
+  }
+  return promise;
+}
+
+function savePreferences(items, callback) {
+  const promise = savePreferencesAsync(items);
+  if (typeof callback === "function") {
+    promise.then(() => callback(), () => callback());
+  }
+  return promise;
+}
+
+function loadStoredPreferences() {
+  return getPreferencesAsync(PREF_DEFAULTS);
+}
+
+function savePreference(key, value) {
+  return savePreferences({ [key]: value });
+}
+
+function getNyaaOrigin() {
+  return window.location.origin;
+}
+
+function toCurrentNyaaUrl(urlOrPath) {
+  try {
+    const parsed = new URL(urlOrPath, getNyaaOrigin());
+    return `${getNyaaOrigin()}${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return urlOrPath;
+  }
+}
+
+function getKeywordSearchUrl(keyword) {
+  return `${getNyaaOrigin()}/?f=0&c=0_0&q=${encodeURIComponent(keyword)}`;
+}
+
+function getTorrentViewUrl(torrentId) {
+  return `${getNyaaOrigin()}/view/${torrentId}`;
 }
 
 // Main function that creates and adds all UI elements to the page
@@ -107,6 +290,7 @@ async function addCopyButton() {
 
   // If buttons are disabled, don't add the button container
   if (!prefs.showButtons) return;
+  if (document.querySelector(".button-container.nyaa-enhancer-toolbar")) return;
 
   const container = document.querySelector(".table-responsive");
   if (!container) return;
@@ -114,63 +298,124 @@ async function addCopyButton() {
   // Create a container for all our buttons and controls
   // This will be placed above the torrent table
   const buttonContainer = document.createElement("div");
-  buttonContainer.className = "button-container";
-  buttonContainer.style.marginBottom = "10px";
-  buttonContainer.style.display = "flex";
-  buttonContainer.style.alignItems = "center";
-  buttonContainer.style.fontFamily = "Segoe UI, Tahoma, sans-serif";
-  buttonContainer.style.fontWeight = "500";
+  buttonContainer.className = "button-container nyaa-enhancer-toolbar";
+
+  const toolbarMain = document.createElement("div");
+  toolbarMain.className = "nyaa-enhancer-toolbar__main";
+
+  const copyGroup = document.createElement("div");
+  copyGroup.className =
+    "nyaa-enhancer-toolbar__group nyaa-enhancer-toolbar__group--split";
+  copyGroup.dataset.group = "copy";
+
+  const downloadGroup = document.createElement("div");
+  downloadGroup.className =
+    "nyaa-enhancer-toolbar__group nyaa-enhancer-toolbar__group--split";
+  downloadGroup.dataset.group = "download";
+
+  const sendGroup = document.createElement("div");
+  sendGroup.className =
+    "nyaa-enhancer-toolbar__group nyaa-enhancer-toolbar__group--split";
+  sendGroup.dataset.group = "send";
+
+  const sendSelectedButton = document.createElement("button");
+  sendSelectedButton.className = "copy-magnets-button send-batch-button";
+  sendSelectedButton.type = "button";
+  sendSelectedButton.title = "Send Selected";
+  sendSelectedButton.setAttribute("aria-label", "Send Selected");
+  sendSelectedButton.innerHTML =
+    '<i class="fa fa-cloud-upload" aria-hidden="true"></i><span class="ne-btn-label">Send</span>';
+  sendSelectedButton.addEventListener("click", sendSelectedTorrents);
+
+  const sendAllButton = document.createElement("button");
+  sendAllButton.className = "copy-magnets-button send-batch-button";
+  sendAllButton.type = "button";
+  sendAllButton.title = "Send All";
+  sendAllButton.setAttribute("aria-label", "Send All");
+  sendAllButton.innerHTML =
+    '<i class="fa fa-paper-plane ne-btn-icon-compact" aria-hidden="true"></i><span class="ne-btn-label">All</span>';
+  sendAllButton.addEventListener("click", sendAllVisibleTorrents);
+  if (!prefs.showSendButtons) {
+    sendGroup.classList.add("nyaa-enhancer-toolbar__btn--hidden");
+  }
+
+  const selectionGroup = document.createElement("div");
+  selectionGroup.className = "nyaa-enhancer-toolbar__group";
+  selectionGroup.dataset.group = "selection";
+
+  const toolbarAside = document.createElement("div");
+  toolbarAside.className = "nyaa-enhancer-toolbar__aside";
 
   // Create the "Copy Selected" button
   // This copies magnet links of checked items
   const copyButton = document.createElement("button");
   copyButton.className = "copy-magnets-button";
-  copyButton.textContent = "Copy Selected";
+  copyButton.type = "button";
+  copyButton.title = "Copy Selected";
+  copyButton.setAttribute("aria-label", "Copy Selected");
+  copyButton.innerHTML =
+    '<i class="fa fa-copy" aria-hidden="true"></i><span class="ne-btn-label">Copy</span>';
   copyButton.addEventListener("click", copySelectedMagnets);
 
   // Create the "Copy All" button
   // This copies all magnet links regardless of selection
   const copyAllButton = document.createElement("button");
   copyAllButton.className = "copy-magnets-button";
-  copyAllButton.style.marginLeft = "10px";
-  copyAllButton.textContent = "Copy All";
+  copyAllButton.type = "button";
+  copyAllButton.title = "Copy All";
+  copyAllButton.setAttribute("aria-label", "Copy All");
+  copyAllButton.innerHTML =
+    '<i class="fa fa-files-o ne-btn-icon-compact" aria-hidden="true"></i><span class="ne-btn-label">All</span>';
   copyAllButton.addEventListener("click", copyAllMagnets);
 
   // Create the "Download Selected" button
   // This downloads .torrent files for checked items
   const downloadButton = document.createElement("button");
   downloadButton.className = "copy-magnets-button download-button";
-  downloadButton.style.marginLeft = "10px";
-  downloadButton.textContent = "Download Selected";
+  downloadButton.type = "button";
+  downloadButton.title = "Download Selected";
+  downloadButton.setAttribute("aria-label", "Download Selected");
+  downloadButton.innerHTML =
+    '<i class="fa fa-download" aria-hidden="true"></i><span class="ne-btn-label">Download</span>';
   downloadButton.addEventListener("click", downloadSelectedTorrents);
 
   // Create the "Download All" button
   // This downloads all .torrent files on the page
   const downloadAllButton = document.createElement("button");
   downloadAllButton.className = "copy-magnets-button download-button";
-  downloadAllButton.textContent = "Download All";
+  downloadAllButton.type = "button";
+  downloadAllButton.title = "Download All";
+  downloadAllButton.setAttribute("aria-label", "Download All");
+  downloadAllButton.innerHTML =
+    '<i class="fa fa-cloud-download ne-btn-icon-compact" aria-hidden="true"></i><span class="ne-btn-label">All</span>';
   downloadAllButton.addEventListener("click", downloadAllTorrents);
 
-  // Add before the "Clear Selection" button
   const invertButton = document.createElement("button");
   invertButton.className = "copy-magnets-button";
-  invertButton.style.marginLeft = "10px";
-  invertButton.innerHTML = '<i class="fa fa-exchange"></i> Invert Selection';
+  invertButton.type = "button";
+  invertButton.title = "Invert Selection";
+  invertButton.setAttribute("aria-label", "Invert Selection");
+  invertButton.innerHTML =
+    '<i class="fa fa-exchange" aria-hidden="true"></i><span class="ne-btn-label">Invert</span>';
   invertButton.addEventListener("click", invertSelection);
 
   // Create the "Clear Selection" button
   // This unchecks all checkboxes
   const clearButton = document.createElement("button");
   clearButton.className = "copy-magnets-button clear-button";
-  clearButton.style.marginLeft = "10px";
-  clearButton.textContent = "Clear Selection";
+  clearButton.type = "button";
+  clearButton.title = "Clear Selection";
+  clearButton.setAttribute("aria-label", "Clear Selection");
+  clearButton.innerHTML =
+    '<i class="fa fa-times-circle" aria-hidden="true"></i><span class="ne-btn-label">Clear</span>';
   clearButton.addEventListener("click", clearSelection);
 
   // Create a counter to show how many items are selected
   const selectionCounter = document.createElement("span");
   selectionCounter.className = "magnet-selection-counter";
-  selectionCounter.style.marginLeft = "15px";
-  selectionCounter.textContent = "0 selected";
+  selectionCounter.setAttribute("role", "status");
+  selectionCounter.setAttribute("aria-live", "polite");
+  updateSelectionCounterDisplay(selectionCounter, 0);
 
   // Add a listener to update the counter whenever checkboxes change
   document.addEventListener("change", (e) => {
@@ -178,46 +423,64 @@ async function addCopyButton() {
       const checkedBoxes = document.querySelectorAll(
         ".magnet-checkbox:checked",
       ).length;
-      selectionCounter.textContent = `${checkedBoxes} selected`;
+      updateSelectionCounterDisplay(selectionCounter, checkedBoxes);
     }
   });
 
   // Create Quick Filter button
   const quickFilterButton = document.createElement("button");
   quickFilterButton.className = "copy-magnets-button quick-filter-button";
-  quickFilterButton.style.display = prefs.showQuickFilter ? "block" : "none";
-  quickFilterButton.innerHTML = '<i class="fa fa-bolt"></i> Quick Search';
+  quickFilterButton.type = "button";
+  quickFilterButton.title = "Quick Search";
+  if (!prefs.showQuickFilter) {
+    quickFilterButton.classList.add("nyaa-enhancer-toolbar__btn--hidden");
+  }
+  quickFilterButton.innerHTML =
+    '<i class="fa fa-bolt" aria-hidden="true"></i><span class="ne-btn-label">Quick Search</span>';
   quickFilterButton.addEventListener("click", showQuickFilterPopup);
 
   // Create Keyword Select button
   const keywordSelectButton = document.createElement("button");
   keywordSelectButton.className = "copy-magnets-button keyword-select-button";
-  keywordSelectButton.style.marginRight = "10px";
+  keywordSelectButton.type = "button";
+  keywordSelectButton.title = "Keyword Select";
+  keywordSelectButton.setAttribute("aria-label", "Keyword Select");
   keywordSelectButton.innerHTML =
-    '<i class="fa fa-check-square"></i> Keyword Select';
+    '<i class="fa fa-check-square" aria-hidden="true"></i><span class="ne-btn-label">Keywords</span>';
   keywordSelectButton.addEventListener("click", showKeywordSelectPopup);
 
   // Create Keyword Monitor button
   const keywordMonitorButton = document.createElement("button");
   keywordMonitorButton.className = "copy-magnets-button keyword-monitor-button";
-  keywordMonitorButton.style.marginRight = "10px";
-  keywordMonitorButton.style.display = prefs.showMonitorButtons
-    ? "inline-block"
-    : "none";
-  keywordMonitorButton.innerHTML = '<i class="fa fa-bell"></i> Keyword Monitor';
+  keywordMonitorButton.type = "button";
+  keywordMonitorButton.title = "Keyword Monitor";
+  keywordMonitorButton.setAttribute("aria-label", "Keyword Monitor");
+  if (!prefs.showMonitorButtons) {
+    keywordMonitorButton.classList.add("nyaa-enhancer-toolbar__btn--hidden");
+  }
+  keywordMonitorButton.innerHTML =
+    '<i class="fa fa-bell" aria-hidden="true"></i><span class="ne-btn-label">Monitor</span>';
   keywordMonitorButton.addEventListener("click", showKeywordMonitorPopup);
 
-  buttonContainer.appendChild(copyButton);
-  buttonContainer.appendChild(copyAllButton);
-  buttonContainer.appendChild(downloadButton);
-  buttonContainer.appendChild(downloadAllButton);
-  buttonContainer.appendChild(invertButton);
-  buttonContainer.appendChild(keywordSelectButton);
-  buttonContainer.appendChild(keywordMonitorButton);
-  buttonContainer.appendChild(clearButton);
-  buttonContainer.appendChild(selectionCounter);
-  buttonContainer.appendChild(quickFilterButton);
+  copyGroup.append(copyButton, copyAllButton);
+  downloadGroup.append(downloadButton, downloadAllButton);
+  sendGroup.append(sendSelectedButton, sendAllButton);
+  selectionGroup.append(
+    invertButton,
+    keywordSelectButton,
+    keywordMonitorButton,
+    clearButton,
+  );
+  toolbarMain.append(copyGroup, downloadGroup, sendGroup, selectionGroup);
+  toolbarAside.append(selectionCounter, quickFilterButton);
+  buttonContainer.append(toolbarMain, toolbarAside);
   container.parentNode.insertBefore(buttonContainer, container);
+}
+
+function updateSelectionCounterDisplay(counter, count) {
+  if (!counter) return;
+  counter.textContent = `${count} selected`;
+  counter.classList.toggle("magnet-selection-counter--active", count > 0);
 }
 
 function getInfoHashFromMagnet(href) {
@@ -294,10 +557,7 @@ function areLinkActionsOrdered(linkCell) {
 
   let anchor = magnetLink;
   for (const action of actions) {
-    if (
-      getNextLinkActionSibling(anchor) !== action ||
-      !hasSpaceBefore(action)
-    ) {
+    if (getNextLinkActionSibling(anchor) !== action || !hasSpaceBefore(action)) {
       return false;
     }
     anchor = action;
@@ -397,9 +657,7 @@ function removeLegacyTorrentListActionColumns() {
     container.remove();
   });
   document
-    .querySelectorAll(
-      ".link-action-copy.magnet-button, .link-action-send.magnet-button",
-    )
+    .querySelectorAll(".link-action-copy.magnet-button, .link-action-send.magnet-button")
     .forEach((el) => el.remove());
 }
 
@@ -446,16 +704,22 @@ function createMagnetCopyButton(magnetLink, { extraStyles = {} } = {}) {
   return magnetButton;
 }
 
-function updateTorrentRowLinkActions(row, prefs) {
+function updateTorrentRowLinkActions(row, prefs, { deferAnimetosho = false } = {}) {
   const linkCell = getTorrentLinkCell(row);
   if (!linkCell) return;
 
   const magnetLink = linkCell.querySelector('a[href^="magnet:"]');
   if (!magnetLink) return;
 
-  const showAtLink = prefs.showATLinks && isAnimetoshoListCategoryRow(row);
+  const showAtLink =
+    prefs.showATLinks && isAnimetoshoListCategoryRow(row);
+  const needsAtSlot = prefs.showATLinks;
+  const resolveAtNow = showAtLink && !deferAnimetosho;
   const needsAny =
-    prefs.showMagnetButtons || prefs.showSendButtons || showAtLink;
+    prefs.showMagnetButtons ||
+    prefs.showSendButtons ||
+    showAtLink ||
+    needsAtSlot;
 
   linkCell.querySelector(".torrent-link-actions")?.remove();
 
@@ -502,9 +766,13 @@ function updateTorrentRowLinkActions(row, prefs) {
     changed = true;
   }
 
-  if (showAtLink) {
+  if (resolveAtNow) {
     const infoHash = getTorrentInfoHashFromRow(row);
     if (infoHash) {
+      if (atLink?.classList.contains("link-action-at-placeholder")) {
+        removeLinkAction(atLink);
+        atLink = null;
+      }
       if (!atLink) {
         atLink = createAnimetoshoListAnchor(infoHash, prefs.useNewATDomain);
         linkCell.appendChild(atLink);
@@ -512,6 +780,16 @@ function updateTorrentRowLinkActions(row, prefs) {
       }
     } else if (atLink) {
       removeLinkAction(atLink);
+      changed = true;
+    }
+  } else if (needsAtSlot || (showAtLink && deferAnimetosho)) {
+    if (atLink && !atLink.classList.contains("link-action-at-placeholder")) {
+      removeLinkAction(atLink);
+      atLink = null;
+    }
+    if (!atLink) {
+      atLink = createAnimetoshoListPlaceholder();
+      linkCell.appendChild(atLink);
       changed = true;
     }
   } else if (atLink) {
@@ -528,8 +806,47 @@ async function updateAllTorrentListLinkActions(overrides = {}) {
   const prefs = { ...(await loadStoredPreferences()), ...overrides };
   removeLegacyTorrentListActionColumns();
   document.querySelectorAll("table.torrent-list tbody tr").forEach((row) => {
+    if (!isNyaaTorrentDataRow(row)) return;
     updateTorrentRowLinkActions(row, prefs);
   });
+}
+
+let neTorrentCheckboxLastChecked = null;
+
+function addCheckboxToTorrentRow(row, prefs) {
+  if (!prefs.showButtons || !isNyaaTorrentDataRow(row)) return;
+  if (row.querySelector(".magnet-checkbox")) return;
+
+  const checkboxCell = document.createElement("td");
+  checkboxCell.className = "text-center";
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.className = "magnet-checkbox";
+
+  checkbox.addEventListener("click", function (e) {
+    if (!neTorrentCheckboxLastChecked) {
+      neTorrentCheckboxLastChecked = this;
+      return;
+    }
+
+    if (e.shiftKey) {
+      const checkboxes = Array.from(
+        document.querySelectorAll(".magnet-checkbox"),
+      ).filter((box) => !isTorrentRowHidden(box.closest("tr")));
+      const start = checkboxes.indexOf(this);
+      const end = checkboxes.indexOf(neTorrentCheckboxLastChecked);
+      if (start !== -1 && end !== -1) {
+        checkboxes
+          .slice(Math.min(start, end), Math.max(start, end) + 1)
+          .forEach((box) => (box.checked = this.checked));
+      }
+    }
+
+    neTorrentCheckboxLastChecked = this;
+  });
+
+  checkboxCell.appendChild(checkbox);
+  row.appendChild(checkboxCell);
 }
 
 // Function to add a checkbox column to the torrent table
@@ -552,44 +869,8 @@ async function addCheckboxColumn() {
     headerRow.appendChild(checkboxHeader);
   }
 
-  // Keep track of last checked checkbox
-  let lastChecked = null;
-
-  // Add cells only if they don't exist
-  const rows = document.querySelectorAll("table.torrent-list tbody tr");
-  rows.forEach((row) => {
-    // Add checkbox cell only if buttons are enabled and doesn't exist
-    if (prefs.showButtons && !row.querySelector(".magnet-checkbox")) {
-      const checkboxCell = document.createElement("td");
-      checkboxCell.className = "text-center";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "magnet-checkbox";
-
-      checkbox.addEventListener("click", function (e) {
-        if (!lastChecked) {
-          lastChecked = this;
-          return;
-        }
-
-        if (e.shiftKey) {
-          const checkboxes = Array.from(
-            document.querySelectorAll(".magnet-checkbox"),
-          );
-          const start = checkboxes.indexOf(this);
-          const end = checkboxes.indexOf(lastChecked);
-
-          checkboxes
-            .slice(Math.min(start, end), Math.max(start, end) + 1)
-            .forEach((checkbox) => (checkbox.checked = this.checked));
-        }
-
-        lastChecked = this;
-      });
-
-      checkboxCell.appendChild(checkbox);
-      row.appendChild(checkboxCell);
-    }
+  document.querySelectorAll("table.torrent-list tbody tr").forEach((row) => {
+    addCheckboxToTorrentRow(row, prefs);
   });
 }
 
@@ -633,19 +914,7 @@ function showNotification(message, isSuccess = true) {
 // Function to copy magnet links from selected torrents
 // This only copies links for torrents that have their checkbox checked
 function copySelectedMagnets() {
-  const selectedMagnets = [];
-  const rows = document.querySelectorAll("table.torrent-list tbody tr");
-
-  // Loop through all rows and collect magnet links from checked rows
-  rows.forEach((row) => {
-    const checkbox = row.querySelector(".magnet-checkbox");
-    if (checkbox && checkbox.checked) {
-      const magnetLink = row.querySelector('a[href^="magnet:"]');
-      if (magnetLink) {
-        selectedMagnets.push(magnetLink.href);
-      }
-    }
-  });
+  const selectedMagnets = getSelectedVisibleMagnetUrls();
 
   // If we found any magnet links, copy them to clipboard
   if (selectedMagnets.length > 0) {
@@ -663,7 +932,7 @@ function copySelectedMagnets() {
         showNotification("Failed to copy magnet links", false);
       });
   } else {
-    showNotification("No magnet links selected!", false);
+    showNotification("No visible torrents selected!", false);
   }
 }
 
@@ -710,7 +979,7 @@ function updateSelectionCounter(selectionCounter) {
   const checkedBoxes = document.querySelectorAll(
     ".magnet-checkbox:checked",
   ).length;
-  selectionCounter.textContent = `${checkedBoxes} selected`;
+  updateSelectionCounterDisplay(selectionCounter, checkedBoxes);
 }
 
 // Function to clear all selected checkboxes
@@ -731,7 +1000,7 @@ function clearSelection() {
   });
 
   // Reset the selection counter
-  selectionCounter.textContent = "0 selected";
+  updateSelectionCounterDisplay(selectionCounter, 0);
   showNotification("Selection cleared", true);
 }
 
@@ -752,6 +1021,52 @@ function getTitleFromRow(row) {
 function isNyaaTorrentListPage() {
   const path = window.location.pathname;
   return path === "/" || path === "" || path.startsWith("/user/");
+}
+
+function isNyaaTorrentDataRow(row) {
+  return !!row?.querySelector?.('a[href^="magnet:"], a[href$=".torrent"]');
+}
+
+function isTorrentRowHidden(row) {
+  return !row || row.style.display === "none";
+}
+
+function getVisibleTorrentDataRows() {
+  return Array.from(
+    document.querySelectorAll("table.torrent-list tbody tr"),
+  ).filter((row) => isNyaaTorrentDataRow(row) && !isTorrentRowHidden(row));
+}
+
+function getSelectedVisibleTorrentRows() {
+  return getVisibleTorrentDataRows().filter((row) => {
+    const checkbox = row.querySelector(".magnet-checkbox");
+    return checkbox && checkbox.checked;
+  });
+}
+
+function getMagnetUrlFromRow(row) {
+  return row.querySelector('a[href^="magnet:"]')?.href || "";
+}
+
+function getVisibleMagnetUrls() {
+  return getVisibleTorrentDataRows()
+    .map(getMagnetUrlFromRow)
+    .filter(Boolean);
+}
+
+function getSelectedVisibleMagnetUrls() {
+  return getSelectedVisibleTorrentRows()
+    .map(getMagnetUrlFromRow)
+    .filter(Boolean);
+}
+
+function getTorrentIdFromRow(row) {
+  const links = row.querySelectorAll('a[href*="/view/"]');
+  for (const link of links) {
+    const match = (link.getAttribute("href") || "").match(/\/view\/(\d+)/);
+    if (match) return match[1];
+  }
+  return null;
 }
 
 function getCompletedDownloadsFromRow(row) {
@@ -789,20 +1104,14 @@ function failsCompletedDownloadsFilter(prefs, count) {
 // Downloads are combined into a ZIP if the ZIP option is enabled
 async function downloadSelectedTorrents() {
   const selectedTorrents = [];
-  const rows = document.querySelectorAll("table.torrent-list tbody tr");
-
-  // Collect information about selected torrents
-  rows.forEach((row) => {
-    const checkbox = row.querySelector(".magnet-checkbox");
-    if (checkbox && checkbox.checked) {
-      const torrentLink = row.querySelector('a[href$=".torrent"]');
-      const title = getTitleFromRow(row);
-      if (torrentLink && title) {
-        selectedTorrents.push({
-          url: torrentLink.href,
-          filename: title,
-        });
-      }
+  getSelectedVisibleTorrentRows().forEach((row) => {
+    const torrentLink = row.querySelector('a[href$=".torrent"]');
+    const title = getTitleFromRow(row);
+    if (torrentLink && title) {
+      selectedTorrents.push({
+        url: torrentLink.href,
+        filename: title,
+      });
     }
   });
 
@@ -810,7 +1119,7 @@ async function downloadSelectedTorrents() {
   if (selectedTorrents.length > 0) {
     await downloadTorrents(selectedTorrents, "selected_torrents.zip");
   } else {
-    showNotification("No torrents selected!", false);
+    showNotification("No visible torrents selected!", false);
   }
 }
 
@@ -871,18 +1180,29 @@ function sanitizeFilename(filename) {
 // Function to download torrents and package them into a ZIP file
 // torrents: Array of torrent objects with url and filename
 // zipName: Name of the output ZIP file
+function dismissProgressNotification(notification, delayMs = 3000) {
+  setTimeout(() => {
+    notification.classList.remove("show");
+    setTimeout(() => notification.remove(), 300);
+  }, delayMs);
+}
+
+function setProgressNotificationStatus(notification, kind) {
+  if (kind === "error") notification.style.backgroundColor = "#f44336";
+  else if (kind === "warning") notification.style.backgroundColor = "#ff9800";
+  else notification.style.backgroundColor = "#4CAF50";
+}
+
 async function downloadTorrentsAsZip(torrents, zipName) {
+  const progressNotification = createProgressNotification();
   try {
-    // Initialize ZIP creation and progress tracking
     const zip = new JSZip();
     let completedDownloads = 0;
-    const progressNotification = createProgressNotification();
+    const failedNames = [];
     const prefs = await loadStoredPreferences();
 
-    // Update initial progress
     progressNotification.textContent = `Progress: 0/${torrents.length} files`;
 
-    // Helper function to convert Blob to Base64
     const blobToBase64 = (blob) => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -894,38 +1214,40 @@ async function downloadTorrentsAsZip(torrents, zipName) {
 
     for (const torrent of torrents) {
       try {
-        // Add delay between requests (500ms)
         if (completedDownloads > 0) {
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
 
-        // Download the torrent file with explicit response type
         const response = await fetch(torrent.url);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // Get the blob with explicit type
         const blob = await response.blob();
         const base64Data = await blobToBase64(blob);
 
-        // Use appropriate filename based on stored preference and sanitize it
         const filename = prefs.useDisplayName
           ? sanitizeFilename(torrent.filename) + ".torrent"
           : torrent.url.split("/").pop();
 
-        // Add file to ZIP using base64
         zip.file(filename, base64Data.split(",")[1], { base64: true });
 
-        // Update progress notification
         completedDownloads++;
         progressNotification.textContent = `Progress: ${completedDownloads}/${torrents.length} files`;
       } catch (error) {
+        failedNames.push(torrent.filename);
         console.error(`Failed to fetch torrent: ${torrent.filename}`, error);
       }
     }
 
-    // Generate and download the ZIP file
+    if (completedDownloads === 0) {
+      setProgressNotificationStatus(progressNotification, "error");
+      progressNotification.textContent =
+        "ZIP failed: none of the torrent files could be downloaded.";
+      dismissProgressNotification(progressNotification);
+      return;
+    }
+
     progressNotification.textContent = "Generating ZIP file...";
 
     const zipBlob = await zip.generateAsync({
@@ -934,7 +1256,6 @@ async function downloadTorrentsAsZip(torrents, zipName) {
       compressionOptions: { level: 5 },
     });
 
-    // Trigger ZIP download
     const zipUrl = URL.createObjectURL(zipBlob);
     const link = document.createElement("a");
     link.href = zipUrl;
@@ -944,15 +1265,19 @@ async function downloadTorrentsAsZip(torrents, zipName) {
     document.body.removeChild(link);
     URL.revokeObjectURL(zipUrl);
 
-    // Show completion notification
-    progressNotification.textContent = "ZIP file download complete!";
-    setTimeout(() => {
-      progressNotification.classList.remove("show");
-      setTimeout(() => progressNotification.remove(), 300);
-    }, 3000);
+    if (failedNames.length) {
+      setProgressNotificationStatus(progressNotification, "warning");
+      progressNotification.textContent = `ZIP downloaded with ${failedNames.length} failed file${failedNames.length === 1 ? "" : "s"} (${completedDownloads}/${torrents.length} ok).`;
+    } else {
+      progressNotification.textContent = "ZIP file download complete!";
+    }
+    dismissProgressNotification(progressNotification);
   } catch (error) {
     console.error("Download failed:", error);
-    showNotification("Failed to create ZIP file: " + error.message, false);
+    setProgressNotificationStatus(progressNotification, "error");
+    progressNotification.textContent =
+      "Failed to create ZIP file: " + error.message;
+    dismissProgressNotification(progressNotification);
   }
 }
 
@@ -963,24 +1288,21 @@ async function downloadIndividualTorrents(torrents) {
   const prefs = await loadStoredPreferences();
   const progressNotification = createProgressNotification();
   let completedDownloads = 0;
+  const failedNames = [];
 
-  // Show progress notification
   progressNotification.textContent = `Progress: 0/${torrents.length} files`;
 
-  // Download files sequentially to avoid overwhelming the browser
   for (const torrent of torrents) {
     try {
-      // Fetch the torrent file
       const response = await fetch(torrent.url);
       if (!response.ok)
         throw new Error(`HTTP error! status: ${response.status}`);
       const blob = await response.blob();
 
       const filename = prefs.useDisplayName
-        ? torrent.filename + ".torrent"
+        ? sanitizeFilename(torrent.filename) + ".torrent"
         : torrent.url.split("/").pop();
 
-      // Create temporary link element to trigger download
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = filename;
@@ -988,23 +1310,27 @@ async function downloadIndividualTorrents(torrents) {
       link.click();
       document.body.removeChild(link);
 
-      // Clean up the URL object to prevent memory leaks
       URL.revokeObjectURL(link.href);
 
-      // Update progress notification
       completedDownloads++;
       progressNotification.textContent = `Progress: ${completedDownloads}/${torrents.length} files`;
     } catch (error) {
+      failedNames.push(torrent.filename);
       console.error(`Failed to download torrent: ${torrent.filename}`, error);
     }
   }
 
-  // Show completion message and remove notification after delay
-  progressNotification.textContent = "Download complete!";
-  setTimeout(() => {
-    progressNotification.classList.remove("show");
-    setTimeout(() => progressNotification.remove(), 300);
-  }, 3000);
+  if (completedDownloads === 0) {
+    setProgressNotificationStatus(progressNotification, "error");
+    progressNotification.textContent =
+      "Download failed: none of the torrent files could be downloaded.";
+  } else if (failedNames.length) {
+    setProgressNotificationStatus(progressNotification, "warning");
+    progressNotification.textContent = `Downloaded ${completedDownloads}/${torrents.length} files (${failedNames.length} failed).`;
+  } else {
+    progressNotification.textContent = "Download complete!";
+  }
+  dismissProgressNotification(progressNotification);
 }
 
 // Main download function that handles both individual and ZIP downloads
@@ -1031,7 +1357,7 @@ async function showChangelog() {
 
   // Get stored version and dismissed states
   const { lastVersion, changelogDismissed, tempDismissed } =
-    await browser.storage.sync.get([
+    await getPreferences([
       "lastVersion",
       "changelogDismissed",
       "tempDismissed",
@@ -1039,7 +1365,7 @@ async function showChangelog() {
 
   // Reset tempDismissed if version is different
   if (currentVersion !== lastVersion) {
-    await browser.storage.sync.set({ tempDismissed: false });
+    await savePreferences({ tempDismissed: false });
   }
 
   // Show if:
@@ -1057,7 +1383,11 @@ async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added qBittorrent category and tag support when sending torrents, configure defaults in settings or pick per torrent via the "Prompt on Send" popup
+        • Added a dedicated Settings page on Nyaa (<a href="/settings">/settings</a>, also in the navbar)<br>
+        • Added an on-page Filters panel above the torrent table for dead torrents, keyword hiding, file size, and completed downloads<br>
+        • Replaced the preset file-size dropdown with a min/max range slider (and matching units)<br>
+        • Added a Show more button under torrent lists to load the next page in place, skipping pages that are fully hidden by filters
+        <div class="changelog-more">Plus more. <a href="/changelog">See the full changelog</a> for everything that's new.</div>
       </div>
       <div class="changelog-actions">
         <button class="changelog-button okay">Okay</button>
@@ -1074,7 +1404,7 @@ async function showChangelog() {
     container
       .querySelector(".changelog-button.dont-show")
       .addEventListener("click", async () => {
-        await browser.storage.sync.set({
+        await savePreferences({
           lastVersion: currentVersion,
           changelogDismissed: true,
         });
@@ -1086,7 +1416,7 @@ async function showChangelog() {
     container
       .querySelector(".changelog-button.okay")
       .addEventListener("click", async () => {
-        await browser.storage.sync.set({
+        await savePreferences({
           lastVersion: currentVersion,
           tempDismissed: true,
         });
@@ -1095,7 +1425,7 @@ async function showChangelog() {
       });
 
     // Store new version
-    await browser.storage.sync.set({ lastVersion: currentVersion });
+    await savePreferences({ lastVersion: currentVersion });
   }
 }
 
@@ -1114,7 +1444,10 @@ async function handleSettingChange(setting, value) {
         ".keyword-monitor-button",
       );
       if (keywordMonitorBtn) {
-        keywordMonitorBtn.style.display = value ? "inline-block" : "none";
+        keywordMonitorBtn.classList.toggle(
+          "nyaa-enhancer-toolbar__btn--hidden",
+          !value,
+        );
       }
 
       // Update monitor button on user pages
@@ -1130,7 +1463,8 @@ async function handleSettingChange(setting, value) {
       break;
     case "showButtons":
       if (value) {
-        initializeExtension(false);
+        addCopyButton();
+        addCheckboxColumn();
       } else {
         // Remove button container if it exists
         document.querySelector(".button-container")?.remove();
@@ -1203,10 +1537,10 @@ async function handleSettingChange(setting, value) {
         if (!value) {
           quickFilterButton.classList.add("hiding");
           setTimeout(() => {
-            quickFilterButton.style.display = "none";
+            quickFilterButton.classList.add("nyaa-enhancer-toolbar__btn--hidden");
           }, 300);
         } else {
-          quickFilterButton.style.display = "block";
+          quickFilterButton.classList.remove("nyaa-enhancer-toolbar__btn--hidden");
           // Force firefox to process the display change
           quickFilterButton.offsetHeight;
           quickFilterButton.classList.remove("hiding");
@@ -1228,53 +1562,10 @@ async function handleSettingChange(setting, value) {
       }
       break;
     case "hideDeadTorrents":
-      // Don't reset display state when disabling dead torrents filter
-      const prefs = await loadStoredPreferences();
-      const rows = document.querySelectorAll("table.torrent-list tbody tr");
-
-      // Apply all active filters in one pass to prevent flicker
-      rows.forEach((row) => {
-        const title = getTitleFromRow(row);
-        const sizeCell = row.querySelector("td:nth-of-type(4)");
-        const seedersCell = row.querySelector("td:nth-of-type(6)");
-        const leechersCell = row.querySelector("td:nth-of-type(7)");
-
-        const seeders = seedersCell ? parseInt(seedersCell.textContent) : 0;
-        const leechers = leechersCell ? parseInt(leechersCell.textContent) : 0;
-        const sizeInBytes = sizeCell ? convertToBytes(sizeCell.textContent) : 0;
-
-        // Check all active filters at once
-        const isDead = value && seeders === 0 && leechers === 0;
-        const wrongSize =
-          prefs.fileSizeFilterEnabled &&
-          !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
-        const wrongDownloads = failsCompletedDownloadsFilter(
-          prefs,
-          getCompletedDownloadsFromRow(row),
-        );
-        const containsKeyword =
-          prefs.keywordFilterEnabled &&
-          prefs.keywords.some((keyword) =>
-            title?.toLowerCase().includes(keyword.toLowerCase()),
-          );
-
-        // Only update display if needed
-        const shouldHide =
-          isDead || wrongSize || wrongDownloads || containsKeyword;
-        if (shouldHide) {
-          row.style.display = "none";
-        } else {
-          row.style.display = "";
-        }
-      });
-
-      // Show notification only if dead torrents filter was disabled
-      if (!value && prefs.showFilterNotifications) {
-        showNotification("Dead torrents filter disabled", true);
-      }
+      await applyAllTorrentFilters({ notify: true });
       break;
     case "keywordFilterEnabled":
-      filterByKeywords(true); // Pass true to force notification
+      await applyAllTorrentFilters({ notify: true });
       break;
     case "showFilterNotifications":
       // Implementation for showFilterNotifications setting
@@ -1293,19 +1584,21 @@ async function handleSettingChange(setting, value) {
       }
       break;
     case "fileSizeFilterEnabled":
-      filterByFileSize();
+      await applyAllTorrentFilters({ notify: true });
       break;
-    case "fileSizeRange":
-      filterByFileSize();
+    case "fileSizeMinBytes":
+      await applyAllTorrentFilters({ notify: false });
+      break;
+    case "fileSizeMaxBytes":
+      await applyAllTorrentFilters({ notify: true });
       break;
     case "completedDownloadsFilterEnabled":
     case "completedDownloadsFilterOperator":
     case "completedDownloadsFilterValue":
-      filterByCompletedDownloads();
+      await applyAllTorrentFilters({ notify: true });
       break;
     case "showChangelogNav":
       if (!value) {
-        // Find and remove the changelog nav item
         const navList = document.querySelector(".nav.navbar-nav");
         const changelogItem = Array.from(
           navList?.querySelectorAll("li") || [],
@@ -1314,8 +1607,13 @@ async function handleSettingChange(setting, value) {
           changelogItem.remove();
         }
       } else {
-        // Add the changelog nav item
         addChangelogNavItem();
+      }
+      break;
+    case "torrentClient":
+      if (window.location.pathname === "/settings") {
+        const qbtSection = document.getElementById("ne-settings-qbt");
+        if (qbtSection) qbtSection.hidden = value !== "qbittorrent";
       }
       break;
     case "useNewATDomain":
@@ -1361,6 +1659,9 @@ async function handleSettingChange(setting, value) {
       removeAmeNZBRow();
       addAmeNZBToViewPage();
       updateAmeNZBDescriptionSection();
+      break;
+    case "tmdbApiKey":
+      clearQuickSearchAnimeCaches();
       break;
     case "showNekoBTLinks":
       if (value) {
@@ -1413,6 +1714,9 @@ async function handleSettingChange(setting, value) {
       );
       break;
     case "showSendButtons":
+      document
+        .querySelector('.nyaa-enhancer-toolbar__group[data-group="send"]')
+        ?.classList.toggle("nyaa-enhancer-toolbar__btn--hidden", !value);
       if (window.location.pathname.startsWith("/view/")) {
         if (value) {
           addSendButtonToViewPage();
@@ -1424,12 +1728,39 @@ async function handleSettingChange(setting, value) {
       }
       break;
   }
+
+  const filterPanelSettings = [
+    "hideDeadTorrents",
+    "keywordFilterEnabled",
+    "fileSizeFilterEnabled",
+    "fileSizeMinBytes",
+    "fileSizeMaxBytes",
+    "completedDownloadsFilterEnabled",
+    "completedDownloadsFilterOperator",
+    "completedDownloadsFilterValue",
+    "keywords",
+  ];
+  if (filterPanelSettings.includes(setting)) {
+    await syncFiltersPanelUI(setting, value);
+  }
 }
 
 const animetoshoViewLinkCache = new Map();
 
 function getAnimetoshoDomain(useNewATDomain) {
   return useNewATDomain ? "animetosho.xyz" : "animetosho.org";
+}
+
+function getAnimetoshoStorageDomain(useNewATDomain) {
+  return useNewATDomain ? "storage.animetosho.xyz" : "storage.animetosho.org";
+}
+
+function normalizeATScreenshotStorageUrl(url, useNewATDomain) {
+  if (!url || !url.includes("/sframes/")) return url;
+  const storageDomain = getAnimetoshoStorageDomain(useNewATDomain);
+  return url
+    .replace(/.*\/sframes\//, `https://${storageDomain}/sframes/`)
+    .replace(/&amp;/g, "&");
 }
 
 function normalizeAnimetoshoViewUrl(url, atDomain) {
@@ -1515,21 +1846,31 @@ function createAnimetoshoListAnchor(infoHash, useNewATDomain) {
   return atLink;
 }
 
+function createAnimetoshoListPlaceholder() {
+  const placeholder = document.createElement("span");
+  placeholder.className = "link-action-at link-action-at-placeholder";
+  placeholder.setAttribute("aria-hidden", "true");
+  placeholder.innerHTML = '<i class="fa fa-fw fa-external-link"></i>';
+  return placeholder;
+}
+
 async function patchTorrentListLinkActionsForNewRows() {
   const prefs = await loadStoredPreferences();
   document.querySelectorAll("table.torrent-list tbody tr").forEach((row) => {
+    if (!isNyaaTorrentDataRow(row)) return;
     const linkCell = getTorrentLinkCell(row);
     if (!linkCell) return;
 
-    const showAtLink = prefs.showATLinks && isAnimetoshoListCategoryRow(row);
+    const showAtLink =
+      prefs.showATLinks && isAnimetoshoListCategoryRow(row);
     const needsCopy =
       prefs.showMagnetButtons && !linkCell.querySelector(".link-action-copy");
     const needsSend =
       prefs.showSendButtons && !linkCell.querySelector(".link-action-send");
     const needsAt =
-      showAtLink &&
-      getTorrentInfoHashFromRow(row) &&
-      !linkCell.querySelector(".link-action-at");
+      prefs.showATLinks &&
+      !linkCell.querySelector(".link-action-at") &&
+      (showAtLink ? !!getTorrentInfoHashFromRow(row) : true);
 
     if (needsCopy || needsSend || needsAt || !areLinkActionsOrdered(linkCell)) {
       updateTorrentRowLinkActions(row, prefs);
@@ -1593,20 +1934,22 @@ async function refreshAnimetoshoViewPageLink() {
 
 async function refreshAnimetoshoListLinks() {
   const prefs = await loadStoredPreferences();
-  document.querySelectorAll(".link-action-at").forEach((link) => {
-    const row = link.closest("tr");
-    const infoHash = row ? getTorrentInfoHashFromRow(row) : "";
-    if (!infoHash) return;
-    link.style.visibility = "hidden";
-    resolveAnimetoshoViewLink(infoHash, prefs.useNewATDomain).then(
-      (viewUrl) => {
-        if (viewUrl) {
-          link.href = viewUrl;
-          link.style.visibility = "";
-        }
-      },
-    );
-  });
+  document
+    .querySelectorAll(".link-action-at:not(.link-action-at-placeholder)")
+    .forEach((link) => {
+      const row = link.closest("tr");
+      const infoHash = row ? getTorrentInfoHashFromRow(row) : "";
+      if (!infoHash) return;
+      link.style.visibility = "hidden";
+      resolveAnimetoshoViewLink(infoHash, prefs.useNewATDomain).then(
+        (viewUrl) => {
+          if (viewUrl) {
+            link.href = viewUrl;
+            link.style.visibility = "";
+          }
+        },
+      );
+    });
 }
 
 // Function to add Animetosho link to torrent view pages
@@ -2702,7 +3045,7 @@ function setAnimetoshoTabStatus(body, message) {
   body.appendChild(status);
 }
 
-function collectATScreenshotsFromRoot(root) {
+function collectATScreenshotsFromRoot(root, useNewATDomain) {
   const screenshots = [];
 
   root.querySelectorAll("a.screenthumb").forEach((a) => {
@@ -2711,16 +3054,8 @@ function collectATScreenshotsFromRoot(root) {
     const img = a.querySelector("img");
     const src = img?.getAttribute("src") || href;
 
-    const storageUrl = href.includes("/sframes/")
-      ? href
-          .replace(/.*\/sframes\//, "https://storage.animetosho.org/sframes/")
-          .replace(/&amp;/g, "&")
-      : href;
-    const thumbnailUrl = src.includes("/sframes/")
-      ? src
-          .replace(/.*\/sframes\//, "https://storage.animetosho.org/sframes/")
-          .replace(/&amp;/g, "&")
-      : src;
+    const storageUrl = normalizeATScreenshotStorageUrl(href, useNewATDomain);
+    const thumbnailUrl = normalizeATScreenshotStorageUrl(src, useNewATDomain);
 
     screenshots.push({
       url: storageUrl,
@@ -2732,7 +3067,7 @@ function collectATScreenshotsFromRoot(root) {
   return screenshots;
 }
 
-function extractATScreenshotsFromHtml(html) {
+function extractATScreenshotsFromHtml(html, useNewATDomain) {
   try {
     const doc = new DOMParser().parseFromString(html, "text/html");
 
@@ -2743,11 +3078,11 @@ function extractATScreenshotsFromHtml(html) {
         /^Screenshots$/i.test(normalizeATAttachmentLabel(th.textContent))
       ) {
         const td = row.querySelector("td");
-        return td ? collectATScreenshotsFromRoot(td) : [];
+        return td ? collectATScreenshotsFromRoot(td, useNewATDomain) : [];
       }
     }
 
-    return collectATScreenshotsFromRoot(doc);
+    return collectATScreenshotsFromRoot(doc, useNewATDomain);
   } catch (error) {
     console.error("Error parsing AnimeTosho screenshots:", error);
     return [];
@@ -2888,7 +3223,7 @@ function extractATAttachmentsFromHtml(html) {
 
 function getATScreenshotDisplayUrl(url) {
   if (!url) return url;
-  if (url.includes("/sframes/") || url.includes("storage.animetosho.org")) {
+  if (url.includes("/sframes/") || url.includes("storage.animetosho.")) {
     return url.replace(/\.png$/i, ".jpg");
   }
   return url;
@@ -3450,7 +3785,10 @@ async function refreshAnimetoshoEpisodeFeatures(prefs, options = {}) {
       );
       if (fetchId !== atEpisodeFetchId) return;
 
-      const screenshots = extractATScreenshotsFromHtml(screenshotHtml);
+      const screenshots = extractATScreenshotsFromHtml(
+        screenshotHtml,
+        record.useNewATDomain,
+      );
       if (!screenshots.length) {
         setAnimetoshoTabStatus(
           screenshotBody,
@@ -3834,7 +4172,7 @@ async function addAmeNZBToViewPage() {
 // Increment the ameNZB daily request counter, resetting at midnight UTC
 function incrementAmeNZBRequestCount() {
   return new Promise((resolve) => {
-    browser.storage.sync.get(
+    getPreferences(
       { ameNZBRequestCount: 0, ameNZBRequestDate: "" },
       (items) => {
         const todayUTC = new Date().toISOString().slice(0, 10);
@@ -3842,7 +4180,7 @@ function incrementAmeNZBRequestCount() {
           items.ameNZBRequestDate === todayUTC
             ? items.ameNZBRequestCount + 1
             : 1;
-        browser.storage.sync.set(
+        savePreferences(
           { ameNZBRequestCount: count, ameNZBRequestDate: todayUTC },
           resolve,
         );
@@ -3861,6 +4199,18 @@ function fetchUrlViaBackground(url) {
   return new Promise((resolve) => {
     browser.runtime.sendMessage({ type: "fetchUrl", url }, resolve);
   });
+}
+
+async function fetchJsonViaBackground(url) {
+  const result = await fetchUrlViaBackground(url);
+  if (!result?.ok) {
+    return { ok: false, error: result?.error || "Request failed" };
+  }
+  try {
+    return { ok: true, data: JSON.parse(result.text) };
+  } catch {
+    return { ok: false, error: "Invalid JSON response" };
+  }
 }
 
 function isNekoBTSupportedViewPage() {
@@ -5042,11 +5392,14 @@ async function seaDexFetch(url) {
   });
 }
 
-async function applySeaDexToListPage() {
-  const rows = document.querySelectorAll("table.torrent-list tbody tr");
+async function applySeaDexToListPage(targetRows = null) {
+  const rows = targetRows
+    ? Array.from(targetRows)
+    : Array.from(document.querySelectorAll("table.torrent-list tbody tr"));
   const infoHashList = [];
 
   rows.forEach((row) => {
+    if (!isNyaaTorrentDataRow(row)) return;
     const magnetLink = row.querySelector('a[href^="magnet:"]');
     const infoHash = magnetLink ? getInfoHashFromMagnet(magnetLink.href) : "";
     infoHashList.push({ element: row, infoHash });
@@ -5055,10 +5408,12 @@ async function applySeaDexToListPage() {
   const validEntries = infoHashList.filter(({ infoHash }) => infoHash);
   if (!validEntries.length) return;
 
-  // Clear previous highlights on visible rows before re-fetching
-  infoHashList.forEach(({ element }) => {
-    element.classList.remove("seadex-best", "seadex-best-alt");
-  });
+  // Clear previous highlights on the rows we're updating before re-fetching
+  if (!targetRows) {
+    infoHashList.forEach(({ element }) => {
+      element.classList.remove("seadex-best", "seadex-best-alt");
+    });
+  }
 
   const filterParam = validEntries
     .map(({ infoHash }) => `infoHash="${infoHash}"`)
@@ -5689,7 +6044,7 @@ function invertSelection() {
     const checkedBoxes = document.querySelectorAll(
       ".magnet-checkbox:checked",
     ).length;
-    selectionCounter.textContent = `${checkedBoxes} selected`;
+    updateSelectionCounterDisplay(selectionCounter, checkedBoxes);
   }
 
   showNotification(
@@ -5730,315 +6085,1141 @@ function filterByLast30Days() {
   );
 }
 
+const QS_FILE_SIZE_SLIDER_MAX_MB = 51200;
+const QS_FILE_SIZE_ABSOLUTE_MAX_BYTES = QS_FILE_SIZE_SLIDER_MAX_MB * 1024 * 1024;
+const QS_FILE_SIZE_UNIT_MULTIPLIERS = {
+  B: 1,
+  KiB: 1024,
+  MiB: 1024 * 1024,
+  GiB: 1024 * 1024 * 1024,
+  TiB: 1024 * 1024 * 1024 * 1024,
+};
+
+function formatQuickSearchFileSizeValue(value, unit) {
+  if (unit === "B") {
+    return String(Math.round(value));
+  }
+  if (value >= 100) {
+    return String(Math.round(value));
+  }
+  if (value >= 10) {
+    return String(Math.round(value * 10) / 10);
+  }
+  return String(Math.round(value * 100) / 100);
+}
+
+function bytesToQuickSearchDisplay(bytes, preferredUnit) {
+  if (
+    preferredUnit &&
+    QS_FILE_SIZE_UNIT_MULTIPLIERS[preferredUnit] !== undefined
+  ) {
+    const value = bytes / QS_FILE_SIZE_UNIT_MULTIPLIERS[preferredUnit];
+    return {
+      value: formatQuickSearchFileSizeValue(value, preferredUnit),
+      unit: preferredUnit,
+    };
+  }
+
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let unitIndex = 0;
+  let value = bytes;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  const unit = units[unitIndex];
+  return {
+    value: formatQuickSearchFileSizeValue(value, unit),
+    unit,
+  };
+}
+
+function quickSearchDisplayToBytes(value, unit) {
+  const num = parseFloat(value);
+  const multiplier = QS_FILE_SIZE_UNIT_MULTIPLIERS[unit];
+  if (!Number.isFinite(num) || num < 0 || multiplier === undefined) {
+    return 0;
+  }
+  return Math.round(num * multiplier);
+}
+
+function clampQuickSearchFileSizeBounds(minBytes, maxBytes) {
+  let min = Math.max(0, Math.min(minBytes, QS_FILE_SIZE_ABSOLUTE_MAX_BYTES));
+  let max = Math.max(0, Math.min(maxBytes, QS_FILE_SIZE_ABSOLUTE_MAX_BYTES));
+  if (min > max) {
+    if (minBytes > maxBytes) {
+      min = max;
+    } else {
+      max = min;
+    }
+  }
+  return { min, max };
+}
+
+function formatQuickSearchFileSizeSummary(minBytes, maxBytes) {
+  if (minBytes <= 0 && maxBytes >= QS_FILE_SIZE_ABSOLUTE_MAX_BYTES) {
+    return "Any size";
+  }
+  return `${formatNekoBTBytes(minBytes)} – ${formatNekoBTBytes(maxBytes)}`;
+}
+
+function updateQuickSearchFileSizeFill() {
+  const minSlider = document.getElementById("qs-file-size-min-slider");
+  const maxSlider = document.getElementById("qs-file-size-max-slider");
+  const fill = document.getElementById("qs-file-size-fill");
+  if (!minSlider || !maxSlider || !fill) return;
+
+  const minVal = parseInt(minSlider.value, 10);
+  const maxVal = parseInt(maxSlider.value, 10);
+  const minPercent = (minVal / QS_FILE_SIZE_SLIDER_MAX_MB) * 100;
+  const maxPercent = (maxVal / QS_FILE_SIZE_SLIDER_MAX_MB) * 100;
+  fill.style.left = `${minPercent}%`;
+  fill.style.width = `${maxPercent - minPercent}%`;
+}
+
+function syncQuickSearchFileSizeControls(minBytes, maxBytes) {
+  const bounds = clampQuickSearchFileSizeBounds(minBytes, maxBytes);
+  const minUnitSelect = document.getElementById("qs-file-size-min-unit");
+  const maxUnitSelect = document.getElementById("qs-file-size-max-unit");
+  const minDisp = bytesToQuickSearchDisplay(bounds.min, minUnitSelect?.value);
+  const maxDisp = bytesToQuickSearchDisplay(bounds.max, maxUnitSelect?.value);
+
+  if (minUnitSelect) minUnitSelect.value = minDisp.unit;
+  if (maxUnitSelect) maxUnitSelect.value = maxDisp.unit;
+
+  document.getElementById("qs-file-size-min-input").value = String(
+    minDisp.value,
+  );
+  document.getElementById("qs-file-size-max-input").value = String(
+    maxDisp.value,
+  );
+  document.getElementById("qs-file-size-min-slider").value = String(
+    Math.round(bounds.min / (1024 * 1024)),
+  );
+  document.getElementById("qs-file-size-max-slider").value = String(
+    Math.round(bounds.max / (1024 * 1024)),
+  );
+  document.getElementById("qs-file-size-summary").textContent =
+    formatQuickSearchFileSizeSummary(bounds.min, bounds.max);
+  updateQuickSearchFileSizeFill();
+  return bounds;
+}
+
+function readQuickSearchFileSizeBounds() {
+  const minBytes = quickSearchDisplayToBytes(
+    document.getElementById("qs-file-size-min-input").value,
+    document.getElementById("qs-file-size-min-unit").value,
+  );
+  const maxBytes = quickSearchDisplayToBytes(
+    document.getElementById("qs-file-size-max-input").value,
+    document.getElementById("qs-file-size-max-unit").value,
+  );
+  return clampQuickSearchFileSizeBounds(minBytes, maxBytes);
+}
+
+function isQuickSearchFileSizeFilterActive(enabled, minBytes, maxBytes) {
+  return (
+    enabled &&
+    (minBytes > 0 || maxBytes < QS_FILE_SIZE_ABSOLUTE_MAX_BYTES)
+  );
+}
+
+function initQuickSearchFileSizeControls() {
+  syncQuickSearchFileSizeControls(0, QS_FILE_SIZE_ABSOLUTE_MAX_BYTES);
+
+  const sizeSection = document.getElementById("qs-file-size-section");
+  const sizeEnabledCheckbox = document.getElementById("qs-file-size-enabled");
+
+  sizeEnabledCheckbox.addEventListener("change", () => {
+    sizeSection.hidden = !sizeEnabledCheckbox.checked;
+    if (sizeEnabledCheckbox.checked) {
+      syncQuickSearchFileSizeControls(
+        500 * 1024 * 1024,
+        4 * 1024 * 1024 * 1024,
+      );
+    }
+  });
+
+  const handleSliderInput = (isMinSlider) => {
+    const minSlider = document.getElementById("qs-file-size-min-slider");
+    const maxSlider = document.getElementById("qs-file-size-max-slider");
+    let minMb = parseInt(minSlider.value, 10);
+    let maxMb = parseInt(maxSlider.value, 10);
+
+    if (isMinSlider && minMb > maxMb) {
+      maxMb = minMb;
+      maxSlider.value = String(maxMb);
+    } else if (!isMinSlider && maxMb < minMb) {
+      minMb = maxMb;
+      minSlider.value = String(minMb);
+    }
+
+    syncQuickSearchFileSizeControls(
+      minMb * 1024 * 1024,
+      maxMb * 1024 * 1024,
+    );
+  };
+
+  document
+    .getElementById("qs-file-size-min-slider")
+    .addEventListener("input", () => handleSliderInput(true));
+  document
+    .getElementById("qs-file-size-max-slider")
+    .addEventListener("input", () => handleSliderInput(false));
+
+  ["qs-file-size-min-input", "qs-file-size-max-input"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", () => {
+      const bounds = readQuickSearchFileSizeBounds();
+      syncQuickSearchFileSizeControls(bounds.min, bounds.max);
+    });
+  });
+
+  ["qs-file-size-min-unit", "qs-file-size-max-unit"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", () => {
+      const bounds = readQuickSearchFileSizeBounds();
+      syncQuickSearchFileSizeControls(bounds.min, bounds.max);
+    });
+  });
+}
+
+function getQuickSearchClientFilterOptions() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const last30Days = urlParams.get("dateFilter") === "30days";
+  const sizeMinParam = urlParams.get("sizeMin");
+  const sizeMaxParam = urlParams.get("sizeMax");
+  const sizeEnabled = sizeMinParam !== null && sizeMaxParam !== null;
+
+  if (!last30Days && !sizeEnabled) return null;
+
+  return {
+    last30Days,
+    sizeEnabled,
+    sizeMin: sizeEnabled ? parseInt(sizeMinParam, 10) : 0,
+    sizeMax: sizeEnabled
+      ? parseInt(sizeMaxParam, 10)
+      : QS_FILE_SIZE_ABSOLUTE_MAX_BYTES,
+  };
+}
+
+function shouldHideRowByQuickSearch(row, options) {
+  if (!options) return false;
+
+  if (options.last30Days) {
+    const dateCell = row.querySelector("td[data-timestamp]");
+    if (dateCell) {
+      const timestamp = parseInt(dateCell.getAttribute("data-timestamp"), 10);
+      const thirtyDaysAgo = Date.now() / 1000 - 30 * 24 * 60 * 60;
+      if (timestamp < thirtyDaysAgo) return true;
+    }
+  }
+
+  if (options.sizeEnabled) {
+    const sizeCell = row.querySelector("td:nth-of-type(4)");
+    if (sizeCell) {
+      const sizeInBytes = convertToBytes(sizeCell.textContent);
+      if (sizeInBytes < options.sizeMin || sizeInBytes > options.sizeMax) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function applyQuickSearchClientFilters(options) {
+  const rows = document.querySelectorAll("table.torrent-list tbody tr");
+  let hiddenCount = 0;
+  let visibleCount = 0;
+  const filterParts = [];
+
+  rows.forEach((row) => {
+    if (!isNyaaTorrentDataRow(row)) return;
+
+    if (shouldHideRowByQuickSearch(row, options)) {
+      row.style.display = "none";
+      hiddenCount++;
+      return;
+    }
+
+    if (row.style.display === "none") {
+      hiddenCount++;
+      return;
+    }
+
+    visibleCount++;
+  });
+
+  if (options.last30Days) filterParts.push("last 30 days");
+  if (options.sizeEnabled) {
+    filterParts.push(
+      `size ${formatNekoBTBytes(options.sizeMin)} – ${formatNekoBTBytes(options.sizeMax)}`,
+    );
+  }
+
+  const filterLabel = filterParts.length
+    ? ` filtered by ${filterParts.join(" and ")}`
+    : "";
+
+  showNotification(
+    `Showing ${visibleCount} torrents (${hiddenCount} hidden)${filterLabel}`,
+    true,
+  );
+}
+
+const XEM_ALL_NAMES_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const TMDB_SEARCH_DEBOUNCE_MS = 500;
+const TMDB_SEARCH_MIN_INTERVAL_MS = 600;
+let tmdbSearchThrottleChain = Promise.resolve();
+let tmdbSearchNextAllowedAt = 0;
+const quickSearchAnimeMemoryCache = {
+  tmdbSearch: new Map(),
+  tmdbExternalIds: new Map(),
+  tmdbAltTitles: new Map(),
+  xemShowNames: new Map(),
+  xemAllNames: { tvdb: null, anidb: null },
+  xemAllNamesPromises: { tvdb: null, anidb: null },
+};
+
+function clearQuickSearchAnimeCaches() {
+  quickSearchAnimeMemoryCache.tmdbSearch.clear();
+  quickSearchAnimeMemoryCache.tmdbExternalIds.clear();
+  quickSearchAnimeMemoryCache.tmdbAltTitles.clear();
+  quickSearchAnimeMemoryCache.xemShowNames.clear();
+  quickSearchAnimeMemoryCache.xemAllNames.tvdb = null;
+  quickSearchAnimeMemoryCache.xemAllNames.anidb = null;
+  quickSearchAnimeMemoryCache.xemAllNamesPromises.tvdb = null;
+  quickSearchAnimeMemoryCache.xemAllNamesPromises.anidb = null;
+  tmdbSearchThrottleChain = Promise.resolve();
+  tmdbSearchNextAllowedAt = 0;
+}
+
+function normalizeAnimeAliasName(name) {
+  return String(name || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function flattenXemNamesPayload(payload) {
+  const names = new Set();
+  if (!payload || typeof payload !== "object") return [];
+
+  for (const value of Object.values(payload)) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) names.add(trimmed);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        const trimmed = String(entry || "").trim();
+        if (trimmed) names.add(trimmed);
+      });
+      continue;
+    }
+    if (value && typeof value === "object") {
+      Object.values(value).forEach((entry) => {
+        if (Array.isArray(entry)) {
+          entry.forEach((name) => {
+            const trimmed = String(name || "").trim();
+            if (trimmed) names.add(trimmed);
+          });
+        }
+      });
+    }
+  }
+
+  return [...names];
+}
+
+function addAnimeAliasNames(targetSet, names) {
+  names.forEach((name) => {
+    const trimmed = String(name || "").trim();
+    if (!trimmed) return;
+    targetSet.add(trimmed);
+  });
+}
+
+function dedupeAnimeAliasNames(names, preferredFirst = []) {
+  const seen = new Set();
+  const ordered = [];
+
+  const pushName = (name) => {
+    const trimmed = String(name || "").trim();
+    if (!trimmed) return;
+    const key = normalizeAnimeAliasName(trimmed);
+    if (seen.has(key)) return;
+    seen.add(key);
+    ordered.push(trimmed);
+  };
+
+  preferredFirst.forEach(pushName);
+  names.forEach(pushName);
+  return ordered;
+}
+
+async function getXemAllNames(origin) {
+  if (quickSearchAnimeMemoryCache.xemAllNames[origin]) {
+    return quickSearchAnimeMemoryCache.xemAllNames[origin];
+  }
+
+  const storageKey = `xemAllNames_${origin}`;
+  const stored = await browser.storage.local.get({ [storageKey]: null });
+  const cached = stored[storageKey];
+  if (
+    cached?.data &&
+    cached.fetchedAt &&
+    Date.now() - cached.fetchedAt < XEM_ALL_NAMES_TTL_MS
+  ) {
+    quickSearchAnimeMemoryCache.xemAllNames[origin] = cached.data;
+    return cached.data;
+  }
+
+  if (!quickSearchAnimeMemoryCache.xemAllNamesPromises[origin]) {
+    quickSearchAnimeMemoryCache.xemAllNamesPromises[origin] = (async () => {
+      const url = `https://thexem.info/map/allNames?origin=${encodeURIComponent(origin)}&defaultNames=1`;
+      const result = await fetchJsonViaBackground(url);
+      if (!result.ok || result.data?.result !== "success") {
+        throw new Error(
+          result.data?.message || result.error || "TheXEM request failed",
+        );
+      }
+      quickSearchAnimeMemoryCache.xemAllNames[origin] = result.data.data || {};
+      await browser.storage.local.set({
+        [storageKey]: {
+          fetchedAt: Date.now(),
+          data: result.data.data || {},
+        },
+      });
+      return result.data.data || {};
+    })().finally(() => {
+      quickSearchAnimeMemoryCache.xemAllNamesPromises[origin] = null;
+    });
+  }
+
+  return quickSearchAnimeMemoryCache.xemAllNamesPromises[origin];
+}
+
+async function fetchXemShowNames(origin, entityId) {
+  const cacheKey = `${origin}:${entityId}`;
+  if (quickSearchAnimeMemoryCache.xemShowNames.has(cacheKey)) {
+    return quickSearchAnimeMemoryCache.xemShowNames.get(cacheKey);
+  }
+
+  const url = `https://thexem.info/map/names?origin=${encodeURIComponent(origin)}&id=${encodeURIComponent(entityId)}&defaultNames=1`;
+  const result = await fetchJsonViaBackground(url);
+  if (!result.ok || result.data?.result !== "success") {
+    quickSearchAnimeMemoryCache.xemShowNames.set(cacheKey, []);
+    return [];
+  }
+
+  const names = flattenXemNamesPayload(result.data.data);
+  quickSearchAnimeMemoryCache.xemShowNames.set(cacheKey, names);
+  return names;
+}
+
+function getAllNamesEntryNames(allNamesData, entityId) {
+  const entry = allNamesData?.[String(entityId)];
+  if (!entry) return [];
+  return Array.isArray(entry) ? entry.filter(Boolean) : [];
+}
+
+function findLinkedAnidbIds(names, anidbAllNames) {
+  const normalizedNames = new Set(
+    names.map((name) => normalizeAnimeAliasName(name)).filter(Boolean),
+  );
+  if (!normalizedNames.size || !anidbAllNames) return [];
+
+  const linkedIds = new Set();
+  for (const [anidbId, entries] of Object.entries(anidbAllNames)) {
+    if (!Array.isArray(entries)) continue;
+    const hasOverlap = entries.some((name) =>
+      normalizedNames.has(normalizeAnimeAliasName(name)),
+    );
+    if (hasOverlap) linkedIds.add(String(anidbId));
+  }
+  return [...linkedIds];
+}
+
+async function fetchTmdbJson(url) {
+  return new Promise((resolve, reject) => {
+    tmdbSearchThrottleChain = tmdbSearchThrottleChain
+      .then(async () => {
+        const waitMs = Math.max(0, tmdbSearchNextAllowedAt - Date.now());
+        if (waitMs > 0) {
+          await new Promise((delayResolve) => setTimeout(delayResolve, waitMs));
+        }
+
+        const result = await fetchJsonViaBackground(url);
+        tmdbSearchNextAllowedAt = Date.now() + TMDB_SEARCH_MIN_INTERVAL_MS;
+
+        if (result.ok && result.data?.status_code === 429) {
+          tmdbSearchNextAllowedAt = Date.now() + 2000;
+          resolve({
+            ok: false,
+            error: "rate_limited",
+            data: result.data,
+          });
+          return;
+        }
+
+        resolve(result);
+      })
+      .catch(reject);
+  });
+}
+
+async function searchTmdbAnime(query, apiKey) {
+  const cacheKey = `${apiKey}:${query.toLowerCase()}`;
+  if (quickSearchAnimeMemoryCache.tmdbSearch.has(cacheKey)) {
+    return quickSearchAnimeMemoryCache.tmdbSearch.get(cacheKey);
+  }
+
+  const url = `https://api.themoviedb.org/3/search/tv?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US`;
+  const result = await fetchTmdbJson(url);
+  if (!result.ok || !Array.isArray(result.data?.results)) {
+    if (result.error === "rate_limited") {
+      throw new Error("rate_limited");
+    }
+    quickSearchAnimeMemoryCache.tmdbSearch.set(cacheKey, []);
+    return [];
+  }
+
+  const shows = result.data.results
+    .filter((entry) => entry?.id && entry?.name)
+    .slice(0, 8)
+    .map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      originalName: entry.original_name || "",
+      firstAirDate: entry.first_air_date || "",
+      overview: entry.overview || "",
+    }));
+
+  quickSearchAnimeMemoryCache.tmdbSearch.set(cacheKey, shows);
+  return shows;
+}
+
+async function getTmdbTvdbId(tmdbId, apiKey) {
+  const cacheKey = `${apiKey}:${tmdbId}`;
+  if (quickSearchAnimeMemoryCache.tmdbExternalIds.has(cacheKey)) {
+    return quickSearchAnimeMemoryCache.tmdbExternalIds.get(cacheKey);
+  }
+
+  const url = `https://api.themoviedb.org/3/tv/${encodeURIComponent(tmdbId)}/external_ids?api_key=${encodeURIComponent(apiKey)}`;
+  const result = await fetchTmdbJson(url);
+  const tvdbId = result.ok ? result.data?.tvdb_id || null : null;
+  quickSearchAnimeMemoryCache.tmdbExternalIds.set(cacheKey, tvdbId);
+  return tvdbId;
+}
+
+async function getTmdbAlternativeTitles(tmdbId, apiKey) {
+  const cacheKey = `${apiKey}:${tmdbId}`;
+  if (quickSearchAnimeMemoryCache.tmdbAltTitles.has(cacheKey)) {
+    return quickSearchAnimeMemoryCache.tmdbAltTitles.get(cacheKey);
+  }
+
+  const url = `https://api.themoviedb.org/3/tv/${encodeURIComponent(tmdbId)}/alternative_titles?api_key=${encodeURIComponent(apiKey)}`;
+  const result = await fetchTmdbJson(url);
+  const titles = result.ok
+    ? (result.data?.results || [])
+        .map((entry) => entry?.title)
+        .filter(Boolean)
+    : [];
+  quickSearchAnimeMemoryCache.tmdbAltTitles.set(cacheKey, titles);
+  return titles;
+}
+
+async function resolveAnimeAliasesForSelection(selection, apiKey) {
+  const aliasSet = new Set();
+  addAnimeAliasNames(aliasSet, [selection.name, selection.originalName]);
+
+  const [tvdbId, tmdbAltTitles] = await Promise.all([
+    getTmdbTvdbId(selection.id, apiKey),
+    getTmdbAlternativeTitles(selection.id, apiKey),
+  ]);
+  addAnimeAliasNames(aliasSet, tmdbAltTitles);
+
+  let tvdbAllNames = null;
+  let anidbAllNames = null;
+
+  try {
+    [tvdbAllNames, anidbAllNames] = await Promise.all([
+      getXemAllNames("tvdb"),
+      getXemAllNames("anidb"),
+    ]);
+  } catch {
+    tvdbAllNames = null;
+    anidbAllNames = null;
+  }
+
+  const tvdbNames = [];
+  if (tvdbId) {
+    const [xemTvdbNames, cachedTvdbNames] = await Promise.all([
+      fetchXemShowNames("tvdb", tvdbId),
+      Promise.resolve(getAllNamesEntryNames(tvdbAllNames, tvdbId)),
+    ]);
+    tvdbNames.push(...xemTvdbNames, ...cachedTvdbNames);
+    addAnimeAliasNames(aliasSet, tvdbNames);
+  }
+
+  if (tvdbId && anidbAllNames) {
+    const linkedAnidbIds = findLinkedAnidbIds([...aliasSet, ...tvdbNames], anidbAllNames);
+    const anidbNameLists = await Promise.all(
+      linkedAnidbIds.map(async (anidbId) => {
+        const [xemAnidbNames, cachedAnidbNames] = await Promise.all([
+          fetchXemShowNames("anidb", anidbId),
+          Promise.resolve(getAllNamesEntryNames(anidbAllNames, anidbId)),
+        ]);
+        return [...xemAnidbNames, ...cachedAnidbNames];
+      }),
+    );
+    anidbNameLists.forEach((names) => addAnimeAliasNames(aliasSet, names));
+  }
+
+  return dedupeAnimeAliasNames([...aliasSet], [selection.name]);
+}
+
+function initQuickSearchAnimeAutocomplete(popup) {
+  const animeInput = popup.querySelector("#anime-name");
+  const suggestionsEl = popup.querySelector("#anime-name-suggestions");
+  const aliasesPanel = popup.querySelector("#anime-name-aliases");
+  const aliasesListEl = popup.querySelector("#anime-aliases-list");
+  const aliasesPreviewEl = popup.querySelector("#anime-aliases-preview");
+  const aliasesMetaEl = popup.querySelector("#anime-aliases-meta");
+  const aliasesClearBtn = popup.querySelector("#anime-aliases-clear");
+  const aliasesInvertBtn = popup.querySelector("#anime-aliases-invert");
+  const aliasesApplyBtn = popup.querySelector("#anime-aliases-apply");
+  const hintEl = popup.querySelector("#anime-name-hint");
+  let searchTimer = null;
+  let activeSearchToken = 0;
+  let selectedAliases = [];
+  let lastAliasCheckbox = null;
+
+  const getAliasCheckboxes = () => [
+    ...aliasesListEl.querySelectorAll('input[type="checkbox"]'),
+  ];
+
+  const hideSuggestions = () => {
+    suggestionsEl.hidden = true;
+    suggestionsEl.innerHTML = "";
+  };
+
+  const setAliasActionsEnabled = (enabled) => {
+    aliasesClearBtn.disabled = !enabled;
+    aliasesInvertBtn.disabled = !enabled;
+    aliasesApplyBtn.disabled = !enabled;
+  };
+
+  const hideAliasesPanel = () => {
+    aliasesPanel.hidden = true;
+    aliasesPanel.classList.remove("is-ready");
+    aliasesListEl.innerHTML = "";
+    aliasesListEl.removeAttribute("title");
+    aliasesPreviewEl.textContent = "";
+    aliasesMetaEl.textContent = "";
+    selectedAliases = [];
+    lastAliasCheckbox = null;
+    setAliasActionsEnabled(false);
+  };
+
+  const updateAliasPreview = () => {
+    const boxes = getAliasCheckboxes();
+    const checked = boxes
+      .filter((input) => input.checked)
+      .map((input) => input.value);
+    const hasBoxes = boxes.length > 0;
+
+    aliasesPreviewEl.textContent = checked.length
+      ? checked.join("|")
+      : hasBoxes
+        ? "Select at least one alias"
+        : "";
+    aliasesMetaEl.textContent = hasBoxes
+      ? `${checked.length} of ${boxes.length} selected · Shift+click a range`
+      : "";
+    aliasesClearBtn.disabled = checked.length === 0;
+    aliasesInvertBtn.disabled = !hasBoxes;
+    aliasesApplyBtn.disabled = checked.length === 0;
+  };
+
+  const onAliasCheckboxClick = function (event) {
+    if (event.shiftKey && lastAliasCheckbox && lastAliasCheckbox !== this) {
+      const boxes = getAliasCheckboxes();
+      const start = boxes.indexOf(this);
+      const end = boxes.indexOf(lastAliasCheckbox);
+      if (start !== -1 && end !== -1) {
+        const checked = this.checked;
+        boxes
+          .slice(Math.min(start, end), Math.max(start, end) + 1)
+          .forEach((box) => {
+            box.checked = checked;
+          });
+      }
+    }
+
+    lastAliasCheckbox = this;
+    updateAliasPreview();
+  };
+
+  const renderAliasCheckboxes = (aliases) => {
+    selectedAliases = aliases;
+    lastAliasCheckbox = null;
+    aliasesListEl.innerHTML = "";
+    aliases.forEach((alias) => {
+      const label = document.createElement("label");
+      label.className = "qf-anime-alias-item";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = alias;
+      input.checked = true;
+      input.addEventListener("click", onAliasCheckboxClick);
+      const text = document.createElement("span");
+      text.textContent = alias;
+      label.append(input, text);
+      aliasesListEl.appendChild(label);
+    });
+    aliasesPanel.hidden = aliases.length === 0;
+    aliasesPanel.classList.toggle("is-ready", aliases.length > 0);
+    aliasesListEl.title = aliases.length
+      ? "Shift+click to select or deselect a range"
+      : "";
+    updateAliasPreview();
+  };
+
+  const applySelectedAliases = () => {
+    const checked = getAliasCheckboxes()
+      .filter((input) => input.checked)
+      .map((input) => input.value.trim())
+      .filter(Boolean);
+    if (!checked.length) {
+      showNotification("Select at least one alias to apply", false);
+      return;
+    }
+    animeInput.value = checked.join("|");
+    hideSuggestions();
+    showNotification("Anime search aliases applied", true);
+  };
+
+  aliasesClearBtn.addEventListener("click", () => {
+    getAliasCheckboxes().forEach((box) => {
+      box.checked = false;
+    });
+    updateAliasPreview();
+  });
+
+  aliasesInvertBtn.addEventListener("click", () => {
+    getAliasCheckboxes().forEach((box) => {
+      box.checked = !box.checked;
+    });
+    updateAliasPreview();
+  });
+
+  aliasesApplyBtn.addEventListener("click", applySelectedAliases);
+  suggestionsEl.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+
+  loadStoredPreferences().then((prefs) => {
+    if (!prefs.tmdbApiKey) {
+      hintEl.hidden = false;
+      hintEl.textContent =
+        "Add a TMDB API key in extension settings to search anime titles and load aliases.";
+    }
+  });
+
+  animeInput.addEventListener("input", () => {
+    hideAliasesPanel();
+    clearTimeout(searchTimer);
+
+    searchTimer = setTimeout(async () => {
+      const query = animeInput.value.trim();
+      if (query.length < 2) {
+        hideSuggestions();
+        return;
+      }
+
+      const prefs = await loadStoredPreferences();
+      if (!prefs.tmdbApiKey) {
+        hideSuggestions();
+        return;
+      }
+
+      const token = ++activeSearchToken;
+      suggestionsEl.hidden = false;
+      suggestionsEl.innerHTML =
+        '<div class="qf-anime-suggestion qf-anime-suggestion--status">Searching…</div>';
+
+      try {
+        const results = await searchTmdbAnime(query, prefs.tmdbApiKey);
+        if (token !== activeSearchToken) return;
+
+        if (!results.length) {
+          suggestionsEl.innerHTML =
+            '<div class="qf-anime-suggestion qf-anime-suggestion--status">No matches found</div>';
+          return;
+        }
+
+        suggestionsEl.innerHTML = "";
+        results.forEach((result) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "qf-anime-suggestion";
+          const title = document.createElement("span");
+          title.className = "qf-anime-suggestion-title";
+          title.textContent = result.name;
+          button.appendChild(title);
+          const meta = [result.originalName, result.firstAirDate]
+            .filter(Boolean)
+            .join(" · ");
+          if (meta) {
+            const metaEl = document.createElement("span");
+            metaEl.className = "qf-anime-suggestion-meta";
+            metaEl.textContent = meta;
+            button.appendChild(metaEl);
+          }
+          button.addEventListener("click", async () => {
+            hideSuggestions();
+            animeInput.value = result.name;
+            aliasesPanel.hidden = false;
+            aliasesPanel.classList.remove("is-ready");
+            lastAliasCheckbox = null;
+            setAliasActionsEnabled(false);
+            aliasesMetaEl.textContent = "";
+            aliasesListEl.innerHTML =
+              '<div class="qf-anime-suggestion qf-anime-suggestion--status">Loading aliases…</div>';
+            aliasesPreviewEl.textContent = "";
+
+            try {
+              const aliases = await resolveAnimeAliasesForSelection(
+                result,
+                prefs.tmdbApiKey,
+              );
+              if (!aliases.length) {
+                aliasesListEl.innerHTML =
+                  '<div class="qf-anime-suggestion qf-anime-suggestion--status">No aliases found</div>';
+                return;
+              }
+              renderAliasCheckboxes(aliases);
+            } catch {
+              aliasesListEl.innerHTML =
+                '<div class="qf-anime-suggestion qf-anime-suggestion--status">Failed to load aliases</div>';
+            }
+          });
+          suggestionsEl.appendChild(button);
+        });
+      } catch (error) {
+        if (token !== activeSearchToken) return;
+        suggestionsEl.innerHTML =
+          error?.message === "rate_limited"
+            ? '<div class="qf-anime-suggestion qf-anime-suggestion--status">TMDB rate limit reached — wait a moment</div>'
+            : '<div class="qf-anime-suggestion qf-anime-suggestion--status">Search failed</div>';
+      }
+    }, TMDB_SEARCH_DEBOUNCE_MS);
+  });
+
+  animeInput.addEventListener("blur", () => {
+    setTimeout(hideSuggestions, 150);
+  });
+
+  animeInput.addEventListener("focus", () => {
+    if (suggestionsEl.childElementCount > 0) {
+      suggestionsEl.hidden = false;
+    }
+  });
+
+  return () => {
+    hideSuggestions();
+    hideAliasesPanel();
+  };
+}
+
+function getDefaultQuickSearchState() {
+  return {
+    animeName: "",
+    encoder: "",
+    quality: "",
+    format: "",
+    source: "",
+    category: "0",
+    dualAudio: false,
+    seasonPack: false,
+    last30Days: false,
+    fileSizeEnabled: false,
+    fileSizeMinBytes: 0,
+    fileSizeMaxBytes: QS_FILE_SIZE_ABSOLUTE_MAX_BYTES,
+    fileSizeMinUnit: "MiB",
+    fileSizeMaxUnit: "GiB",
+  };
+}
+
+function readQuickSearchFormState() {
+  const sizeBounds = readQuickSearchFileSizeBounds();
+  return {
+    animeName: document.getElementById("anime-name")?.value || "",
+    encoder: document.getElementById("encoder-name")?.value || "",
+    quality: document.getElementById("quality")?.value || "",
+    format: document.getElementById("format")?.value || "",
+    source: document.getElementById("source")?.value || "",
+    category: document.getElementById("category")?.value || "0",
+    dualAudio: document.getElementById("dual-audio")?.checked || false,
+    seasonPack: document.getElementById("season-pack")?.checked || false,
+    last30Days: document.getElementById("last-30-days")?.checked || false,
+    fileSizeEnabled:
+      document.getElementById("qs-file-size-enabled")?.checked || false,
+    fileSizeMinBytes: sizeBounds.min,
+    fileSizeMaxBytes: sizeBounds.max,
+    fileSizeMinUnit:
+      document.getElementById("qs-file-size-min-unit")?.value || "MiB",
+    fileSizeMaxUnit:
+      document.getElementById("qs-file-size-max-unit")?.value || "GiB",
+  };
+}
+
+function applyQuickSearchFormState(state) {
+  const merged = { ...getDefaultQuickSearchState(), ...state };
+
+  document.getElementById("anime-name").value = merged.animeName;
+  document.getElementById("encoder-name").value = merged.encoder;
+  document.getElementById("quality").value = merged.quality;
+  document.getElementById("format").value = merged.format;
+  document.getElementById("source").value = merged.source;
+  document.getElementById("category").value = merged.category;
+  document.getElementById("dual-audio").checked = merged.dualAudio;
+  document.getElementById("season-pack").checked = merged.seasonPack;
+  document.getElementById("last-30-days").checked = merged.last30Days;
+  document.getElementById("qs-file-size-enabled").checked =
+    merged.fileSizeEnabled;
+  document.getElementById("qs-file-size-section").hidden =
+    !merged.fileSizeEnabled;
+
+  const minUnitSelect = document.getElementById("qs-file-size-min-unit");
+  const maxUnitSelect = document.getElementById("qs-file-size-max-unit");
+  if (minUnitSelect) minUnitSelect.value = merged.fileSizeMinUnit;
+  if (maxUnitSelect) maxUnitSelect.value = merged.fileSizeMaxUnit;
+
+  syncQuickSearchFileSizeControls(
+    merged.fileSizeMinBytes,
+    merged.fileSizeMaxBytes,
+  );
+}
+
+function loadQuickSearchPreferences() {
+  return new Promise((resolve) => {
+    getPreferences(
+      {
+        quickSearchRememberSelection: true,
+        quickSearchState: getDefaultQuickSearchState(),
+      },
+      (items) => {
+        resolve({
+          rememberSelection: items.quickSearchRememberSelection !== false,
+          state: {
+            ...getDefaultQuickSearchState(),
+            ...(items.quickSearchState || {}),
+          },
+        });
+      },
+    );
+  });
+}
+
+function loadQuickSearchState() {
+  return loadQuickSearchPreferences().then((prefs) => prefs.state);
+}
+
+function saveQuickSearchState(state) {
+  return new Promise((resolve) => {
+    savePreferences({ quickSearchState: state }, resolve);
+  });
+}
+
+function clearQuickSearchState() {
+  return saveQuickSearchState(getDefaultQuickSearchState());
+}
+
 // Function to show Quick Filter popup
 function showQuickFilterPopup() {
   const popup = document.createElement("div");
   popup.className = "quick-filter-popup";
-  popup.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: white;
-    padding: 25px;
-    border-radius: 12px;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
-    z-index: 1001;
-    min-width: 320px;
-    max-width: 400px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  `;
 
-  const content = `
-    <h3 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Quick Search</h3>
-    
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Anime Name:</label>
-      <input type="text" id="anime-name" class="filter-input" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-    </div>
+  popup.innerHTML = `
+    <h3 class="qf-title">Quick Search</h3>
 
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Encoder:</label>
-      <input type="text" id="encoder-name" class="filter-input" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-    </div>
+    <div class="qf-body">
+      <div class="qf-grid qf-grid--2 qf-grid--anime-row">
+        <div class="qf-field qf-field--anime-name">
+          <label class="qf-label" for="anime-name">Anime Name</label>
+          <div class="qf-anime-search">
+            <input type="text" id="anime-name" class="qf-input" placeholder="Search by title…" autocomplete="off">
+            <div class="qf-anime-suggestions" id="anime-name-suggestions" hidden></div>
+          </div>
+        </div>
+        <div class="qf-field">
+          <label class="qf-label" for="encoder-name">Encoder</label>
+          <input type="text" id="encoder-name" class="qf-input" placeholder="e.g. SubsPlease">
+        </div>
+        <p class="qf-anime-hint" id="anime-name-hint" hidden></p>
+        <div class="qf-anime-aliases" id="anime-name-aliases" hidden>
+          <div class="qf-anime-aliases-header">
+            <div class="qf-anime-aliases-heading">
+              <span class="qf-anime-aliases-title">Select aliases for search</span>
+              <span class="qf-anime-aliases-meta" id="anime-aliases-meta"></span>
+            </div>
+            <div class="qf-anime-aliases-actions">
+              <button type="button" id="anime-aliases-clear" class="qf-btn qf-btn--outline qf-btn--compact" title="Uncheck all aliases" disabled>Clear selected</button>
+              <button type="button" id="anime-aliases-invert" class="qf-btn qf-btn--outline qf-btn--compact" title="Toggle all aliases" disabled>Invert selection</button>
+              <button type="button" id="anime-aliases-apply" class="qf-btn qf-btn--secondary qf-btn--compact" title="Fill the search field with selected aliases" disabled>Apply selected</button>
+            </div>
+          </div>
+          <div class="qf-anime-aliases-list" id="anime-aliases-list"></div>
+          <div class="qf-anime-aliases-preview" id="anime-aliases-preview"></div>
+        </div>
+      </div>
 
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Quality:</label>
-      <select id="quality" class="filter-select" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        background-color: white;
-        cursor: pointer;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-        <option value="">Select Quality</option>
-        <option value="480p">480p</option>
-        <option value="720p">720p</option>
-        <option value="1080p">1080p</option>
-        <option value="2160p">2160p (4K)</option>
-      </select>
-    </div>
+      <div class="qf-grid qf-grid--3">
+        <div class="qf-field">
+          <label class="qf-label" for="quality">Quality</label>
+          <select id="quality" class="qf-select">
+            <option value="">Any quality</option>
+            <option value="480p">480p</option>
+            <option value="720p">720p</option>
+            <option value="1080p">1080p</option>
+            <option value="2160p">2160p (4K)</option>
+          </select>
+        </div>
+        <div class="qf-field">
+          <label class="qf-label" for="format">Format</label>
+          <select id="format" class="qf-select">
+            <option value="">Any format</option>
+            <option value="264">H264/AVC</option>
+            <option value="x265">x265/HEVC</option>
+            <option value="AV1">AV1</option>
+            <option value="VP9">VP9</option>
+          </select>
+        </div>
+        <div class="qf-field">
+          <label class="qf-label" for="source">Source</label>
+          <select id="source" class="qf-select">
+            <option value="">Any source</option>
+            <option value="BD">BD (Blu-ray)</option>
+            <option value="Web">Web (Streaming Service)</option>
+            <option value="DVD">DVD</option>
+          </select>
+        </div>
+      </div>
 
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Format:</label>
-      <select id="format" class="filter-select" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        background-color: white;
-        cursor: pointer;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-        <option value="">Select Format</option>
-        <option value="264">H264/AVC</option>
-        <option value="x265">x265/HEVC</option>
-        <option value="AV1">AV1</option>
-        <option value="VP9">VP9</option>
-      </select>
-    </div>
+      <div class="qf-field">
+        <label class="qf-label" for="category">Category</label>
+        <select id="category" class="qf-select">
+          <option value="0">All categories</option>
+          <option value="1">Anime Music Video</option>
+          <option value="2">English-translated</option>
+          <option value="3">Non-English-translated</option>
+          <option value="4">Raw</option>
+        </select>
+      </div>
 
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Source:</label>
-      <select id="source" class="filter-select" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        background-color: white;
-        cursor: pointer;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-        <option value="">Select Source</option>
-        <option value="BD">BD (Blu-ray)</option>
-        <option value="Web">Web (Streaming Service)</option>
-        <option value="DVD">DVD</option>
-      </select>
-    </div>
-
-    <div class="filter-group" style="margin-bottom: 18px;">
-      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;">Category:</label>
-      <select id="category" class="filter-select" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        background-color: white;
-        cursor: pointer;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      ">
-        <option value="0">All categories</option>
-        <option value="1">Anime Music Video</option>
-        <option value="2">English-translated</option>
-        <option value="3">Non-English-translated</option>
-        <option value="4">Raw</option>
-      </select>
-    </div>
-
-    <div class="filter-group" style="margin-bottom: 25px;">
-      <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-        <label style="display: flex; align-items: center; font-size: 14px; cursor: pointer;">
-          <input type="checkbox" id="dual-audio" style="
-            margin: 0;
-            margin-right: 8px;
-            cursor: pointer;
-          ">
-          <span style="font-weight: 500;">Dual Audio</span>
+      <div class="qf-options">
+        <label class="qf-checkbox">
+          <input type="checkbox" id="dual-audio">
+          <span>Dual Audio</span>
         </label>
-        <label style="display: flex; align-items: center; font-size: 14px; cursor: pointer;">
-          <input type="checkbox" id="season-pack" style="
-            margin: 0;
-            margin-right: 8px;
-            cursor: pointer;
-          ">
-          <span style="font-weight: 500;">Season Pack</span>
+        <label class="qf-checkbox">
+          <input type="checkbox" id="season-pack">
+          <span>Season Pack</span>
         </label>
-        <label style="display: flex; align-items: center; font-size: 14px; cursor: pointer;">
-          <input type="checkbox" id="last-30-days" style="
-            margin: 0;
-            margin-right: 8px;
-            cursor: pointer;
-          ">
-          <span style="font-weight: 500;">Last 30 Days</span>
+        <label class="qf-checkbox">
+          <input type="checkbox" id="last-30-days">
+          <span>Last 30 Days</span>
         </label>
+        <label class="qf-checkbox">
+          <input type="checkbox" id="qs-file-size-enabled">
+          <span>File Size</span>
+        </label>
+      </div>
+
+      <div class="qf-size-filter" id="qs-file-size-section" hidden>
+        <div class="qf-size-inputs">
+          <div class="qf-size-field">
+            <label for="qs-file-size-min-input">Minimum</label>
+            <div class="qf-size-value-row">
+              <input type="number" id="qs-file-size-min-input" min="0" step="any">
+              <select id="qs-file-size-min-unit">
+                <option value="B">B</option>
+                <option value="KiB">KiB</option>
+                <option value="MiB" selected>MiB</option>
+                <option value="GiB">GiB</option>
+                <option value="TiB">TiB</option>
+              </select>
+            </div>
+          </div>
+          <div class="qf-size-field">
+            <label for="qs-file-size-max-input">Maximum</label>
+            <div class="qf-size-value-row">
+              <input type="number" id="qs-file-size-max-input" min="0" step="any">
+              <select id="qs-file-size-max-unit">
+                <option value="B">B</option>
+                <option value="KiB">KiB</option>
+                <option value="MiB">MiB</option>
+                <option value="GiB" selected>GiB</option>
+                <option value="TiB">TiB</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="qf-size-slider">
+          <div class="qf-size-track">
+            <div class="qf-size-fill" id="qs-file-size-fill"></div>
+          </div>
+          <input type="range" id="qs-file-size-min-slider" min="0" max="51200" step="1">
+          <input type="range" id="qs-file-size-max-slider" min="0" max="51200" step="1">
+        </div>
+        <div class="qf-size-summary" id="qs-file-size-summary">Any size</div>
       </div>
     </div>
 
-    <div style="display: flex; justify-content: flex-end; gap: 10px;">
-      <button id="reset-filter" class="copy-magnets-button clear-button" style="
-        padding: 8px 16px;
-        border: none;
-        border-radius: 8px;
-        color: white;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.2s;
-      ">Reset</button>
-      <button id="cancel-filter" class="copy-magnets-button" style="
-        padding: 8px 16px;
-        border: none;
-        background: #337ab7;
-        border-radius: 8px;
-        color: white;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.2s;
-      ">Cancel</button>
-      <button id="apply-filter" class="copy-magnets-button" style="
-        padding: 8px 16px;
-        border: none;
-        background: #337ab7;
-        border-radius: 8px;
-        color: white;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.2s;
-      ">Search</button>
+    <div class="qf-footer">
+      <button id="reset-filter" type="button" class="qf-btn qf-btn--outline qf-btn--compact">Reset filters</button>
+      <label class="qf-checkbox qf-remember-selection" for="qs-remember-selection">
+        <input type="checkbox" id="qs-remember-selection" checked>
+        <span>Remember selection</span>
+      </label>
+      <div class="qf-footer-spacer" aria-hidden="true"></div>
+      <button id="cancel-filter" type="button" class="qf-btn qf-btn--secondary">Cancel</button>
+      <button id="apply-filter" type="button" class="qf-btn qf-btn--primary">Search</button>
     </div>
   `;
 
-  popup.innerHTML = content;
-
-  // Create overlay
   const overlay = document.createElement("div");
   overlay.className = "quick-filter-overlay";
-  overlay.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-  `;
 
   document.body.appendChild(overlay);
   document.body.appendChild(popup);
   document.body.style.overflow = "hidden";
 
-  // Add hover effects for inputs and buttons
-  const style = document.createElement("style");
-  style.textContent = `
-    .quick-filter-popup {
-      animation: popupFadeIn 0.3s ease;
-    }
+  initQuickSearchFileSizeControls();
 
-    .quick-filter-overlay {
-      animation: overlayFadeIn 0.3s ease;
-    }
+  let resetAnimeAutocomplete = initQuickSearchAnimeAutocomplete(popup);
 
-    @keyframes popupFadeIn {
-      from {
-        opacity: 0;
-        transform: translate(-50%, -48%) scale(0.96);
-      }
-      to {
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-      }
-    }
+  const rememberSelectionCheckbox = document.getElementById(
+    "qs-remember-selection",
+  );
 
-    @keyframes overlayFadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
+  loadQuickSearchPreferences().then(({ rememberSelection, state }) => {
+    rememberSelectionCheckbox.checked = rememberSelection;
+    if (rememberSelection) {
+      applyQuickSearchFormState(state);
     }
+  });
 
-    .quick-filter-popup.hiding {
-      animation: popupFadeOut 0.3s ease;
-    }
-
-    .quick-filter-overlay.hiding {
-      animation: overlayFadeOut 0.3s ease;
-    }
-
-    @keyframes popupFadeOut {
-      from {
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-      }
-      to {
-        opacity: 0;
-        transform: translate(-50%, -48%) scale(0.96);
-      }
-    }
-
-    @keyframes overlayFadeOut {
-      from { opacity: 1; }
-      to { opacity: 0; }
-    }
-
-    .quick-filter-popup input:focus,
-    .quick-filter-popup select:focus {
-      outline: none;
-      border-color: #337ab7;
-      box-shadow: 0 0 0 3px rgba(51, 122, 183, 0.1);
-    }
-    .quick-filter-popup input:hover,
-    .quick-filter-popup select:hover {
-      border-color: #337ab7;
-    }
-    #cancel-filter:hover,
-    #apply-filter:hover {
-      background-color: #286090;
-    }
-  `;
-  document.head.appendChild(style);
-
-  // Dark mode styles
-  if (document.body.classList.contains("dark")) {
-    popup.style.background = "#34353b";
-    popup.style.color = "#ffffff";
-    const inputs = popup.querySelectorAll("input, select");
-    inputs.forEach((input) => {
-      input.style.background = "#232327";
-      input.style.color = "#ffffff";
-      input.style.border = "1px solid #666";
+  rememberSelectionCheckbox.addEventListener("change", () => {
+    savePreferences({
+      quickSearchRememberSelection: rememberSelectionCheckbox.checked,
     });
+  });
 
-    // Update dark mode specific hover styles
-    const darkStyle = document.createElement("style");
-    darkStyle.textContent = `
-      .dark .quick-filter-popup input:hover,
-      .dark .quick-filter-popup select:hover {
-        border-color: #4a89dc;
-      }
-      .dark #cancel-filter,
-      .dark #apply-filter {
-        color: #ffffff;
-        background: #337ab7;
-      }
-      .dark #cancel-filter:hover,
-      .dark #apply-filter:hover {
-        background-color: #286090;
-      }
-    `;
-    document.head.appendChild(darkStyle);
-  }
-
-  // Add Enter key handler for text inputs
   const textInputs = [
     document.getElementById("anime-name"),
     document.getElementById("encoder-name"),
@@ -6047,16 +7228,29 @@ function showQuickFilterPopup() {
   textInputs.forEach((input) => {
     input.addEventListener("keypress", (event) => {
       if (event.key === "Enter") {
-        event.preventDefault(); // Prevent default form submission
+        event.preventDefault();
         document.getElementById("apply-filter").click();
       }
     });
   });
 
-  // Handle reset
-  document.getElementById("reset-filter").addEventListener("click", () => {
-    // Check if any filters are active before resetting
-    const hasActiveFilters =
+  const resetQuickSearchFileSizeControls = () => {
+    document.getElementById("qs-file-size-enabled").checked = false;
+    document.getElementById("qs-file-size-section").hidden = true;
+    syncQuickSearchFileSizeControls(0, QS_FILE_SIZE_ABSOLUTE_MAX_BYTES);
+  };
+
+  const hasActiveQuickSearchFilters = () => {
+    const sizeBounds = readQuickSearchFileSizeBounds();
+    const fileSizeEnabled = document.getElementById("qs-file-size-enabled")
+      .checked;
+    const fileSizeActive = isQuickSearchFileSizeFilterActive(
+      fileSizeEnabled,
+      sizeBounds.min,
+      sizeBounds.max,
+    );
+
+    return (
       document.getElementById("anime-name").value.trim() ||
       document.getElementById("encoder-name").value.trim() ||
       document.getElementById("quality").value ||
@@ -6065,11 +7259,15 @@ function showQuickFilterPopup() {
       document.getElementById("category").value !== "0" ||
       document.getElementById("dual-audio").checked ||
       document.getElementById("season-pack").checked ||
-      document.getElementById("last-30-days").checked;
+      document.getElementById("last-30-days").checked ||
+      fileSizeActive
+    );
+  };
 
-    // Only show reset notification if there were active filters
-    if (hasActiveFilters) {
+  document.getElementById("reset-filter").addEventListener("click", async () => {
+    if (hasActiveQuickSearchFilters()) {
       document.getElementById("anime-name").value = "";
+      if (resetAnimeAutocomplete) resetAnimeAutocomplete();
       document.getElementById("encoder-name").value = "";
       document.getElementById("quality").value = "";
       document.getElementById("format").value = "";
@@ -6078,14 +7276,17 @@ function showQuickFilterPopup() {
       document.getElementById("dual-audio").checked = false;
       document.getElementById("season-pack").checked = false;
       document.getElementById("last-30-days").checked = false;
+      resetQuickSearchFileSizeControls();
+      if (rememberSelectionCheckbox.checked) {
+        await clearQuickSearchState();
+      }
       showNotification("All filters have been reset", true);
     } else {
       showNotification("No active filters to reset", false);
     }
   });
 
-  // Handle search
-  document.getElementById("apply-filter").addEventListener("click", () => {
+  document.getElementById("apply-filter").addEventListener("click", async () => {
     const searchParams = [];
     const category = document.getElementById("category").value;
 
@@ -6097,6 +7298,14 @@ function showQuickFilterPopup() {
     const dualAudio = document.getElementById("dual-audio").checked;
     const seasonPack = document.getElementById("season-pack").checked;
     const last30Days = document.getElementById("last-30-days").checked;
+    const fileSizeEnabled = document.getElementById("qs-file-size-enabled")
+      .checked;
+    const sizeBounds = readQuickSearchFileSizeBounds();
+    const fileSizeActive = isQuickSearchFileSizeFilterActive(
+      fileSizeEnabled,
+      sizeBounds.min,
+      sizeBounds.max,
+    );
 
     if (animeName) searchParams.push(animeName);
     if (encoder) searchParams.push(encoder);
@@ -6106,7 +7315,6 @@ function showQuickFilterPopup() {
     if (dualAudio) searchParams.push("Dual");
     if (seasonPack) searchParams.push("Season");
 
-    // Check if any filter option is selected (excluding last30Days for URL search)
     const hasSearchFilters =
       animeName ||
       encoder ||
@@ -6117,8 +7325,8 @@ function showQuickFilterPopup() {
       seasonPack ||
       category !== "0";
 
-    // Check if any filter option is selected at all
-    const hasAnyFilters = hasSearchFilters || last30Days;
+    const hasClientFilters = last30Days || fileSizeActive;
+    const hasAnyFilters = hasSearchFilters || hasClientFilters;
 
     if (!hasAnyFilters) {
       showNotification(
@@ -6128,35 +7336,42 @@ function showQuickFilterPopup() {
       return;
     }
 
-    // If only last30Days is checked, filter the current page
-    if (last30Days && !hasSearchFilters) {
+    if (rememberSelectionCheckbox.checked) {
+      await saveQuickSearchState(readQuickSearchFormState());
+    }
+
+    if (!hasSearchFilters && hasClientFilters) {
       closePopup();
-      filterByLast30Days();
+      applyQuickSearchClientFilters({
+        last30Days,
+        sizeEnabled: fileSizeActive,
+        sizeMin: sizeBounds.min,
+        sizeMax: sizeBounds.max,
+      });
       return;
     }
 
-    // If other filters are present, navigate to search results
     const searchQuery = searchParams.join(" ");
     const categoryParam = category === "0" ? "0_0" : `1_${category}`;
     let targetUrl = `${
       window.location.origin
     }/?f=0&c=${categoryParam}&q=${encodeURIComponent(searchQuery)}`;
 
-    // Add date filter parameter if checked
     if (last30Days) {
       targetUrl += "&dateFilter=30days";
+    }
+    if (fileSizeActive) {
+      targetUrl += `&sizeMin=${sizeBounds.min}&sizeMax=${sizeBounds.max}`;
     }
 
     window.location.href = targetUrl;
   });
 
-  // Handle cancel
   const closePopup = () => {
     popup.classList.add("hiding");
     overlay.classList.add("hiding");
     document.body.style.overflow = "";
 
-    // Wait for animations to finish before removing elements
     popup.addEventListener(
       "animationend",
       () => {
@@ -6182,98 +7397,375 @@ function showQuickFilterPopup() {
 
 // Function to hide dead torrents
 async function filterDeadTorrents(isInitialLoad = false) {
-  const prefs = await loadStoredPreferences();
-  if (!prefs.hideDeadTorrents) {
-    // Instead of showing all rows, reapply other active filters
-    const rows = document.querySelectorAll("table.torrent-list tbody tr");
-    rows.forEach((row) => (row.style.display = ""));
+  await applyAllTorrentFilters({ notify: isInitialLoad });
+}
 
-    // Reapply other active filters
-    if (prefs.keywordFilterEnabled) {
-      filterByKeywords(false);
-    }
-    if (prefs.fileSizeFilterEnabled) {
-      filterByFileSize();
-    }
-    if (prefs.completedDownloadsFilterEnabled) {
-      filterByCompletedDownloads();
-    }
-    return;
-  }
+const NE_SHOW_MORE_SKIP_DELAY_MS = 1500;
 
-  const rows = document.querySelectorAll("table.torrent-list tbody tr");
-  let hiddenCount = 0;
+const neShowMoreState = {
+  initialized: false,
+  loading: false,
+  loadingLabel: "Loading…",
+  currentPage: 1,
+  hasMore: false,
+};
 
-  rows.forEach((row) => {
-    // Changed selectors to be more specific and reliable
-    const seedersCell = row.querySelector("td:nth-of-type(6)");
-    const leechersCell = row.querySelector("td:nth-of-type(7)");
+let neTableMutationObserver = null;
 
-    if (seedersCell && leechersCell) {
-      const seeders = parseInt(seedersCell.textContent);
-      const leechers = parseInt(leechersCell.textContent);
-
-      if (seeders === 0 && leechers === 0) {
-        row.style.display = "none";
-        hiddenCount++;
-      } else {
-        // Only show if not hidden by other filters
-        if (row.style.display === "none") {
-          const title = getTitleFromRow(row);
-          const sizeCell = row.querySelector("td:nth-of-type(4)");
-          const sizeInBytes = sizeCell
-            ? convertToBytes(sizeCell.textContent)
-            : 0;
-
-          // Check other filters before showing
-          const showByKeyword =
-            !prefs.keywordFilterEnabled ||
-            !prefs.keywords.some((keyword) =>
-              title?.toLowerCase().includes(keyword.toLowerCase()),
-            );
-          const showBySize =
-            !prefs.fileSizeFilterEnabled ||
-            isInSizeRange(sizeInBytes, prefs.fileSizeRange);
-          const showByDownloads = !failsCompletedDownloadsFilter(
-            prefs,
-            getCompletedDownloadsFromRow(row),
-          );
-
-          if (showByKeyword && showBySize && showByDownloads) {
-            row.style.display = "";
-          }
-        }
-      }
-    }
-  });
-
-  if (hiddenCount > 0 && prefs.showFilterNotifications && isInitialLoad) {
-    showNotification(
-      `Hidden ${hiddenCount} dead torrent${hiddenCount === 1 ? "" : "s"}`,
-      true,
-    );
+function getNyaaPageNumberFromHref(href, base = window.location.href) {
+  try {
+    const url = new URL(href, base);
+    const p = parseInt(url.searchParams.get("p"), 10);
+    return Number.isFinite(p) && p > 0 ? p : 1;
+  } catch {
+    return 1;
   }
 }
 
-// Add this after filterDeadTorrents function
-function observeTableChanges() {
+function buildNyaaPageUrl(pageNumber) {
+  const url = new URL(window.location.href);
+  if (pageNumber <= 1) {
+    url.searchParams.delete("p");
+  } else {
+    url.searchParams.set("p", String(pageNumber));
+  }
+  return url.toString();
+}
+
+function getMaxPageNumberFromDocument(doc) {
+  let max = 1;
+  doc.querySelectorAll("ul.pagination a").forEach((anchor) => {
+    const href = anchor.getAttribute("href");
+    if (!href || href === "#") return;
+    const page = getNyaaPageNumberFromHref(href);
+    if (page > max) max = page;
+  });
+  const activePage = parseInt(
+    doc.querySelector("ul.pagination li.active a")?.textContent,
+    10,
+  );
+  if (Number.isFinite(activePage) && activePage > max) max = activePage;
+  return max;
+}
+
+function documentHasNextNyaaPage(doc, currentPage) {
+  const nextLink = doc.querySelector('ul.pagination a[rel="next"]');
+  if (nextLink) {
+    const href = nextLink.getAttribute("href");
+    const parent = nextLink.closest("li");
+    if (
+      href &&
+      href !== "#" &&
+      !parent?.classList.contains("disabled")
+    ) {
+      return getNyaaPageNumberFromHref(href) > currentPage;
+    }
+  }
+
+  return getMaxPageNumberFromDocument(doc) > currentPage;
+}
+
+function getExistingTorrentIds() {
+  const ids = new Set();
+  document
+    .querySelectorAll("table.torrent-list tbody tr")
+    .forEach((row) => {
+      const id = getTorrentIdFromRow(row);
+      if (id) ids.add(id);
+    });
+  return ids;
+}
+
+function getShowMoreButton() {
+  return document.querySelector(".ne-show-more__button");
+}
+
+function setShowMoreButtonContent(
+  button,
+  { loading = false, done = false, loadingLabel = "Loading…" } = {},
+) {
+  if (!button) return;
+  if (loading) {
+    button.innerHTML = `<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> ${loadingLabel}`;
+    return;
+  }
+  if (done) {
+    button.textContent = "No more results";
+    return;
+  }
+  button.innerHTML =
+    '<i class="fa fa-angle-down" aria-hidden="true"></i> Show more';
+}
+
+function updateShowMoreButtonState() {
+  const button = getShowMoreButton();
+  if (!button) return;
+
+  button.disabled = neShowMoreState.loading || !neShowMoreState.hasMore;
+  button.setAttribute("aria-busy", neShowMoreState.loading ? "true" : "false");
+
+  if (neShowMoreState.loading) {
+    setShowMoreButtonContent(button, {
+      loading: true,
+      loadingLabel: neShowMoreState.loadingLabel,
+    });
+  } else if (!neShowMoreState.hasMore) {
+    setShowMoreButtonContent(button, { done: true });
+  } else {
+    setShowMoreButtonContent(button);
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function applyFiltersToShowMoreRows(rows, prefs) {
+  const qsOptions = getQuickSearchClientFilterOptions();
+  let hidden = 0;
+  rows.forEach((row) => {
+    const shouldHide =
+      shouldHideRowByFilters(row, prefs) ||
+      shouldHideRowByQuickSearch(row, qsOptions);
+    row.style.display = shouldHide ? "none" : "";
+    if (shouldHide) hidden++;
+  });
+  return {
+    hidden,
+    visible: rows.length - hidden,
+    total: rows.length,
+  };
+}
+
+function animateNewTorrentRows(rows) {
+  const visibleRows = rows.filter((row) => row.style.display !== "none");
+  if (!visibleRows.length) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  visibleRows.forEach((row, index) => {
+    row.classList.add("ne-show-more-row-enter");
+    row.style.animationDelay = `${Math.min(index, 16) * 18}ms`;
+    const cleanup = () => {
+      row.classList.remove("ne-show-more-row-enter");
+      row.style.animationDelay = "";
+      row.removeEventListener("animationend", cleanup);
+    };
+    row.addEventListener("animationend", cleanup);
+  });
+}
+
+function resolveAnimetoshoLinksForRows(rows, prefs) {
+  if (!prefs.showATLinks) return;
+  rows.forEach((row) => {
+    if (row.style.display === "none") return;
+    updateTorrentRowLinkActions(row, prefs);
+  });
+}
+
+async function withTorrentTableObserverPaused(asyncFn) {
+  const tableBody = document.querySelector("table.torrent-list tbody");
+  if (neTableMutationObserver) {
+    neTableMutationObserver.disconnect();
+  }
+  try {
+    return await asyncFn();
+  } finally {
+    if (neTableMutationObserver && tableBody?.isConnected) {
+      neTableMutationObserver.observe(tableBody, {
+        childList: true,
+        subtree: true,
+      });
+    }
+  }
+}
+
+function prepareImportedShowMoreRow(sourceRow, pageNumber, prefs) {
+  const row = document.importNode(sourceRow, true);
+  row.querySelectorAll("script").forEach((script) => script.remove());
+  row.classList.add("ne-show-more-page");
+  row.dataset.nePage = String(pageNumber);
+  addCheckboxToTorrentRow(row, prefs);
+  updateTorrentRowLinkActions(row, prefs, { deferAnimetosho: true });
+  return row;
+}
+
+async function fetchAndAppendNyaaPage(tableBody, prefs) {
+  const nextPage = neShowMoreState.currentPage + 1;
+  const nextUrl = buildNyaaPageUrl(nextPage);
+  const response = await fetch(nextUrl, { credentials: "include" });
+
+  if (!response.ok) {
+    const error = new Error(`Failed to load page (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+
+  const html = await response.text();
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const sourceRows = Array.from(
+    doc.querySelectorAll("table.torrent-list tbody tr"),
+  );
+  const existingIds = getExistingTorrentIds();
+
+  const newRows = [];
+  for (const sourceRow of sourceRows) {
+    if (!isNyaaTorrentDataRow(sourceRow)) continue;
+    const torrentId = getTorrentIdFromRow(sourceRow);
+    if (torrentId && existingIds.has(torrentId)) continue;
+    if (torrentId) existingIds.add(torrentId);
+    newRows.push(prepareImportedShowMoreRow(sourceRow, nextPage, prefs));
+  }
+
+  neShowMoreState.currentPage = nextPage;
+  neShowMoreState.hasMore =
+    sourceRows.length > 0 && documentHasNextNyaaPage(doc, nextPage);
+
+  if (!newRows.length) {
+    return { added: 0, visible: 0, visibleRows: [] };
+  }
+
+  const filterResult = applyFiltersToShowMoreRows(newRows, prefs);
+  const visibleRows = newRows.filter((row) => row.style.display !== "none");
+
+  await withTorrentTableObserverPaused(async () => {
+    newRows.forEach((row) => tableBody.appendChild(row));
+    if (visibleRows.length) {
+      animateNewTorrentRows(newRows);
+      // Resolve AnimeTosho links only after visible rows are in the table.
+      resolveAnimetoshoLinksForRows(newRows, prefs);
+    }
+  });
+
+  return {
+    added: newRows.length,
+    visible: filterResult.visible,
+    visibleRows,
+  };
+}
+
+async function loadNextNyaaResultsPage() {
+  if (neShowMoreState.loading || !neShowMoreState.hasMore) return;
+
   const tableBody = document.querySelector("table.torrent-list tbody");
   if (!tableBody) return;
 
+  neShowMoreState.loading = true;
+  neShowMoreState.loadingLabel = "Loading…";
+  updateShowMoreButtonState();
+
+  try {
+    const prefs = await loadStoredPreferences();
+    let foundVisible = false;
+    let skippedFilteredPages = 0;
+    let isFirstFetch = true;
+
+    while (neShowMoreState.hasMore && !foundVisible) {
+      if (!isFirstFetch) {
+        neShowMoreState.loadingLabel = "Looking for more results…";
+        updateShowMoreButtonState();
+        await delay(NE_SHOW_MORE_SKIP_DELAY_MS);
+      }
+      isFirstFetch = false;
+
+      const pageResult = await fetchAndAppendNyaaPage(tableBody, prefs);
+
+      if (pageResult.visible > 0) {
+        foundVisible = true;
+        if (prefs.showSeaDex) {
+          applySeaDexToListPage(pageResult.visibleRows);
+        }
+        break;
+      }
+
+      if (!pageResult.added) {
+        showNotification(
+          skippedFilteredPages > 0
+            ? "No more results match your current filters."
+            : neShowMoreState.hasMore
+              ? "No new results on this page."
+              : "No more results.",
+          true,
+        );
+        return;
+      }
+
+      skippedFilteredPages++;
+    }
+
+    if (!foundVisible) {
+      showNotification(
+        skippedFilteredPages > 0
+          ? "No more results match your current filters."
+          : "No more results.",
+        true,
+      );
+    }
+  } catch (error) {
+    console.error("Failed to load more Nyaa results:", error);
+    showNotification(
+      error?.status === 429
+        ? "Nyaa is rate limiting requests. Please wait and try again."
+        : "Failed to load more results. Please try again.",
+      false,
+    );
+  } finally {
+    neShowMoreState.loading = false;
+    neShowMoreState.loadingLabel = "Loading…";
+    updateShowMoreButtonState();
+  }
+}
+
+function initShowMorePagination() {
+  if (neShowMoreState.initialized) return;
+  if (!document.querySelector("table.torrent-list tbody")) return;
+
+  const currentPage = getNyaaPageNumberFromHref(window.location.href);
+  if (!documentHasNextNyaaPage(document, currentPage)) return;
+
+  const tableResponsive = document.querySelector(
+    ".table-responsive:has(table.torrent-list)",
+  );
+  if (!tableResponsive) return;
+
+  neShowMoreState.initialized = true;
+  neShowMoreState.currentPage = currentPage;
+  neShowMoreState.hasMore = true;
+
+  const container = document.createElement("div");
+  container.className = "ne-show-more";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ne-show-more__button";
+  button.setAttribute("aria-label", "Show more results");
+  button.title = "Load the next page of results";
+  setShowMoreButtonContent(button);
+  button.addEventListener("click", () => {
+    loadNextNyaaResultsPage();
+  });
+
+  container.appendChild(button);
+  tableResponsive.insertAdjacentElement("afterend", container);
+}
+
+function observeTableChanges() {
+  const tableBody = document.querySelector("table.torrent-list tbody");
+  if (!tableBody || neTableMutationObserver) return;
+
   let isInitialLoad = true;
-  const observer = new MutationObserver((mutations) => {
+  neTableMutationObserver = new MutationObserver((mutations) => {
     if (isInitialLoad) {
       isInitialLoad = false;
       return;
     }
+    if (neShowMoreState.loading) return;
     filterDeadTorrents();
-    filterByCompletedDownloads();
     if (mutationsIncludeNonLinkActionChanges(mutations)) {
       patchTorrentListLinkActionsForNewRows();
     }
   });
 
-  observer.observe(tableBody, {
+  neTableMutationObserver.observe(tableBody, {
     childList: true,
     subtree: true,
   });
@@ -6281,98 +7773,8 @@ function observeTableChanges() {
 
 // Add new function for keyword filtering
 async function filterByKeywords(isInitialLoad = false) {
-  const prefs = await loadStoredPreferences();
-  if (!prefs.keywordFilterEnabled) {
-    // Show all rows that aren't hidden by other filters
-    const rows = document.querySelectorAll("table.torrent-list tbody tr");
-    rows.forEach((row) => {
-      if (row.style.display === "none") {
-        // Check other active filters before showing
-        const seedersCell = row.querySelector("td:nth-of-type(6)");
-        const leechersCell = row.querySelector("td:nth-of-type(7)");
-        const sizeCell = row.querySelector("td:nth-of-type(4)");
-
-        const seeders = seedersCell ? parseInt(seedersCell.textContent) : 0;
-        const leechers = leechersCell ? parseInt(leechersCell.textContent) : 0;
-        const sizeInBytes = sizeCell ? convertToBytes(sizeCell.textContent) : 0;
-
-        const showByDead = !(
-          seeders === 0 &&
-          leechers === 0 &&
-          prefs.hideDeadTorrents
-        );
-        const showBySize =
-          !prefs.fileSizeFilterEnabled ||
-          isInSizeRange(sizeInBytes, prefs.fileSizeRange);
-        const showByDownloads = !failsCompletedDownloadsFilter(
-          prefs,
-          getCompletedDownloadsFromRow(row),
-        );
-
-        if (showByDead && showBySize && showByDownloads) {
-          row.style.display = "";
-        }
-      }
-    });
-    return;
-  }
-
-  const rows = document.querySelectorAll("table.torrent-list tbody tr");
-  let hiddenCount = 0;
-
-  rows.forEach((row) => {
-    const title = getTitleFromRow(row);
-    if (!title) return;
-
-    // Check all active filters
-    const seedersCell = row.querySelector("td:nth-of-type(6)");
-    const leechersCell = row.querySelector("td:nth-of-type(7)");
-    const sizeCell = row.querySelector("td:nth-of-type(4)");
-
-    const seeders = seedersCell ? parseInt(seedersCell.textContent) : 0;
-    const leechers = leechersCell ? parseInt(leechersCell.textContent) : 0;
-    const sizeInBytes = sizeCell ? convertToBytes(sizeCell.textContent) : 0;
-
-    const containsKeyword = prefs.keywords.some((keyword) =>
-      title.toLowerCase().includes(keyword.toLowerCase()),
-    );
-    const isDead = seeders === 0 && leechers === 0 && prefs.hideDeadTorrents;
-    const wrongSize =
-      prefs.fileSizeFilterEnabled &&
-      !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
-    const wrongDownloads = failsCompletedDownloadsFilter(
-      prefs,
-      getCompletedDownloadsFromRow(row),
-    );
-
-    if (containsKeyword || isDead || wrongSize || wrongDownloads) {
-      if (row.style.display !== "none") {
-        row.style.display = "none";
-        if (containsKeyword) hiddenCount++;
-      }
-    } else {
-      row.style.display = "";
-    }
-  });
-
-  if (hiddenCount > 0 && prefs.showFilterNotifications && isInitialLoad) {
-    showNotification(
-      `Hidden ${hiddenCount} torrent${
-        hiddenCount === 1 ? "" : "s"
-      } matching keywords`,
-      true,
-    );
-  }
+  await applyAllTorrentFilters({ notify: isInitialLoad });
 }
-
-// Add to message listener
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "keywordsUpdated") {
-    browser.storage.sync.set({ keywords: message.keywords }, () => {
-      filterByKeywords(true); // Always pass true to show notifications
-    });
-  }
-});
 
 // Initialize the extension when the page loads
 if (document.readyState === "loading") {
@@ -6388,12 +7790,13 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "settingChanged") {
     handleSettingChange(message.setting, message.value);
   } else if (message.type === "keywordsUpdated") {
-    browser.storage.sync.set({ keywords: message.keywords }, () => {
-      filterByKeywords();
+    savePreferences({ keywords: message.keywords }, () => {
+      neDisplayFilterKeywords(message.keywords);
+      applyAllTorrentFilters({ notify: true });
     });
   } else if (message.type === "monitoredUsersUpdated") {
     // Update the monitored users and refresh the sidebar if it exists
-    browser.storage.sync.set({ monitoredUsers: message.monitoredUsers }, () => {
+    savePreferences({ monitoredUsers: message.monitoredUsers }, () => {
       const sidebar = document.querySelector(".monitored-users-sidebar");
       if (sidebar) {
         checkMonitoredUsers();
@@ -6402,18 +7805,18 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Function to check URL for date filter parameter and apply it
-function checkAndApplyDateFilter() {
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get("dateFilter") === "30days") {
-    // Wait a bit for the page to fully load before filtering
-    setTimeout(() => {
-      filterByLast30Days();
-    }, 500);
-  }
+// Function to check URL for Quick Search client-side filter parameters
+function checkAndApplyQuickSearchFilters() {
+  const options = getQuickSearchClientFilterOptions();
+  if (!options) return;
+
+  setTimeout(() => {
+    applyQuickSearchClientFilters(options);
+  }, 500);
 }
 
 async function initializeExtension(isInitialLoad = false) {
+  await addFiltersPanel();
   addCopyButton();
   addCheckboxColumn();
   addAnimetoshoToViewPage();
@@ -6427,18 +7830,18 @@ async function initializeExtension(isInitialLoad = false) {
   addSendButtonToViewPage();
   enhanceTorrentDescriptionPanel();
   showChangelog();
-  filterDeadTorrents(isInitialLoad);
   observeTableChanges();
-  filterByKeywords(isInitialLoad);
+  initShowMorePagination();
+  await applyAllTorrentFilters({ notify: isInitialLoad });
   toggleComments();
   applyImprovedFileListFromPrefs();
-  filterByFileSize();
-  filterByCompletedDownloads();
   handleChangelogPage();
+  handleSettingsPage();
   addChangelogNavItem();
+  addSettingsNavItem();
   addMonitorButton();
   checkMonitoredUsers();
-  checkAndApplyDateFilter();
+  checkAndApplyQuickSearchFilters();
 }
 
 async function addMagnetButtonToViewPage() {
@@ -6452,11 +7855,7 @@ async function addMagnetButtonToViewPage() {
   const magnetLink = document.querySelector('a[href^="magnet:"]');
   if (!magnetLink) return;
 
-  if (
-    magnetLink.parentNode.querySelector(
-      ".magnet-button:not(.send-torrent-button)",
-    )
-  ) {
+  if (magnetLink.parentNode.querySelector(".magnet-button:not(.send-torrent-button)")) {
     return;
   }
 
@@ -6470,6 +7869,223 @@ async function addMagnetButtonToViewPage() {
 }
 
 // Shared helper: wires up the click → torrent client flow
+const SEND_TORRENT_CONCURRENCY = 3;
+const SEND_FATAL_ERRORS = new Set([
+  "auth_failed",
+  "auth_required",
+  "permission_denied",
+  "wrong_client",
+]);
+
+function getTorrentClientAuth(prefs) {
+  if (prefs.torrentClient === "transmission") {
+    return {
+      username: prefs.transmissionUsername || "",
+      password: prefs.transmissionPassword || "",
+    };
+  }
+  if (prefs.torrentClient === "deluge") {
+    return { username: "", password: prefs.delugePassword || "" };
+  }
+  return {
+    username: prefs.qbtUsername || "",
+    password: prefs.qbtPassword || "",
+  };
+}
+
+function getSendTorrentErrorMessage(result) {
+  switch (result?.error) {
+    case "already_exists":
+      return "Torrent already exists in your client.";
+    case "wrong_client":
+      return "Wrong torrent client selected for this URL. Fix it in the extension popup.";
+    case "auth_failed":
+      return "Authentication failed — check your credentials.";
+    case "auth_required":
+      return "Torrent client requires authentication.";
+    case "permission_denied":
+      return "Missing network permission. Use Test Connection in the extension popup.";
+    default:
+      return "Failed to send torrent. Check the client connection.";
+  }
+}
+
+function qbtNeedsSendPrompt(prefs) {
+  return (
+    prefs.torrentClient === "qbittorrent" &&
+    prefs.qbtPromptOnSend &&
+    ((prefs.qbtCategories || []).length > 0 || (prefs.qbtTags || []).length > 0)
+  );
+}
+
+async function sendMagnetToClient(magnetUrl, prefs, { category, tags } = {}) {
+  const { username, password } = getTorrentClientAuth(prefs);
+  const isQbt = prefs.torrentClient === "qbittorrent";
+  const msg = {
+    type: "sendTorrent",
+    client: prefs.torrentClient,
+    url: prefs.torrentClientUrl,
+    username,
+    password,
+    magnetUrl,
+  };
+  if (isQbt) {
+    msg.category = category || "";
+    msg.tags = tags || [];
+  }
+  return browser.runtime.sendMessage(msg);
+}
+
+function setBatchSendButtonsBusy(busy) {
+  document.querySelectorAll(".send-batch-button").forEach((btn) => {
+    btn.disabled = busy;
+  });
+}
+
+async function sendMagnetsToClient(magnetUrls, prefs, category, tags) {
+  const progressNotification = createProgressNotification();
+  const total = magnetUrls.length;
+  let sent = 0;
+  let alreadyExists = 0;
+  let failed = 0;
+  let processed = 0;
+  let abortError = null;
+  let nextIndex = 0;
+
+  progressNotification.textContent = `Sending: 0/${total}`;
+  setBatchSendButtonsBusy(true);
+
+  const worker = async () => {
+    while (nextIndex < total) {
+      if (abortError) return;
+      const magnetUrl = magnetUrls[nextIndex++];
+      let result;
+      try {
+        result = await sendMagnetToClient(magnetUrl, prefs, { category, tags });
+      } catch (err) {
+        result = { ok: false, error: "request_failed", message: err.message };
+      }
+
+      processed++;
+      if (result?.ok) sent++;
+      else if (result?.error === "already_exists") alreadyExists++;
+      else {
+        failed++;
+        if (SEND_FATAL_ERRORS.has(result?.error)) abortError = result;
+      }
+      progressNotification.textContent = `Sending: ${processed}/${total}`;
+    }
+  };
+
+  try {
+    const workerCount = Math.min(SEND_TORRENT_CONCURRENCY, total);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  } finally {
+    setBatchSendButtonsBusy(false);
+  }
+
+  if (abortError) {
+    setProgressNotificationStatus(progressNotification, "error");
+    const skipped = total - processed;
+    const extra =
+      sent || alreadyExists
+        ? ` (${sent} sent, ${alreadyExists} already in client${skipped ? `, ${skipped} skipped` : ""}).`
+        : "";
+    progressNotification.textContent =
+      getSendTorrentErrorMessage(abortError) + extra;
+    dismissProgressNotification(progressNotification, 5000);
+    return;
+  }
+
+  if (sent === 0 && alreadyExists === 0) {
+    setProgressNotificationStatus(progressNotification, "error");
+    progressNotification.textContent = `Failed to send ${failed} torrent${failed === 1 ? "" : "s"}.`;
+  } else if (failed) {
+    setProgressNotificationStatus(progressNotification, "warning");
+    progressNotification.textContent = `Sent ${sent} torrent${sent === 1 ? "" : "s"} (${alreadyExists} already in client, ${failed} failed).`;
+  } else if (sent === 0 && alreadyExists) {
+    setProgressNotificationStatus(progressNotification, "warning");
+    progressNotification.textContent = `All ${alreadyExists} torrent${alreadyExists === 1 ? " is" : "s are"} already in your client.`;
+  } else if (alreadyExists) {
+    progressNotification.textContent = `Sent ${sent} torrent${sent === 1 ? "" : "s"} (${alreadyExists} already in client).`;
+  } else {
+    progressNotification.textContent = `Sent ${sent} torrent${sent === 1 ? "" : "s"} to client!`;
+  }
+  dismissProgressNotification(progressNotification, 4000);
+}
+
+function resolveQbtSendOptions(prefs) {
+  if (prefs.torrentClient !== "qbittorrent") {
+    return Promise.resolve({ category: "", tags: [], cancelled: false });
+  }
+  if (!qbtNeedsSendPrompt(prefs)) {
+    return Promise.resolve({
+      category: prefs.qbtDefaultCategory || "",
+      tags: prefs.qbtDefaultTags || [],
+      cancelled: false,
+    });
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    openQbtCategoryTagModal(
+      prefs,
+      (category, tags) => {
+        if (settled) return;
+        settled = true;
+        savePreferences({
+          qbtLastCategory: category || "",
+          qbtLastTags: tags || [],
+        });
+        resolve({ category, tags, cancelled: false });
+      },
+      () => {
+        if (settled) return;
+        settled = true;
+        resolve({ cancelled: true });
+      },
+    );
+  });
+}
+
+async function sendVisibleTorrentsToClient(magnetUrls, emptyMessage) {
+  if (!magnetUrls.length) {
+    showNotification(emptyMessage, false);
+    return;
+  }
+
+  const prefs = await loadStoredPreferences();
+  if (!prefs.torrentClientUrl) {
+    showNotification(
+      "No torrent client configured. Set it up in the extension popup.",
+      false,
+    );
+    return;
+  }
+
+  const options = await resolveQbtSendOptions(prefs);
+  if (options.cancelled) return;
+  await sendMagnetsToClient(
+    magnetUrls,
+    prefs,
+    options.category,
+    options.tags,
+  );
+}
+
+function sendSelectedTorrents() {
+  return sendVisibleTorrentsToClient(
+    getSelectedVisibleMagnetUrls(),
+    "No visible torrents selected!",
+  );
+}
+
+function sendAllVisibleTorrents() {
+  return sendVisibleTorrentsToClient(
+    getVisibleMagnetUrls(),
+    "No torrents found!",
+  );
+}
+
 function wireSendTorrentAction(element, magnetUrl) {
   element.addEventListener("click", async (e) => {
     e.preventDefault();
@@ -6484,24 +8100,7 @@ function wireSendTorrentAction(element, magnetUrl) {
       return;
     }
 
-    let username = "",
-      password = "";
-    if (currentPrefs.torrentClient === "transmission") {
-      username = currentPrefs.transmissionUsername;
-      password = currentPrefs.transmissionPassword;
-    } else if (currentPrefs.torrentClient === "deluge") {
-      password = currentPrefs.delugePassword;
-    } else {
-      username = currentPrefs.qbtUsername;
-      password = currentPrefs.qbtPassword;
-    }
-
     const isQbt = currentPrefs.torrentClient === "qbittorrent";
-    const needsPrompt =
-      isQbt &&
-      currentPrefs.qbtPromptOnSend &&
-      (currentPrefs.qbtCategories.length > 0 ||
-        currentPrefs.qbtTags.length > 0);
 
     const setBusy = (busy) => {
       if (element instanceof HTMLButtonElement) {
@@ -6514,42 +8113,27 @@ function wireSendTorrentAction(element, magnetUrl) {
 
     const doSend = async (category, tags) => {
       setBusy(true);
-
-      const msg = {
-        type: "sendTorrent",
-        client: currentPrefs.torrentClient,
-        url: currentPrefs.torrentClientUrl,
-        username,
-        password,
-        magnetUrl,
-      };
       if (isQbt) {
-        msg.category = category || "";
-        msg.tags = tags || [];
-        browser.storage.sync.set({
+        savePreferences({
           qbtLastCategory: category || "",
           qbtLastTags: tags || [],
         });
       }
 
-      const result = await new Promise((resolve) => {
-        browser.runtime.sendMessage(msg, resolve);
-      });
+      let result;
+      try {
+        result = await sendMagnetToClient(magnetUrl, currentPrefs, {
+          category,
+          tags,
+        });
+      } catch (err) {
+        result = { ok: false, error: "request_failed", message: err.message };
+      }
 
       setBusy(false);
 
       if (!result || !result.ok) {
-        const msgTxt =
-          result?.error === "already_exists"
-            ? "Torrent already exists in your client."
-            : result?.error === "wrong_client"
-              ? "Wrong torrent client selected for this URL. Fix it in the extension popup."
-              : result?.error === "auth_failed"
-                ? "Authentication failed — check your credentials."
-                : result?.error === "auth_required"
-                  ? "Torrent client requires authentication."
-                  : "Failed to send torrent. Check the client connection.";
-        showNotification(msgTxt, false);
+        showNotification(getSendTorrentErrorMessage(result), false);
         return;
       }
 
@@ -6561,7 +8145,7 @@ function wireSendTorrentAction(element, magnetUrl) {
       return;
     }
 
-    if (!needsPrompt) {
+    if (!qbtNeedsSendPrompt(currentPrefs)) {
       await doSend(
         currentPrefs.qbtDefaultCategory || "",
         currentPrefs.qbtDefaultTags || [],
@@ -6598,9 +8182,19 @@ function createSendButton(magnetUrl, extraStyles = {}) {
 
 // ── qBittorrent category/tag selection modal ─────────────────────────────────
 
-function openQbtCategoryTagModal(prefs, onConfirm) {
+let qbtModalOnCancel = null;
+
+function invokeQbtModalCancel() {
+  const cancelCb = qbtModalOnCancel;
+  qbtModalOnCancel = null;
+  if (typeof cancelCb === "function") cancelCb();
+}
+
+function openQbtCategoryTagModal(prefs, onConfirm, onCancel) {
   // Remove any existing modal first (skip fade-out so a fresh one can open)
+  invokeQbtModalCancel();
   closeQbtCategoryTagModal(true);
+  qbtModalOnCancel = typeof onCancel === "function" ? onCancel : null;
 
   const categories = prefs.qbtCategories || [];
   const tags = prefs.qbtTags || [];
@@ -6663,7 +8257,7 @@ function openQbtCategoryTagModal(prefs, onConfirm) {
               `,
                   )
                   .join("")
-              : `<span class="qbt-modal-empty">No tags defined. Add some in extension settings.</span>`
+              : `<span class="qbt-modal-empty">No tags defined. Add some on the <a href="/settings">Settings page</a>.</span>`
           }
         </div>
       </div>
@@ -6684,12 +8278,16 @@ function openQbtCategoryTagModal(prefs, onConfirm) {
   const cancelBtn = modal.querySelector("#qbtModalCancelBtn");
   const confirmBtn = modal.querySelector("#qbtModalConfirmBtn");
 
-  const close = () => closeQbtCategoryTagModal();
+  const close = (cancelled = true) => {
+    if (cancelled) invokeQbtModalCancel();
+    else qbtModalOnCancel = null;
+    closeQbtCategoryTagModal();
+  };
 
-  closeBtn.addEventListener("click", close);
-  cancelBtn.addEventListener("click", close);
+  closeBtn.addEventListener("click", () => close(true));
+  cancelBtn.addEventListener("click", () => close(true));
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) close();
+    if (e.target === overlay) close(true);
   });
 
   confirmBtn.addEventListener("click", () => {
@@ -6699,7 +8297,7 @@ function openQbtCategoryTagModal(prefs, onConfirm) {
       "#qbtModalTagsContainer input[type='checkbox']:checked",
     );
     const tags = Array.from(tagInputs).map((cb) => cb.value);
-    close();
+    close(false);
     onConfirm(category, tags);
   });
 
@@ -6733,7 +8331,10 @@ function closeQbtCategoryTagModal(immediate = false) {
 }
 
 function qbtModalKeyHandler(e) {
-  if (e.key === "Escape") closeQbtCategoryTagModal();
+  if (e.key === "Escape") {
+    invokeQbtModalCancel();
+    closeQbtCategoryTagModal();
+  }
   if (e.key === "Enter") {
     const confirmBtn = document.getElementById("qbtModalConfirmBtn");
     if (confirmBtn) confirmBtn.click();
@@ -6914,6 +8515,7 @@ function convertToBytes(sizeStr) {
   const numValue = parseFloat(value);
 
   switch (unit) {
+    case "B":
     case "Bytes":
       return numValue;
     case "KiB":
@@ -6930,197 +8532,799 @@ function convertToBytes(sizeStr) {
 }
 
 // Function to check if size is within selected range
-function isInSizeRange(sizeInBytes, range) {
-  switch (range) {
-    case "less_than_256mb":
-      return sizeInBytes < 256 * 1024 * 1024;
-    case "less_than_512mb":
-      return sizeInBytes < 512 * 1024 * 1024;
-    case "less_than_768mb":
-      return sizeInBytes < 768 * 1024 * 1024;
-    case "less_than_1gb":
-      return sizeInBytes < 1024 * 1024 * 1024;
-    case "greater_than_1gb":
-      return sizeInBytes > 1024 * 1024 * 1024;
-    case "greater_than_5gb":
-      return sizeInBytes > 5 * 1024 * 1024 * 1024;
-    case "greater_than_10gb":
-      return sizeInBytes > 10 * 1024 * 1024 * 1024;
-    case "greater_than_20gb":
-      return sizeInBytes > 20 * 1024 * 1024 * 1024;
-    default:
-      return true;
+const FILE_SIZE_FILTER_ABSOLUTE_MAX_BYTES = 51200 * 1024 * 1024;
+const FILE_SIZE_FILTER_DEFAULT_MIN_BYTES = 500 * 1024 * 1024;
+const FILE_SIZE_FILTER_DEFAULT_MAX_BYTES = 4 * 1024 * 1024 * 1024;
+
+const LEGACY_FILE_SIZE_RANGE_MAP = {
+  less_than_256mb: { min: 0, max: 256 * 1024 * 1024 },
+  less_than_512mb: { min: 0, max: 512 * 1024 * 1024 },
+  less_than_768mb: { min: 0, max: 768 * 1024 * 1024 },
+  less_than_1gb: { min: 0, max: 1024 * 1024 * 1024 },
+  greater_than_1gb: {
+    min: 1024 * 1024 * 1024,
+    max: FILE_SIZE_FILTER_ABSOLUTE_MAX_BYTES,
+  },
+  greater_than_5gb: {
+    min: 5 * 1024 * 1024 * 1024,
+    max: FILE_SIZE_FILTER_ABSOLUTE_MAX_BYTES,
+  },
+  greater_than_10gb: {
+    min: 10 * 1024 * 1024 * 1024,
+    max: FILE_SIZE_FILTER_ABSOLUTE_MAX_BYTES,
+  },
+  greater_than_20gb: {
+    min: 20 * 1024 * 1024 * 1024,
+    max: FILE_SIZE_FILTER_ABSOLUTE_MAX_BYTES,
+  },
+};
+
+function getFileSizeFilterBounds(prefs) {
+  if (
+    typeof prefs.fileSizeMinBytes === "number" &&
+    typeof prefs.fileSizeMaxBytes === "number"
+  ) {
+    return {
+      min: prefs.fileSizeMinBytes,
+      max: prefs.fileSizeMaxBytes,
+    };
   }
+
+  const legacy = LEGACY_FILE_SIZE_RANGE_MAP[prefs.fileSizeRange];
+  if (legacy) return legacy;
+
+  return {
+    min: FILE_SIZE_FILTER_DEFAULT_MIN_BYTES,
+    max: FILE_SIZE_FILTER_DEFAULT_MAX_BYTES,
+  };
+}
+
+function isInFileSizeFilterRange(sizeInBytes, prefs) {
+  const { min, max } = getFileSizeFilterBounds(prefs);
+  return sizeInBytes >= min && sizeInBytes <= max;
+}
+
+function getActiveFilterLabels(prefs) {
+  const labels = [];
+  if (prefs.hideDeadTorrents) labels.push("dead torrents");
+  if (prefs.keywordFilterEnabled && prefs.keywords.length > 0) {
+    labels.push("blocked keywords");
+  }
+  if (prefs.fileSizeFilterEnabled) labels.push("file size");
+  if (prefs.completedDownloadsFilterEnabled) labels.push("completed downloads");
+  return labels;
+}
+
+function formatFilterHiddenNotificationMessage(hiddenCount, activeFilterLabels) {
+  const torrentWord = hiddenCount === 1 ? "torrent" : "torrents";
+  if (activeFilterLabels.length === 1) {
+    return `Hid ${hiddenCount} ${torrentWord} matching your ${activeFilterLabels[0]} filter`;
+  }
+  if (activeFilterLabels.length > 1) {
+    return `Hid ${hiddenCount} ${torrentWord} matching your filters (${activeFilterLabels.join(", ")})`;
+  }
+  return `Hid ${hiddenCount} ${torrentWord} matching your active filters`;
+}
+
+function shouldHideRowByFilters(row, prefs) {
+  const title = getTitleFromRow(row);
+  const sizeCell = row.querySelector("td:nth-of-type(4)");
+  const seedersCell = row.querySelector("td:nth-of-type(6)");
+  const leechersCell = row.querySelector("td:nth-of-type(7)");
+
+  const seeders = seedersCell ? parseInt(seedersCell.textContent, 10) || 0 : 0;
+  const leechers = leechersCell ? parseInt(leechersCell.textContent, 10) || 0 : 0;
+  const sizeInBytes = sizeCell ? convertToBytes(sizeCell.textContent) : 0;
+
+  if (prefs.hideDeadTorrents && seeders === 0 && leechers === 0) {
+    return true;
+  }
+
+  if (
+    prefs.keywordFilterEnabled &&
+    prefs.keywords.some((keyword) =>
+      title?.toLowerCase().includes(keyword.toLowerCase()),
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    prefs.fileSizeFilterEnabled &&
+    !isInFileSizeFilterRange(sizeInBytes, prefs)
+  ) {
+    return true;
+  }
+
+  if (
+    isNyaaTorrentListPage() &&
+    failsCompletedDownloadsFilter(prefs, getCompletedDownloadsFromRow(row))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+async function applyAllTorrentFilters({ notify = false } = {}) {
+  const tableBody = document.querySelector("table.torrent-list tbody");
+  if (!tableBody) return { newlyHidden: 0, totalHidden: 0 };
+
+  const prefs = await loadStoredPreferences();
+  const qsOptions = getQuickSearchClientFilterOptions();
+  const rows = tableBody.querySelectorAll("tr");
+  let newlyHidden = 0;
+  let totalHidden = 0;
+  const newlyVisibleForAt = [];
+
+  rows.forEach((row) => {
+    if (!isNyaaTorrentDataRow(row)) return;
+
+    const wasVisible = row.style.display !== "none";
+    const shouldHide =
+      shouldHideRowByFilters(row, prefs) ||
+      shouldHideRowByQuickSearch(row, qsOptions);
+
+    row.style.display = shouldHide ? "none" : "";
+
+    if (shouldHide) {
+      totalHidden++;
+      if (wasVisible) newlyHidden++;
+    } else if (
+      !wasVisible &&
+      row.querySelector(".link-action-at-placeholder")
+    ) {
+      newlyVisibleForAt.push(row);
+    }
+  });
+
+  newlyVisibleForAt.forEach((row) => {
+    updateTorrentRowLinkActions(row, prefs);
+  });
+
+  if (notify && prefs.showFilterNotifications && newlyHidden > 0) {
+    showNotification(
+      formatFilterHiddenNotificationMessage(
+        newlyHidden,
+        getActiveFilterLabels(prefs),
+      ),
+      true,
+    );
+  }
+
+  return { newlyHidden, totalHidden };
 }
 
 async function filterByCompletedDownloads() {
-  if (!isNyaaTorrentListPage()) return;
-
-  const prefs = await loadStoredPreferences();
-  const rows = document.querySelectorAll("table.torrent-list tbody tr");
-  let hiddenCount = 0;
-
-  if (!prefs.completedDownloadsFilterEnabled) {
-    rows.forEach((row) => {
-      if (row.style.display === "none") {
-        const title = getTitleFromRow(row);
-        const seedersCell = row.querySelector("td:nth-of-type(6)");
-        const leechersCell = row.querySelector("td:nth-of-type(7)");
-        const sizeCell = row.querySelector("td:nth-of-type(4)");
-
-        const seeders = seedersCell ? parseInt(seedersCell.textContent) : 0;
-        const leechers = leechersCell ? parseInt(leechersCell.textContent) : 0;
-        const sizeInBytes = sizeCell ? convertToBytes(sizeCell.textContent) : 0;
-
-        const showByDead = !(
-          seeders === 0 &&
-          leechers === 0 &&
-          prefs.hideDeadTorrents
-        );
-        const showByKeyword =
-          !prefs.keywordFilterEnabled ||
-          !prefs.keywords.some((keyword) =>
-            title?.toLowerCase().includes(keyword.toLowerCase()),
-          );
-        const showBySize =
-          !prefs.fileSizeFilterEnabled ||
-          isInSizeRange(sizeInBytes, prefs.fileSizeRange);
-
-        if (showByDead && showByKeyword && showBySize) {
-          row.style.display = "";
-        }
-      }
-    });
-    return;
-  }
-
-  rows.forEach((row) => {
-    const title = getTitleFromRow(row);
-    const seedersCell = row.querySelector("td:nth-of-type(6)");
-    const leechersCell = row.querySelector("td:nth-of-type(7)");
-    const sizeCell = row.querySelector("td:nth-of-type(4)");
-
-    const seeders = seedersCell ? parseInt(seedersCell.textContent) : 0;
-    const leechers = leechersCell ? parseInt(leechersCell.textContent) : 0;
-    const sizeInBytes = sizeCell ? convertToBytes(sizeCell.textContent) : 0;
-    const completedDownloads = getCompletedDownloadsFromRow(row);
-
-    const wrongDownloads = failsCompletedDownloadsFilter(
-      prefs,
-      completedDownloads,
-    );
-    const isDead = seeders === 0 && leechers === 0 && prefs.hideDeadTorrents;
-    const containsKeyword =
-      prefs.keywordFilterEnabled &&
-      prefs.keywords.some((keyword) =>
-        title?.toLowerCase().includes(keyword.toLowerCase()),
-      );
-    const wrongSize =
-      prefs.fileSizeFilterEnabled &&
-      !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
-
-    if (wrongDownloads || isDead || containsKeyword || wrongSize) {
-      if (row.style.display !== "none") {
-        row.style.display = "none";
-        if (wrongDownloads) hiddenCount++;
-      }
-    } else {
-      row.style.display = "";
-    }
-  });
-
-  if (hiddenCount > 0 && prefs.showFilterNotifications) {
-    showNotification(
-      `Hidden ${hiddenCount} torrent${
-        hiddenCount === 1 ? "" : "s"
-      } by completed downloads`,
-      true,
-    );
-  }
+  await applyAllTorrentFilters({ notify: true });
 }
 
 async function filterByFileSize() {
-  const prefs = await loadStoredPreferences();
-  const rows = document.querySelectorAll("table.torrent-list tbody tr");
-  let hiddenCount = 0;
+  await applyAllTorrentFilters({ notify: true });
+}
 
-  if (!prefs.fileSizeFilterEnabled) {
-    // Show all rows that aren't hidden by other filters
-    rows.forEach((row) => {
-      if (row.style.display === "none") {
-        const title = getTitleFromRow(row);
-        const seedersCell = row.querySelector("td:nth-of-type(6)");
-        const leechersCell = row.querySelector("td:nth-of-type(7)");
+function hasTorrentListTable() {
+  return !!document.querySelector("table.torrent-list");
+}
 
-        const seeders = seedersCell ? parseInt(seedersCell.textContent) : 0;
-        const leechers = leechersCell ? parseInt(leechersCell.textContent) : 0;
+const NE_FILTER_FILE_SIZE_SLIDER_MAX_MB = 51200;
+const NE_FILTER_FILE_SIZE_ABSOLUTE_MAX_BYTES =
+  NE_FILTER_FILE_SIZE_SLIDER_MAX_MB * 1024 * 1024;
+const NE_FILTER_FILE_SIZE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB"];
+const NE_FILTER_FILE_SIZE_UNIT_MULTIPLIERS = {
+  B: 1,
+  KiB: 1024,
+  MiB: 1024 * 1024,
+  GiB: 1024 * 1024 * 1024,
+  TiB: 1024 * 1024 * 1024 * 1024,
+};
 
-        const showByDead = !(
-          seeders === 0 &&
-          leechers === 0 &&
-          prefs.hideDeadTorrents
-        );
-        const showByKeyword =
-          !prefs.keywordFilterEnabled ||
-          !prefs.keywords.some((keyword) =>
-            title?.toLowerCase().includes(keyword.toLowerCase()),
-          );
-        const showByDownloads = !failsCompletedDownloadsFilter(
-          prefs,
-          getCompletedDownloadsFromRow(row),
-        );
+let neFilterFileSizeInputDebounceTimer = null;
 
-        if (showByDead && showByKeyword && showByDownloads) {
-          row.style.display = "";
-        }
-      }
+function neFormatFileSizeDisplayValue(value, unit) {
+  if (unit === "B") return String(Math.round(value));
+  if (value >= 100) return String(Math.round(value));
+  if (value >= 10) return String(Math.round(value * 10) / 10);
+  return String(Math.round(value * 100) / 100);
+}
+
+function neBytesToDisplayValue(bytes, preferredUnit) {
+  if (
+    preferredUnit &&
+    NE_FILTER_FILE_SIZE_UNIT_MULTIPLIERS[preferredUnit] !== undefined
+  ) {
+    const value = bytes / NE_FILTER_FILE_SIZE_UNIT_MULTIPLIERS[preferredUnit];
+    return {
+      value: neFormatFileSizeDisplayValue(value, preferredUnit),
+      unit: preferredUnit,
+    };
+  }
+
+  let unitIndex = 0;
+  let value = bytes;
+  while (value >= 1024 && unitIndex < NE_FILTER_FILE_SIZE_UNITS.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  const unit = NE_FILTER_FILE_SIZE_UNITS[unitIndex];
+  return {
+    value: neFormatFileSizeDisplayValue(value, unit),
+    unit,
+  };
+}
+
+function neDisplayValueToBytes(value, unit) {
+  const num = parseFloat(value);
+  const multiplier = NE_FILTER_FILE_SIZE_UNIT_MULTIPLIERS[unit];
+  if (!Number.isFinite(num) || num < 0 || multiplier === undefined) return 0;
+  return Math.round(num * multiplier);
+}
+
+function neClampFileSizeBounds(minBytes, maxBytes) {
+  let min = Math.max(
+    0,
+    Math.min(minBytes, NE_FILTER_FILE_SIZE_ABSOLUTE_MAX_BYTES),
+  );
+  let max = Math.max(
+    0,
+    Math.min(maxBytes, NE_FILTER_FILE_SIZE_ABSOLUTE_MAX_BYTES),
+  );
+  if (min > max) [min, max] = [max, min];
+  return { min, max };
+}
+
+function neBytesToSliderMb(bytes) {
+  return Math.round(bytes / (1024 * 1024));
+}
+
+function neSliderMbToBytes(mb) {
+  return mb * 1024 * 1024;
+}
+
+function neFormatFileSizeRangeSummary(minBytes, maxBytes) {
+  const minDisp = neBytesToDisplayValue(minBytes);
+  const maxDisp = neBytesToDisplayValue(maxBytes);
+  return `${minDisp.value} ${minDisp.unit} – ${maxDisp.value} ${maxDisp.unit}`;
+}
+
+function neUpdateFileSizeRangeFill() {
+  const minSlider = document.getElementById("ne-fileSizeMinSlider");
+  const maxSlider = document.getElementById("ne-fileSizeMaxSlider");
+  const fill = document.getElementById("ne-fileSizeRangeFill");
+  if (!minSlider || !maxSlider || !fill) return;
+
+  const minVal = parseInt(minSlider.value, 10);
+  const maxVal = parseInt(maxSlider.value, 10);
+  const minPercent = (minVal / NE_FILTER_FILE_SIZE_SLIDER_MAX_MB) * 100;
+  const maxPercent = (maxVal / NE_FILTER_FILE_SIZE_SLIDER_MAX_MB) * 100;
+  fill.style.left = `${minPercent}%`;
+  fill.style.width = `${maxPercent - minPercent}%`;
+}
+
+function neReadFileSizeBoundsFromControls() {
+  const minInput = document.getElementById("ne-fileSizeMinInput");
+  const maxInput = document.getElementById("ne-fileSizeMaxInput");
+  const minUnit = document.getElementById("ne-fileSizeMinUnit").value;
+  const maxUnit = document.getElementById("ne-fileSizeMaxUnit").value;
+  const minBytes = neDisplayValueToBytes(minInput.value, minUnit);
+  const maxBytes = neDisplayValueToBytes(maxInput.value, maxUnit);
+  return neClampFileSizeBounds(minBytes, maxBytes);
+}
+
+function neSyncFileSizeControlsFromBounds(
+  minBytes,
+  maxBytes,
+  { updateStorage = false } = {},
+) {
+  const bounds = neClampFileSizeBounds(minBytes, maxBytes);
+  const minUnitSelect = document.getElementById("ne-fileSizeMinUnit");
+  const maxUnitSelect = document.getElementById("ne-fileSizeMaxUnit");
+  const minDisp = neBytesToDisplayValue(bounds.min, minUnitSelect.value);
+  const maxDisp = neBytesToDisplayValue(bounds.max, maxUnitSelect.value);
+
+  document.getElementById("ne-fileSizeMinInput").value = String(minDisp.value);
+  minUnitSelect.value = minDisp.unit;
+  document.getElementById("ne-fileSizeMaxInput").value = String(maxDisp.value);
+  maxUnitSelect.value = maxDisp.unit;
+  document.getElementById("ne-fileSizeMinSlider").value = String(
+    neBytesToSliderMb(bounds.min),
+  );
+  document.getElementById("ne-fileSizeMaxSlider").value = String(
+    neBytesToSliderMb(bounds.max),
+  );
+  document.getElementById("ne-fileSizeRangeSummary").textContent =
+    neFormatFileSizeRangeSummary(bounds.min, bounds.max);
+  neUpdateFileSizeRangeFill();
+
+  if (updateStorage) {
+    savePreferences({
+      fileSizeMinBytes: bounds.min,
+      fileSizeMaxBytes: bounds.max,
     });
+    handleSettingChange("fileSizeMinBytes", bounds.min);
+    handleSettingChange("fileSizeMaxBytes", bounds.max);
+  }
+}
+
+function neSetFileSizeRangeControlsEnabled(enabled) {
+  const container = document.getElementById("ne-fileSizeRangeContainer");
+  if (!container) return;
+  container.querySelectorAll("input, select").forEach((el) => {
+    el.disabled = !enabled;
+  });
+  container.classList.toggle("disabled", !enabled);
+}
+
+function neSetCompletedDownloadsControlsEnabled(enabled) {
+  const operatorSelect = document.getElementById(
+    "ne-completedDownloadsOperator",
+  );
+  const valueInput = document.getElementById("ne-completedDownloadsValue");
+  if (operatorSelect) operatorSelect.disabled = !enabled;
+  if (valueInput) valueInput.disabled = !enabled;
+}
+
+function neSetFilterToggleState(toggleId, enabled) {
+  const toggle = document.querySelector(
+    `.ne-filters-panel [data-ne-toggle="${toggleId}"]`,
+  );
+  if (toggle) toggle.setAttribute("aria-checked", String(enabled));
+}
+
+function neCountActiveFilters(prefs) {
+  let count = 0;
+  if (prefs.hideDeadTorrents) count++;
+  if (prefs.keywordFilterEnabled) count++;
+  if (prefs.fileSizeFilterEnabled) count++;
+  if (prefs.completedDownloadsFilterEnabled) count++;
+  return count;
+}
+
+function neUpdateActiveFilterBadge(prefs) {
+  const badge = document.querySelector(".ne-filters-panel__badge");
+  if (!badge) return;
+  const count = neCountActiveFilters(prefs);
+  badge.textContent = String(count);
+  badge.hidden = count === 0;
+}
+
+async function neSaveFilterSetting(key, value) {
+  await new Promise((resolve) =>
+    savePreferences({ [key]: value }, resolve),
+  );
+  await handleSettingChange(key, value);
+  const prefs = await loadStoredPreferences();
+  neUpdateActiveFilterBadge(prefs);
+}
+
+function neDisplayFilterKeywords(keywords) {
+  const keywordsList = document.getElementById("ne-keywords-list");
+  if (!keywordsList) return;
+  keywordsList.innerHTML = "";
+
+  if (!keywords.length) {
+    const empty = document.createElement("p");
+    empty.className = "ne-filters-panel__empty-keywords";
+    empty.textContent = "No keywords added yet.";
+    keywordsList.appendChild(empty);
     return;
   }
 
-  rows.forEach((row) => {
-    const title = getTitleFromRow(row);
-    const sizeCell = row.querySelector("td:nth-of-type(4)");
-    if (!sizeCell) return;
+  keywords.forEach((keyword) => {
+    const item = document.createElement("div");
+    item.className = "ne-filters-panel__keyword-item";
+    item.innerHTML = `
+      <span class="ne-filters-panel__keyword-text"></span>
+      <button type="button" class="ne-filters-panel__keyword-remove" title="Remove keyword">×</button>
+    `;
+    item.querySelector(".ne-filters-panel__keyword-text").textContent = keyword;
+    item
+      .querySelector(".ne-filters-panel__keyword-remove")
+      .addEventListener("click", () => neRemoveFilterKeyword(keyword));
+    keywordsList.appendChild(item);
+  });
+}
 
-    // Check all active filters
-    const seedersCell = row.querySelector("td:nth-of-type(6)");
-    const leechersCell = row.querySelector("td:nth-of-type(7)");
+async function neAddFilterKeyword() {
+  const input = document.getElementById("ne-keyword-input");
+  const keyword = input.value.trim();
+  if (!keyword) return;
 
-    const seeders = seedersCell ? parseInt(seedersCell.textContent) : 0;
-    const leechers = leechersCell ? parseInt(leechersCell.textContent) : 0;
-    const sizeInBytes = convertToBytes(sizeCell.textContent);
+  const prefs = await loadStoredPreferences();
+  if (prefs.keywords.includes(keyword)) {
+    input.value = "";
+    return;
+  }
 
-    const wrongSize = !isInSizeRange(sizeInBytes, prefs.fileSizeRange);
-    const isDead = seeders === 0 && leechers === 0 && prefs.hideDeadTorrents;
-    const containsKeyword =
-      prefs.keywordFilterEnabled &&
-      prefs.keywords.some((keyword) =>
-        title?.toLowerCase().includes(keyword.toLowerCase()),
-      );
-    const wrongDownloads = failsCompletedDownloadsFilter(
-      prefs,
-      getCompletedDownloadsFromRow(row),
-    );
+  const keywords = [...prefs.keywords, keyword];
+  await new Promise((resolve) =>
+    savePreferences({ keywords }, resolve),
+  );
+  input.value = "";
+  neDisplayFilterKeywords(keywords);
+  await applyAllTorrentFilters({ notify: true });
+}
 
-    if (wrongSize || isDead || containsKeyword || wrongDownloads) {
-      if (row.style.display !== "none") {
-        row.style.display = "none";
-        if (wrongSize) hiddenCount++;
-      }
-    } else {
-      row.style.display = "";
-    }
+async function neRemoveFilterKeyword(keywordToRemove) {
+  const prefs = await loadStoredPreferences();
+  const keywords = prefs.keywords.filter((k) => k !== keywordToRemove);
+  await new Promise((resolve) =>
+    savePreferences({ keywords }, resolve),
+  );
+  neDisplayFilterKeywords(keywords);
+  await applyAllTorrentFilters({ notify: true });
+}
+
+async function neRemoveAllFilterKeywords() {
+  await new Promise((resolve) =>
+    savePreferences({ keywords: [] }, resolve),
+  );
+  neDisplayFilterKeywords([]);
+  await applyAllTorrentFilters({ notify: true });
+}
+
+function neInitFileSizeRangeControls(prefs) {
+  const bounds = getFileSizeFilterBounds(prefs);
+  if (
+    typeof prefs.fileSizeMinBytes !== "number" ||
+    typeof prefs.fileSizeMaxBytes !== "number"
+  ) {
+    savePreferences({
+      fileSizeMinBytes: bounds.min,
+      fileSizeMaxBytes: bounds.max,
+    });
+  }
+  neSyncFileSizeControlsFromBounds(bounds.min, bounds.max);
+  neSetFileSizeRangeControlsEnabled(prefs.fileSizeFilterEnabled);
+}
+
+function nePersistFileSizeBoundsFromControls() {
+  const bounds = neReadFileSizeBoundsFromControls();
+  neSyncFileSizeControlsFromBounds(bounds.min, bounds.max, {
+    updateStorage: true,
+  });
+}
+
+function neScheduleFileSizePersistFromControls() {
+  clearTimeout(neFilterFileSizeInputDebounceTimer);
+  neFilterFileSizeInputDebounceTimer = setTimeout(() => {
+    nePersistFileSizeBoundsFromControls();
+  }, 250);
+}
+
+function neHandleFileSizeSliderInput(isMinSlider) {
+  const minSlider = document.getElementById("ne-fileSizeMinSlider");
+  const maxSlider = document.getElementById("ne-fileSizeMaxSlider");
+  let minMb = parseInt(minSlider.value, 10);
+  let maxMb = parseInt(maxSlider.value, 10);
+
+  if (isMinSlider && minMb > maxMb) {
+    minMb = maxMb;
+    minSlider.value = String(minMb);
+  } else if (!isMinSlider && maxMb < minMb) {
+    maxMb = minMb;
+    maxSlider.value = String(maxMb);
+  }
+
+  neSyncFileSizeControlsFromBounds(
+    neSliderMbToBytes(minMb),
+    neSliderMbToBytes(maxMb),
+  );
+}
+
+function neHandleFileSizeSliderCommit(isMinSlider) {
+  const minSlider = document.getElementById("ne-fileSizeMinSlider");
+  const maxSlider = document.getElementById("ne-fileSizeMaxSlider");
+  let minMb = parseInt(minSlider.value, 10);
+  let maxMb = parseInt(maxSlider.value, 10);
+
+  if (isMinSlider && minMb > maxMb) {
+    minMb = maxMb;
+    minSlider.value = String(minMb);
+  } else if (!isMinSlider && maxMb < minMb) {
+    maxMb = minMb;
+    maxSlider.value = String(maxMb);
+  }
+
+  neSyncFileSizeControlsFromBounds(
+    neSliderMbToBytes(minMb),
+    neSliderMbToBytes(maxMb),
+    { updateStorage: true },
+  );
+}
+
+function neWireFilterToggle(toggleId, settingKey, onChange) {
+  const toggle = document.querySelector(
+    `.ne-filters-panel [data-ne-toggle="${toggleId}"]`,
+  );
+  if (!toggle) return;
+
+  toggle.addEventListener("click", async () => {
+    const newState = toggle.getAttribute("aria-checked") !== "true";
+    toggle.setAttribute("aria-checked", String(newState));
+    if (onChange) onChange(newState);
+    await neSaveFilterSetting(settingKey, newState);
+  });
+}
+
+function neSetFiltersPanelExpanded(expanded) {
+  const panel = document.querySelector(".ne-filters-panel");
+  const body = document.querySelector(".ne-filters-panel__body");
+  const header = document.querySelector(".ne-filters-panel__header");
+  if (!panel || !body || !header) return;
+
+  panel.classList.toggle("ne-filters-panel--expanded", expanded);
+  header.setAttribute("aria-expanded", String(expanded));
+  body.hidden = !expanded;
+}
+
+async function neSyncFiltersPanelFromPrefs(prefs) {
+  neSetFilterToggleState("hideDeadTorrents", prefs.hideDeadTorrents);
+  neSetFilterToggleState("keywordFilter", prefs.keywordFilterEnabled);
+  neSetFilterToggleState("fileSizeFilter", prefs.fileSizeFilterEnabled);
+  neSetFilterToggleState(
+    "completedDownloadsFilter",
+    prefs.completedDownloadsFilterEnabled,
+  );
+
+  neDisplayFilterKeywords(prefs.keywords);
+  neInitFileSizeRangeControls(prefs);
+
+  const operatorSelect = document.getElementById("ne-completedDownloadsOperator");
+  const valueInput = document.getElementById("ne-completedDownloadsValue");
+  if (operatorSelect) {
+    operatorSelect.value = prefs.completedDownloadsFilterOperator || "gt";
+  }
+  if (valueInput) {
+    valueInput.value = String(prefs.completedDownloadsFilterValue ?? 0);
+  }
+  neSetCompletedDownloadsControlsEnabled(
+    prefs.completedDownloadsFilterEnabled,
+  );
+  neUpdateActiveFilterBadge(prefs);
+}
+
+async function addFiltersPanel() {
+  if (!hasTorrentListTable()) return;
+  if (document.querySelector(".ne-filters-panel")) return;
+
+  const tableResponsive = document.querySelector(
+    ".table-responsive:has(table.torrent-list)",
+  );
+  if (!tableResponsive) return;
+
+  const prefs = await loadStoredPreferences();
+
+  const panel = document.createElement("div");
+  panel.className = "ne-filters-panel";
+  panel.innerHTML = `
+    <button type="button" class="ne-filters-panel__header" aria-expanded="false">
+      <span class="ne-filters-panel__title"><i class="fa fa-filter" aria-hidden="true"></i> Filters</span>
+      <span class="ne-filters-panel__badge" hidden>0</span>
+      <span class="ne-filters-panel__chevron" aria-hidden="true"></span>
+    </button>
+    <div class="ne-filters-panel__body" hidden>
+      <div class="ne-filters-panel__toggles">
+        <div class="ne-filters-panel__toggle-item">
+          <span class="ne-filters-panel__toggle-label">Hide dead torrents (0 S/L)</span>
+          <button type="button" class="ne-filters-panel__toggle" data-ne-toggle="hideDeadTorrents" role="switch" aria-checked="false">
+            <span class="ne-filters-panel__toggle-indicator"></span>
+          </button>
+        </div>
+        <div class="ne-filters-panel__toggle-item">
+          <span class="ne-filters-panel__toggle-label">Enable keyword filtering</span>
+          <button type="button" class="ne-filters-panel__toggle" data-ne-toggle="keywordFilter" role="switch" aria-checked="false">
+            <span class="ne-filters-panel__toggle-indicator"></span>
+          </button>
+        </div>
+        <div class="ne-filters-panel__toggle-item">
+          <span class="ne-filters-panel__toggle-label">Filter by file size</span>
+          <button type="button" class="ne-filters-panel__toggle" data-ne-toggle="fileSizeFilter" role="switch" aria-checked="false">
+            <span class="ne-filters-panel__toggle-indicator"></span>
+          </button>
+        </div>
+        <div class="ne-filters-panel__toggle-item">
+          <span class="ne-filters-panel__toggle-label">Filter completed downloads</span>
+          <button type="button" class="ne-filters-panel__toggle" data-ne-toggle="completedDownloadsFilter" role="switch" aria-checked="false">
+            <span class="ne-filters-panel__toggle-indicator"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="ne-filters-panel__section">
+        <h4 class="ne-filters-panel__section-title">Blocked keywords</h4>
+        <p class="ne-filters-panel__section-desc">Torrents with these words in their title will be hidden when keyword filtering is enabled.</p>
+        <div class="ne-filters-panel__keyword-input-row">
+          <input type="text" id="ne-keyword-input" class="ne-filters-panel__keyword-input" placeholder="Enter keyword to filter" />
+          <button type="button" id="ne-add-keyword" class="ne-filters-panel__keyword-add">Add</button>
+        </div>
+        <div class="ne-filters-panel__keyword-actions">
+          <button type="button" id="ne-remove-all-keywords" class="ne-filters-panel__keyword-remove-all">Remove all</button>
+        </div>
+        <div id="ne-keywords-list" class="ne-filters-panel__keywords-list"></div>
+      </div>
+
+      <div class="ne-filters-panel__section" id="ne-fileSizeRangeContainer">
+        <h4 class="ne-filters-panel__section-title">File size range</h4>
+        <div class="ne-filters-panel__file-size-inputs">
+          <div class="ne-filters-panel__file-size-field">
+            <label for="ne-fileSizeMinInput">Minimum</label>
+            <div class="ne-filters-panel__file-size-value-row">
+              <input type="number" id="ne-fileSizeMinInput" min="0" step="any" disabled />
+              <select id="ne-fileSizeMinUnit" disabled>
+                <option value="B">B</option>
+                <option value="KiB">KiB</option>
+                <option value="MiB" selected>MiB</option>
+                <option value="GiB">GiB</option>
+                <option value="TiB">TiB</option>
+              </select>
+            </div>
+          </div>
+          <div class="ne-filters-panel__file-size-field">
+            <label for="ne-fileSizeMaxInput">Maximum</label>
+            <div class="ne-filters-panel__file-size-value-row">
+              <input type="number" id="ne-fileSizeMaxInput" min="0" step="any" disabled />
+              <select id="ne-fileSizeMaxUnit" disabled>
+                <option value="B">B</option>
+                <option value="KiB">KiB</option>
+                <option value="MiB">MiB</option>
+                <option value="GiB" selected>GiB</option>
+                <option value="TiB">TiB</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="ne-filters-panel__file-size-slider">
+          <div class="ne-filters-panel__file-size-track">
+            <div class="ne-filters-panel__file-size-fill" id="ne-fileSizeRangeFill"></div>
+          </div>
+          <input type="range" id="ne-fileSizeMinSlider" min="0" max="${NE_FILTER_FILE_SIZE_SLIDER_MAX_MB}" step="1" disabled />
+          <input type="range" id="ne-fileSizeMaxSlider" min="0" max="${NE_FILTER_FILE_SIZE_SLIDER_MAX_MB}" step="1" disabled />
+        </div>
+        <div class="ne-filters-panel__file-size-summary" id="ne-fileSizeRangeSummary"></div>
+      </div>
+
+      <div class="ne-filters-panel__section ne-filters-panel__completed-section">
+        <h4 class="ne-filters-panel__section-title">Completed downloads threshold</h4>
+        <div class="ne-filters-panel__completed-row">
+          <select id="ne-completedDownloadsOperator" disabled>
+            <option value="gt">Greater than</option>
+            <option value="eq">Equal to</option>
+            <option value="lt">Less than</option>
+          </select>
+          <input type="number" id="ne-completedDownloadsValue" min="0" step="1" placeholder="Count" disabled />
+        </div>
+      </div>
+    </div>
+  `;
+
+  tableResponsive.parentNode.insertBefore(panel, tableResponsive);
+  await neSyncFiltersPanelFromPrefs(prefs);
+
+  panel.querySelector(".ne-filters-panel__header").addEventListener(
+    "click",
+    () => {
+      const isExpanded = panel.classList.contains("ne-filters-panel--expanded");
+      neSetFiltersPanelExpanded(!isExpanded);
+    },
+  );
+
+  neWireFilterToggle("hideDeadTorrents", "hideDeadTorrents");
+  neWireFilterToggle("keywordFilter", "keywordFilterEnabled");
+  neWireFilterToggle("fileSizeFilter", "fileSizeFilterEnabled", (enabled) => {
+    neSetFileSizeRangeControlsEnabled(enabled);
+  });
+  neWireFilterToggle(
+    "completedDownloadsFilter",
+    "completedDownloadsFilterEnabled",
+    (enabled) => {
+      neSetCompletedDownloadsControlsEnabled(enabled);
+    },
+  );
+
+  document
+    .getElementById("ne-add-keyword")
+    .addEventListener("click", neAddFilterKeyword);
+  document.getElementById("ne-keyword-input").addEventListener(
+    "keypress",
+    (e) => {
+      if (e.key === "Enter") neAddFilterKeyword();
+    },
+  );
+  document
+    .getElementById("ne-remove-all-keywords")
+    .addEventListener("click", neRemoveAllFilterKeywords);
+
+  document
+    .getElementById("ne-fileSizeMinSlider")
+    .addEventListener("input", () => neHandleFileSizeSliderInput(true));
+  document
+    .getElementById("ne-fileSizeMinSlider")
+    .addEventListener("change", () => neHandleFileSizeSliderCommit(true));
+  document
+    .getElementById("ne-fileSizeMaxSlider")
+    .addEventListener("input", () => neHandleFileSizeSliderInput(false));
+  document
+    .getElementById("ne-fileSizeMaxSlider")
+    .addEventListener("change", () => neHandleFileSizeSliderCommit(false));
+
+  ["ne-fileSizeMinInput", "ne-fileSizeMaxInput"].forEach((id) => {
+    const input = document.getElementById(id);
+    input.addEventListener("input", neScheduleFileSizePersistFromControls);
+    input.addEventListener("change", () => {
+      clearTimeout(neFilterFileSizeInputDebounceTimer);
+      nePersistFileSizeBoundsFromControls();
+    });
   });
 
-  if (hiddenCount > 0 && prefs.showFilterNotifications) {
-    showNotification(
-      `Hidden ${hiddenCount} torrent${
-        hiddenCount === 1 ? "" : "s"
-      } by file size`,
-      true,
-    );
+  ["ne-fileSizeMinUnit", "ne-fileSizeMaxUnit"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", () => {
+      nePersistFileSizeBoundsFromControls();
+    });
+  });
+
+  document
+    .getElementById("ne-completedDownloadsOperator")
+    .addEventListener("change", async (e) => {
+      const newValue = e.target.value;
+      await neSaveFilterSetting("completedDownloadsFilterOperator", newValue);
+    });
+
+  document
+    .getElementById("ne-completedDownloadsValue")
+    .addEventListener("change", async (e) => {
+      const parsed = parseInt(e.target.value, 10);
+      const newValue = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+      e.target.value = String(newValue);
+      await neSaveFilterSetting("completedDownloadsFilterValue", newValue);
+    });
+}
+
+async function syncFiltersPanelUI(setting, value) {
+  const panel = document.querySelector(".ne-filters-panel");
+  if (!panel) return;
+
+  const prefs = await loadStoredPreferences();
+
+  switch (setting) {
+    case "hideDeadTorrents":
+      neSetFilterToggleState("hideDeadTorrents", value);
+      break;
+    case "keywordFilterEnabled":
+      neSetFilterToggleState("keywordFilter", value);
+      break;
+    case "fileSizeFilterEnabled":
+      neSetFilterToggleState("fileSizeFilter", value);
+      neSetFileSizeRangeControlsEnabled(value);
+      break;
+    case "completedDownloadsFilterEnabled":
+      neSetFilterToggleState("completedDownloadsFilter", value);
+      neSetCompletedDownloadsControlsEnabled(value);
+      break;
+    case "fileSizeMinBytes":
+    case "fileSizeMaxBytes":
+      neSyncFileSizeControlsFromBounds(
+        prefs.fileSizeMinBytes,
+        prefs.fileSizeMaxBytes,
+      );
+      break;
+    case "completedDownloadsFilterOperator":
+      const operatorSelect = document.getElementById(
+        "ne-completedDownloadsOperator",
+      );
+      if (operatorSelect) operatorSelect.value = value;
+      break;
+    case "completedDownloadsFilterValue":
+      const valueInput = document.getElementById("ne-completedDownloadsValue");
+      if (valueInput) valueInput.value = String(value ?? 0);
+      break;
+    case "keywords":
+      neDisplayFilterKeywords(value);
+      break;
   }
+
+  neUpdateActiveFilterBadge(prefs);
 }
 
 function showKeywordMonitorPopup() {
@@ -7546,7 +9750,7 @@ function showKeywordSelectPopup() {
         const totalChecked = document.querySelectorAll(
           ".magnet-checkbox:checked",
         ).length;
-        counter.textContent = `${totalChecked} selected`;
+        updateSelectionCounterDisplay(counter, totalChecked);
       }
     } else {
       showNotification(`No torrents found matching "${keyword}"`, false);
@@ -7585,6 +9789,1112 @@ function showKeywordSelectPopup() {
   overlay.addEventListener("click", closePopup);
 }
 
+// ── Settings Page ───────────────────────────────────────────────────────────
+
+const NE_SETTINGS_NAV_SECTIONS = [
+  { id: "ne-settings-download", label: "Download" },
+  { id: "ne-settings-interface", label: "Interface" },
+  { id: "ne-settings-filters", label: "Filters" },
+  { id: "ne-settings-view", label: "View Page" },
+  { id: "ne-settings-monitoring", label: "Monitoring" },
+  { id: "ne-settings-animetosho", label: "AnimeTosho" },
+  { id: "ne-settings-amenzb", label: "ameNZB" },
+  { id: "ne-settings-nekobt", label: "nekoBT" },
+  { id: "ne-settings-tsukihime", label: "Tsukihime" },
+  { id: "ne-settings-features", label: "Additional Features" },
+  { id: "ne-settings-qbt", label: "qBittorrent" },
+];
+
+function neSettingsCreateToggleRow(settingKey, label, hint = "", dependsOn = null) {
+  const row = document.createElement("div");
+  row.className = "ne-settings-row";
+  if (dependsOn) row.dataset.dependsOn = dependsOn;
+  row.innerHTML = `
+    <div class="ne-settings-row__info">
+      <span class="ne-settings-row__label">${label}</span>
+      ${hint ? `<span class="ne-settings-row__hint">${hint}</span>` : ""}
+    </div>
+    <button type="button" class="ne-settings-toggle is-off" data-setting="${settingKey}" role="switch" aria-checked="false">
+      <span class="ne-settings-toggle__thumb"></span>
+    </button>
+  `;
+  return row;
+}
+
+async function neSettingsSave(settingKey, value) {
+  if (settingKey === "changelogDismissed") {
+    await new Promise((resolve) =>
+      savePreferences({ changelogDismissed: !value, tempDismissed: !value }, resolve),
+    );
+  } else {
+    await new Promise((resolve) =>
+      savePreferences({ [settingKey]: value }, resolve),
+    );
+  }
+  await handleSettingChange(settingKey, value);
+}
+
+function neSettingsSyncToggleVisual(toggle, checked) {
+  if (!toggle) return;
+  const isOn = !!checked;
+  toggle.setAttribute("aria-checked", String(isOn));
+  toggle.classList.toggle("is-on", isOn);
+  toggle.classList.toggle("is-off", !isOn);
+}
+
+function neSettingsSetToggleState(settingKey, checked) {
+  const toggle = document.querySelector(
+    `.ne-settings-page [data-setting="${settingKey}"]`,
+  );
+  neSettingsSyncToggleVisual(toggle, checked);
+}
+
+function neSettingsUpdateDependentRows(buttonsEnabled) {
+  document
+    .querySelectorAll(".ne-settings-page [data-depends-on='showButtons']")
+    .forEach((row) => {
+      row.classList.toggle("is-disabled", !buttonsEnabled);
+    });
+}
+
+function neSettingsUpdateScreenshotInputs(enabled) {
+  const hover = document.getElementById("ne-sp-hover-delay");
+  const slide = document.getElementById("ne-sp-slide-delay");
+  const disclaimer = document.getElementById("ne-sp-disclaimer");
+  if (hover) hover.disabled = !enabled;
+  if (slide) slide.disabled = !enabled;
+  if (disclaimer) disclaimer.classList.toggle("is-visible", !!enabled);
+}
+
+function neSettingsUpdateAmeNZBState(hasApiKey) {
+  document
+    .querySelectorAll(".ne-settings-page [data-depends-on='ameNZBApiKey']")
+    .forEach((row) => {
+      row.classList.toggle("is-disabled", !hasApiKey);
+      const toggle = row.querySelector(".ne-settings-toggle");
+      if (toggle) toggle.disabled = !hasApiKey;
+    });
+}
+
+function neSettingsUpdateAmeNZBQuota(prefs) {
+  const el = document.getElementById("ne-amenzb-request-count");
+  if (!el) return;
+  const todayUTC = new Date().toISOString().slice(0, 10);
+  const todayCount =
+    prefs.ameNZBRequestDate === todayUTC ? prefs.ameNZBRequestCount : 0;
+  el.textContent = `${todayCount.toLocaleString()} / 10,000`;
+}
+
+function neSettingsWireToggles() {
+  document.querySelectorAll(".ne-settings-page .ne-settings-toggle").forEach((toggle) => {
+    toggle.addEventListener("click", async () => {
+      if (toggle.disabled) return;
+      const settingKey = toggle.dataset.setting;
+      const newState = toggle.getAttribute("aria-checked") !== "true";
+      neSettingsSyncToggleVisual(toggle, newState);
+
+      if (settingKey === "changelogDismissed") {
+        await neSettingsSave(settingKey, newState);
+        return;
+      }
+
+      await neSettingsSave(settingKey, newState);
+
+      if (settingKey === "showButtons") {
+        neSettingsUpdateDependentRows(newState);
+      }
+      if (settingKey === "screenshotPreviewEnabled") {
+        neSettingsUpdateScreenshotInputs(newState);
+      }
+      if (settingKey === "qbtPromptOnSend") {
+        neSettingsSaveQbtDefaults();
+      }
+    });
+  });
+}
+
+function neSettingsWireNav() {
+  const navLinks = document.querySelectorAll(".ne-settings-nav__link");
+  navLinks.forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      const targetId = link.dataset.target;
+      const section = document.getElementById(targetId);
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+        navLinks.forEach((l) => l.classList.remove("is-active"));
+        link.classList.add("is-active");
+      }
+    });
+  });
+
+  const sections = NE_SETTINGS_NAV_SECTIONS.map((s) =>
+    document.getElementById(s.id),
+  ).filter(Boolean);
+
+  if (!sections.length) return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const visible = entries
+        .filter((e) => e.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!visible) return;
+      navLinks.forEach((l) => {
+        l.classList.toggle("is-active", l.dataset.target === visible.target.id);
+      });
+    },
+    { rootMargin: "-20% 0px -60% 0px", threshold: [0, 0.25, 0.5] },
+  );
+
+  sections.forEach((section) => observer.observe(section));
+}
+
+async function neSettingsLoadValues() {
+  const prefs = await loadStoredPreferences();
+
+  const boolSettings = {
+    useDisplayName: prefs.useDisplayName,
+    useZip: prefs.useZip,
+    showButtons: prefs.showButtons,
+    showQuickFilter: prefs.showQuickFilter,
+    showMagnetButtons: prefs.showMagnetButtons,
+    showSendButtons: prefs.showSendButtons,
+    showMonitorButtons: prefs.showMonitorButtons,
+    showFilterNotifications: prefs.showFilterNotifications,
+    hideComments: prefs.hideComments,
+    improvedFileList: prefs.improvedFileList,
+    showATLinks: prefs.showATLinks,
+    useNewATDomain: prefs.useNewATDomain,
+    showATComments: prefs.showATComments,
+    showATScreenshotsSection: prefs.showATScreenshotsSection,
+    showATFileInfoSection: prefs.showATFileInfoSection,
+    showATAttachmentsSection: prefs.showATAttachmentsSection,
+    showNekoBTLinks: prefs.showNekoBTLinks,
+    showNekoBTSection: prefs.showNekoBTSection,
+    showNekoBTFullLangNames: prefs.showNekoBTFullLangNames,
+    showTsukihimeLinks: prefs.showTsukihimeLinks,
+    showTsukihimeSection: prefs.showTsukihimeSection,
+    showAmeNZBLinks: prefs.showAmeNZBLinks,
+    showAmeNZBSection: prefs.showAmeNZBSection,
+    screenshotPreviewEnabled: prefs.screenshotPreviewEnabled,
+    showSeaDex: prefs.showSeaDex,
+    showChangelogNav: prefs.showChangelogNav,
+    qbtPromptOnSend: prefs.qbtPromptOnSend !== false,
+  };
+
+  Object.entries(boolSettings).forEach(([key, value]) => {
+    neSettingsSetToggleState(key, value);
+  });
+
+  neSettingsSetToggleState("changelogDismissed", !prefs.changelogDismissed);
+
+  neSettingsUpdateDependentRows(prefs.showButtons);
+  neSettingsUpdateScreenshotInputs(prefs.screenshotPreviewEnabled);
+  neSettingsUpdateAmeNZBState(!!prefs.ameNZBApiKey);
+  neSettingsUpdateAmeNZBQuota(prefs);
+
+  const hoverInput = document.getElementById("ne-sp-hover-delay");
+  const slideInput = document.getElementById("ne-sp-slide-delay");
+  if (hoverInput) hoverInput.value = prefs.screenshotPreviewHoverDelay;
+  if (slideInput) slideInput.value = prefs.screenshotPreviewSlideDelay;
+
+  const qbtSection = document.getElementById("ne-settings-qbt");
+  if (qbtSection) {
+    qbtSection.hidden = prefs.torrentClient !== "qbittorrent";
+  }
+
+  if (prefs.torrentClient === "qbittorrent") {
+    neSettingsLoadQbtCategoryTagSettings(prefs);
+  }
+
+  await neSettingsLoadMonitoringLists();
+}
+
+function neSettingsFormatTimeAgo(date) {
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.round(diffMs / 60000);
+  if (diffMins < 60) {
+    return `${diffMins} min${diffMins !== 1 ? "s" : ""} ago`;
+  }
+  const hours = Math.round(diffMins / 60);
+  return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+}
+
+function neSettingsDisplayMonitoredUsers(monitoredUsers) {
+  const listEl = document.getElementById("ne-monitored-users-list");
+  if (!listEl) return;
+
+  listEl.innerHTML = "";
+  if (!monitoredUsers?.length) {
+    listEl.innerHTML =
+      '<p class="ne-settings-monitor-empty">You are not monitoring any users yet. Visit a user page and click the Monitor button to start tracking.</p>';
+    return;
+  }
+
+  monitoredUsers.forEach((user) => {
+    const hasNewTorrents = user.torrentCount > (user.lastDismissedCount || 0);
+    const newTorrentsCount = hasNewTorrents
+      ? user.torrentCount - (user.lastDismissedCount || 0)
+      : 0;
+    const lastChecked = user.lastChecked ? new Date(user.lastChecked) : new Date();
+
+    const item = document.createElement("div");
+    item.className = "ne-settings-monitor-item";
+    item.innerHTML = `
+      <div class="ne-settings-monitor-item__info">
+        <a class="ne-settings-monitor-item__title" href="${user.url}" target="_blank" rel="noopener"></a>
+        <div class="ne-settings-monitor-item__meta">
+          <span>${user.torrentCount} torrents</span>
+          ${hasNewTorrents ? `<span class="ne-settings-monitor-item__new">${newTorrentsCount} new</span>` : ""}
+          <span>Checked ${neSettingsFormatTimeAgo(lastChecked)}</span>
+        </div>
+      </div>
+    `;
+    item.querySelector(".ne-settings-monitor-item__title").textContent =
+      user.username;
+
+    const unmonitorBtn = document.createElement("button");
+    unmonitorBtn.type = "button";
+    unmonitorBtn.className = "ne-settings-btn ne-settings-btn--ghost ne-settings-btn--small";
+    unmonitorBtn.textContent = "Unmonitor";
+    unmonitorBtn.addEventListener("click", () =>
+      neSettingsUnmonitorUser(user.username),
+    );
+    item.appendChild(unmonitorBtn);
+    listEl.appendChild(item);
+  });
+}
+
+function neSettingsDisplayMonitoredKeywords(monitoredKeywords) {
+  const listEl = document.getElementById("ne-monitored-keywords-list");
+  if (!listEl) return;
+
+  listEl.innerHTML = "";
+  if (!monitoredKeywords?.length) {
+    listEl.innerHTML =
+      '<p class="ne-settings-monitor-empty">You are not monitoring any keywords yet. Add one above or use the Keyword Monitor button on the torrent list.</p>';
+    return;
+  }
+
+  monitoredKeywords.forEach((keywordObj) => {
+    const lastChecked = keywordObj.lastCheckedAt
+      ? new Date(keywordObj.lastCheckedAt)
+      : new Date();
+
+    const item = document.createElement("div");
+    item.className = "ne-settings-monitor-item";
+    item.innerHTML = `
+      <div class="ne-settings-monitor-item__info">
+        <a class="ne-settings-monitor-item__title" href="${getKeywordSearchUrl(keywordObj.keyword)}" target="_blank" rel="noopener"></a>
+        <div class="ne-settings-monitor-item__meta">
+          <span>Checked ${neSettingsFormatTimeAgo(lastChecked)}</span>
+        </div>
+      </div>
+    `;
+    item.querySelector(".ne-settings-monitor-item__title").textContent =
+      keywordObj.keyword;
+
+    const unmonitorBtn = document.createElement("button");
+    unmonitorBtn.type = "button";
+    unmonitorBtn.className = "ne-settings-btn ne-settings-btn--ghost ne-settings-btn--small";
+    unmonitorBtn.textContent = "Unmonitor";
+    unmonitorBtn.addEventListener("click", () =>
+      neSettingsRemoveMonitoredKeyword(keywordObj.keyword),
+    );
+    item.appendChild(unmonitorBtn);
+    listEl.appendChild(item);
+  });
+}
+
+async function neSettingsLoadMonitoringLists() {
+  const prefs = await loadStoredPreferences();
+  neSettingsDisplayMonitoredUsers(prefs.monitoredUsers || []);
+  neSettingsDisplayMonitoredKeywords(prefs.monitoredKeywords || []);
+}
+
+function neSettingsUnmonitorUser(username) {
+  getPreferences({ monitoredUsers: [] }, (items) => {
+    const monitoredUsers = items.monitoredUsers.filter(
+      (user) => user.username !== username,
+    );
+    savePreferences({ monitoredUsers }, () => {
+      neSettingsDisplayMonitoredUsers(monitoredUsers);
+      checkMonitoredUsers();
+    });
+  });
+}
+
+function neSettingsUnmonitorAllUsers() {
+  savePreferences({ monitoredUsers: [] }, () => {
+    neSettingsDisplayMonitoredUsers([]);
+    checkMonitoredUsers();
+  });
+}
+
+function neSettingsAddMonitoredKeyword() {
+  const input = document.getElementById("ne-monitor-keyword-input");
+  const keyword = input?.value.trim();
+  if (!keyword) return;
+
+  getPreferences({ monitoredKeywords: [] }, (items) => {
+    const monitoredKeywords = items.monitoredKeywords || [];
+    if (monitoredKeywords.some((k) => k.keyword === keyword)) {
+      input.value = "";
+      return;
+    }
+    monitoredKeywords.push({
+      keyword,
+      url: getKeywordSearchUrl(keyword),
+      lastTorrentId: 0,
+      lastDismissedTorrentId: 0,
+    });
+    savePreferences({ monitoredKeywords }, () => {
+      neSettingsDisplayMonitoredKeywords(monitoredKeywords);
+      input.value = "";
+      checkMonitoredUsers();
+    });
+  });
+}
+
+function neSettingsRemoveMonitoredKeyword(keywordToRemove) {
+  getPreferences({ monitoredKeywords: [] }, (items) => {
+    const monitoredKeywords = items.monitoredKeywords.filter(
+      (k) => k.keyword !== keywordToRemove,
+    );
+    savePreferences({ monitoredKeywords }, () => {
+      neSettingsDisplayMonitoredKeywords(monitoredKeywords);
+      checkMonitoredUsers();
+    });
+  });
+}
+
+function neSettingsRemoveAllMonitoredKeywords() {
+  savePreferences({ monitoredKeywords: [] }, () => {
+    neSettingsDisplayMonitoredKeywords([]);
+    checkMonitoredUsers();
+  });
+}
+
+function neSettingsWireMonitoringSection() {
+  document.querySelectorAll(".ne-settings-monitor-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const panelId = tab.dataset.monitorTab;
+      document.querySelectorAll(".ne-settings-monitor-tab").forEach((t) => {
+        t.classList.toggle("is-active", t === tab);
+      });
+      document.getElementById("ne-monitor-users-panel").hidden =
+        panelId !== "users";
+      document.getElementById("ne-monitor-keywords-panel").hidden =
+        panelId !== "keywords";
+    });
+  });
+
+  document
+    .getElementById("ne-unmonitor-all-users")
+    ?.addEventListener("click", neSettingsUnmonitorAllUsers);
+  document
+    .getElementById("ne-unmonitor-all-keywords")
+    ?.addEventListener("click", neSettingsRemoveAllMonitoredKeywords);
+  document
+    .getElementById("ne-add-monitor-keyword")
+    ?.addEventListener("click", neSettingsAddMonitoredKeyword);
+  document
+    .getElementById("ne-monitor-keyword-input")
+    ?.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") neSettingsAddMonitoredKeyword();
+    });
+}
+
+function neSettingsLoadQbtCategoryTagSettings(items) {
+  const categories = items.qbtCategories || [];
+  const tags = items.qbtTags || [];
+  const defaultCategory = items.qbtDefaultCategory || "";
+  const defaultTags = items.qbtDefaultTags || [];
+
+  neSettingsSetToggleState("qbtPromptOnSend", items.qbtPromptOnSend !== false);
+  neSettingsDisplayQbtCategories(categories, defaultCategory);
+  neSettingsDisplayQbtTags(tags);
+  neSettingsDisplayDefaultTags(tags, defaultTags);
+}
+
+function neSettingsDisplayQbtCategories(categories, selectedDefault) {
+  const listEl = document.getElementById("ne-qbt-categories-list");
+  const selectEl = document.getElementById("ne-qbt-default-category");
+  if (!listEl || !selectEl) return;
+
+  listEl.innerHTML = "";
+  if (!categories.length) {
+    listEl.innerHTML = '<span class="ne-settings-empty">No categories defined.</span>';
+  } else {
+    categories.forEach((cat) => {
+      const item = document.createElement("div");
+      item.className = "ne-settings-qbt-item";
+      item.innerHTML = `<span>${cat}</span>`;
+      const rmBtn = document.createElement("button");
+      rmBtn.type = "button";
+      rmBtn.className = "ne-settings-qbt-remove";
+      rmBtn.textContent = "Remove";
+      rmBtn.addEventListener("click", () => neSettingsRemoveQbtCategory(cat));
+      item.appendChild(rmBtn);
+      listEl.appendChild(item);
+    });
+  }
+
+  selectEl.innerHTML = '<option value="">(none)</option>';
+  categories.forEach((cat) => {
+    const opt = document.createElement("option");
+    opt.value = cat;
+    opt.textContent = cat;
+    if (cat === selectedDefault) opt.selected = true;
+    selectEl.appendChild(opt);
+  });
+}
+
+function neSettingsDisplayQbtTags(tags) {
+  const listEl = document.getElementById("ne-qbt-tags-list");
+  if (!listEl) return;
+
+  listEl.innerHTML = "";
+  if (!tags.length) {
+    listEl.innerHTML = '<span class="ne-settings-empty">No tags defined.</span>';
+    return;
+  }
+  tags.forEach((tag) => {
+    const item = document.createElement("div");
+    item.className = "ne-settings-qbt-item";
+    item.innerHTML = `<span>${tag}</span>`;
+    const rmBtn = document.createElement("button");
+    rmBtn.type = "button";
+    rmBtn.className = "ne-settings-qbt-remove";
+    rmBtn.textContent = "Remove";
+    rmBtn.addEventListener("click", () => neSettingsRemoveQbtTag(tag));
+    item.appendChild(rmBtn);
+    listEl.appendChild(item);
+  });
+}
+
+function neSettingsDisplayDefaultTags(tags, defaultTags) {
+  const container = document.getElementById("ne-qbt-default-tags");
+  if (!container) return;
+
+  container.innerHTML = "";
+  if (!tags.length) {
+    container.innerHTML =
+      '<span class="ne-settings-empty">No tags defined yet.</span>';
+    return;
+  }
+  tags.forEach((tag) => {
+    const label = document.createElement("label");
+    label.className = "ne-settings-qbt-tag-label";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = tag;
+    if (defaultTags.includes(tag)) cb.checked = true;
+    cb.addEventListener("change", () => neSettingsSaveQbtDefaults());
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(tag));
+    container.appendChild(label);
+  });
+}
+
+function neSettingsSaveQbtDefaults() {
+  const defaultCatSelect = document.getElementById("ne-qbt-default-category");
+  const defaultTags = [];
+  document
+    .querySelectorAll("#ne-qbt-default-tags input[type='checkbox']:checked")
+    .forEach((cb) => defaultTags.push(cb.value));
+
+  const promptToggle = document.querySelector(
+    '.ne-settings-page [data-setting="qbtPromptOnSend"]',
+  );
+
+  savePreferences({
+    qbtDefaultCategory: defaultCatSelect ? defaultCatSelect.value : "",
+    qbtDefaultTags: defaultTags,
+    qbtPromptOnSend: promptToggle
+      ? promptToggle.getAttribute("aria-checked") === "true"
+      : true,
+  });
+}
+
+function neSettingsAddQbtCategory() {
+  const input = document.getElementById("ne-qbt-new-category");
+  const name = input?.value.trim();
+  if (!name) return;
+  getPreferences({ qbtCategories: [] }, (items) => {
+    const list = items.qbtCategories || [];
+    if (list.includes(name)) {
+      input.value = "";
+      return;
+    }
+    list.push(name);
+    savePreferences({ qbtCategories: list }, () => {
+      input.value = "";
+      getPreferences({ qbtDefaultCategory: "" }, (items2) =>
+        neSettingsDisplayQbtCategories(list, items2.qbtDefaultCategory),
+      );
+    });
+  });
+}
+
+function neSettingsRemoveQbtCategory(cat) {
+  getPreferences(
+    { qbtCategories: [], qbtDefaultCategory: "", qbtLastCategory: null },
+    (items) => {
+      const list = (items.qbtCategories || []).filter((c) => c !== cat);
+      const defaultCat =
+        items.qbtDefaultCategory === cat ? "" : items.qbtDefaultCategory;
+      let lastCat = items.qbtLastCategory;
+      if (lastCat !== null && lastCat === cat) lastCat = "";
+      savePreferences(
+        {
+          qbtCategories: list,
+          qbtDefaultCategory: defaultCat,
+          qbtLastCategory: lastCat,
+        },
+        () => neSettingsDisplayQbtCategories(list, defaultCat),
+      );
+    },
+  );
+}
+
+function neSettingsAddQbtTag() {
+  const input = document.getElementById("ne-qbt-new-tag");
+  const name = input?.value.trim();
+  if (!name) return;
+  getPreferences({ qbtTags: [], qbtDefaultTags: [] }, (items) => {
+    const list = items.qbtTags || [];
+    if (list.includes(name)) {
+      input.value = "";
+      return;
+    }
+    list.push(name);
+    const defaultTags = items.qbtDefaultTags || [];
+    savePreferences({ qbtTags: list }, () => {
+      input.value = "";
+      neSettingsDisplayQbtTags(list);
+      neSettingsDisplayDefaultTags(list, defaultTags);
+    });
+  });
+}
+
+function neSettingsRemoveQbtTag(tag) {
+  getPreferences(
+    { qbtTags: [], qbtDefaultTags: [], qbtLastTags: null },
+    (items) => {
+      const list = (items.qbtTags || []).filter((t) => t !== tag);
+      const defaultTags = (items.qbtDefaultTags || []).filter((t) => t !== tag);
+      let lastTags = items.qbtLastTags;
+      if (lastTags !== null && Array.isArray(lastTags)) {
+        lastTags = lastTags.filter((t) => t !== tag);
+      }
+      savePreferences(
+        { qbtTags: list, qbtDefaultTags: defaultTags, qbtLastTags: lastTags },
+        () => {
+          neSettingsDisplayQbtTags(list);
+          neSettingsDisplayDefaultTags(list, defaultTags);
+        },
+      );
+    },
+  );
+}
+
+function neSettingsSetQbtSyncStatus(color, text) {
+  const statusEl = document.getElementById("ne-qbt-sync-status");
+  if (!statusEl) return;
+  statusEl.textContent = text || "";
+  statusEl.style.color = color || (text?.startsWith("✓") ? "#4caf50" : "#888");
+}
+
+async function neSettingsSyncQbtCategoriesAndTags() {
+  const syncBtn = document.getElementById("ne-qbt-sync-btn");
+  const syncIcon = document.getElementById("ne-qbt-sync-icon");
+  const prefs = await loadStoredPreferences();
+
+  if (prefs.torrentClient !== "qbittorrent") {
+    neSettingsSetQbtSyncStatus(null, "⚠ qBittorrent is not the selected client.");
+    return;
+  }
+
+  const url = prefs.torrentClientUrl?.trim();
+  if (!url) {
+    neSettingsSetQbtSyncStatus(null, "⚠ Configure your torrent client in the extension popup first.");
+    return;
+  }
+
+  const username = prefs.qbtUsername || "";
+  const password = prefs.qbtPassword || "";
+
+  syncBtn.disabled = true;
+  if (syncIcon) syncIcon.classList.add("is-spinning");
+  neSettingsSetQbtSyncStatus(null, "Syncing...");
+
+  try {
+    const result = await browser.runtime.sendMessage({
+      type: "qbtFetchCategoriesAndTags",
+      url,
+      username,
+      password,
+    });
+
+    if (!result?.ok) {
+      let msg = "✗ Sync failed";
+      switch (result?.error) {
+        case "auth_failed":
+          msg = "✗ Authentication failed — check credentials in extension popup";
+          break;
+        case "auth_required":
+          msg = "✗ Server requires authentication";
+          break;
+        case "permission_denied":
+          msg = "✗ Missing permission — use Test Connection in extension popup";
+          break;
+        case "wrong_client":
+          msg = "✗ This URL is not a qBittorrent server";
+          break;
+        default:
+          msg = result?.message ? `✗ ${result.message}` : msg;
+      }
+      neSettingsSetQbtSyncStatus("#e53935", msg);
+      return;
+    }
+
+    const remoteCats = result.categories || [];
+    const remoteTags = result.tags || [];
+
+    getPreferences(
+      {
+        qbtCategories: [],
+        qbtTags: [],
+        qbtDefaultCategory: "",
+        qbtDefaultTags: [],
+      },
+      (items) => {
+        const mergedCats = new Set([...(items.qbtCategories || []), ...remoteCats]);
+        const mergedTags = new Set([...(items.qbtTags || []), ...remoteTags]);
+        const catList = [...mergedCats].sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" }),
+        );
+        const tagList = [...mergedTags].sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" }),
+        );
+        const defaultCategory =
+          items.qbtDefaultCategory && mergedCats.has(items.qbtDefaultCategory)
+            ? items.qbtDefaultCategory
+            : "";
+        const defaultTags = (items.qbtDefaultTags || []).filter((t) =>
+          mergedTags.has(t),
+        );
+
+        savePreferences(
+          {
+            qbtCategories: catList,
+            qbtTags: tagList,
+            qbtDefaultCategory: defaultCategory,
+            qbtDefaultTags: defaultTags,
+          },
+          () => {
+            neSettingsDisplayQbtCategories(catList, defaultCategory);
+            neSettingsDisplayQbtTags(tagList);
+            neSettingsDisplayDefaultTags(tagList, defaultTags);
+            neSettingsSetQbtSyncStatus("#4caf50", "✓ Synced successfully.");
+          },
+        );
+      },
+    );
+  } catch (err) {
+    neSettingsSetQbtSyncStatus("#e53935", `✗ Sync error: ${err.message}`);
+  } finally {
+    syncBtn.disabled = false;
+    if (syncIcon) syncIcon.classList.remove("is-spinning");
+  }
+}
+
+function neSettingsWireQbtSection() {
+  document
+    .getElementById("ne-qbt-add-category")
+    ?.addEventListener("click", neSettingsAddQbtCategory);
+  document
+    .getElementById("ne-qbt-add-tag")
+    ?.addEventListener("click", neSettingsAddQbtTag);
+  document
+    .getElementById("ne-qbt-new-category")
+    ?.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") neSettingsAddQbtCategory();
+    });
+  document.getElementById("ne-qbt-new-tag")?.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") neSettingsAddQbtTag();
+  });
+  document
+    .getElementById("ne-qbt-default-category")
+    ?.addEventListener("change", neSettingsSaveQbtDefaults);
+  document
+    .getElementById("ne-qbt-sync-btn")
+    ?.addEventListener("click", neSettingsSyncQbtCategoriesAndTags);
+}
+
+function neSettingsWireScreenshotInputs() {
+  const attach = (inputId, settingKey, defaultValue, minValue) => {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const commit = async () => {
+      let value = parseFloat(input.value);
+      if (!isFinite(value) || value < minValue) {
+        value = defaultValue;
+        input.value = value;
+      }
+      await neSettingsSave(settingKey, value);
+    };
+    input.addEventListener("change", commit);
+    input.addEventListener("blur", commit);
+  };
+  attach("ne-sp-hover-delay", "screenshotPreviewHoverDelay", 2, 0);
+  attach("ne-sp-slide-delay", "screenshotPreviewSlideDelay", 2, 0.1);
+}
+
+function neSettingsBuildPageHTML() {
+  const navLinks = NE_SETTINGS_NAV_SECTIONS
+    .map(
+      (s) =>
+        `<button type="button" class="ne-settings-nav__link" data-target="${s.id}">${s.label}</button>`,
+    )
+    .join("");
+
+  const page = document.createElement("div");
+  page.className = "ne-settings-page";
+  page.innerHTML = `
+    <header class="ne-settings-page__header">
+      <h1>Nyaa Enhancer Settings</h1>
+      <p class="ne-settings-page__subtitle">
+        Configure how Nyaa Enhancer behaves on this site.
+        Torrent client connection and API keys (ameNZB, TMDB) are managed in the
+        <strong>extension popup</strong> (click the extension icon in your browser toolbar).
+      </p>
+    </header>
+    <div class="ne-settings-layout">
+      <nav class="ne-settings-nav" aria-label="Settings categories">${navLinks}</nav>
+      <div class="ne-settings-main">
+        <section id="ne-settings-download" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-download" aria-hidden="true"></i> Download</h2>
+          <p class="ne-settings-section__desc">Options for batch torrent file downloads from the torrent list.</p>
+          <div class="ne-settings-rows" id="ne-settings-download-rows"></div>
+        </section>
+        <section id="ne-settings-interface" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-sliders" aria-hidden="true"></i> Interface</h2>
+          <p class="ne-settings-section__desc">Control which buttons and controls appear on Nyaa pages.</p>
+          <div class="ne-settings-rows" id="ne-settings-interface-rows"></div>
+        </section>
+        <section id="ne-settings-filters" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-filter" aria-hidden="true"></i> Filters</h2>
+          <p class="ne-settings-section__desc">Filter options for the torrent list. Active filters are configured in the Filters panel above the torrent table.</p>
+          <div class="ne-settings-rows" id="ne-settings-filters-rows"></div>
+        </section>
+        <section id="ne-settings-view" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-file-text-o" aria-hidden="true"></i> Torrent View Page</h2>
+          <p class="ne-settings-section__desc">Customize individual torrent view pages.</p>
+          <div class="ne-settings-rows" id="ne-settings-view-rows"></div>
+        </section>
+        <section id="ne-settings-monitoring" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-bell" aria-hidden="true"></i> Monitoring</h2>
+          <p class="ne-settings-section__desc">Track new uploads from favorite uploaders or torrents matching specific keywords. Notifications appear in the sidebar on the left edge of the screen.</p>
+          <div class="ne-settings-monitor-tabs" role="tablist">
+            <button type="button" class="ne-settings-monitor-tab is-active" data-monitor-tab="users" role="tab" aria-selected="true">User Monitoring</button>
+            <button type="button" class="ne-settings-monitor-tab" data-monitor-tab="keywords" role="tab" aria-selected="false">Keyword Monitoring</button>
+          </div>
+          <div id="ne-monitor-users-panel" role="tabpanel">
+            <details class="ne-settings-howto">
+              <summary>How to monitor a user</summary>
+              <ol>
+                <li>Visit any user's page on Nyaa (e.g. <code>/user/username</code>)</li>
+                <li>Click the <strong>Monitor</strong> button next to their name</li>
+                <li>You'll receive notifications in the sidebar when they upload new torrents</li>
+              </ol>
+            </details>
+            <div class="ne-settings-monitor-header">
+              <h3>Currently Monitored Users</h3>
+              <button type="button" id="ne-unmonitor-all-users" class="ne-settings-btn ne-settings-btn--ghost ne-settings-btn--small">Unmonitor All</button>
+            </div>
+            <div id="ne-monitored-users-list" class="ne-settings-monitor-list"></div>
+          </div>
+          <div id="ne-monitor-keywords-panel" role="tabpanel" hidden>
+            <details class="ne-settings-howto">
+              <summary>How to monitor keywords</summary>
+              <ol>
+                <li>Visit the Nyaa homepage or any page with the torrent list</li>
+                <li>Click the <strong>Keyword Monitor</strong> button in the toolbar, or add keywords below</li>
+                <li>You'll receive sidebar notifications when new torrents match your keywords</li>
+              </ol>
+            </details>
+            <div class="ne-settings-keyword-add">
+              <input type="text" id="ne-monitor-keyword-input" placeholder="Enter keyword to monitor" />
+              <button type="button" id="ne-add-monitor-keyword" class="ne-settings-btn ne-settings-btn--primary ne-settings-btn--small">Add Monitor</button>
+            </div>
+            <div class="ne-settings-monitor-header">
+              <h3>Currently Monitored Keywords</h3>
+              <button type="button" id="ne-unmonitor-all-keywords" class="ne-settings-btn ne-settings-btn--ghost ne-settings-btn--small">Unmonitor All</button>
+            </div>
+            <div id="ne-monitored-keywords-list" class="ne-settings-monitor-list"></div>
+          </div>
+        </section>
+        <section id="ne-settings-animetosho" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-external-link" aria-hidden="true"></i> AnimeTosho</h2>
+          <p class="ne-settings-section__desc">AnimeTosho links and metadata on supported anime torrents.</p>
+          <div class="ne-settings-rows" id="ne-settings-animetosho-rows"></div>
+        </section>
+        <section id="ne-settings-amenzb" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-external-link" aria-hidden="true"></i> ameNZB</h2>
+          <p class="ne-settings-section__desc">ameNZB release links and metadata on supported torrents. Requires an API key configured in the extension popup.</p>
+          <div class="ne-settings-rows" id="ne-settings-amenzb-rows"></div>
+          <div class="ne-settings-row ne-settings-row--quota">
+            <div class="ne-settings-row__info">
+              <span class="ne-settings-row__label">API Requests Today</span>
+            </div>
+            <span id="ne-amenzb-request-count" class="ne-settings-quota">0 / 10,000</span>
+          </div>
+          <p class="ne-settings-notice ne-settings-notice--warning">
+            ⚠ API calls must come from your pinned IP address (set on ameNZB in Account Settings → IP Security). Requests from other IPs are rejected.
+          </p>
+        </section>
+        <section id="ne-settings-nekobt" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-external-link" aria-hidden="true"></i> nekoBT</h2>
+          <p class="ne-settings-section__desc">nekoBT release links and metadata sections.</p>
+          <div class="ne-settings-rows" id="ne-settings-nekobt-rows"></div>
+          <p class="ne-settings-notice">Rate limits are enforced but not publicly disclosed. If exceeded, requests will silently fail until the limit resets.</p>
+        </section>
+        <section id="ne-settings-tsukihime" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-external-link" aria-hidden="true"></i> Tsukihime</h2>
+          <p class="ne-settings-section__desc">Tsukihime release links and metadata sections.</p>
+          <div class="ne-settings-rows" id="ne-settings-tsukihime-rows"></div>
+          <p class="ne-settings-notice">Tsukihime API rate limits are currently unknown. Excessive use may trigger rate limiting.</p>
+        </section>
+        <section id="ne-settings-features" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-star" aria-hidden="true"></i> Additional Features</h2>
+          <p class="ne-settings-section__desc">Extra enhancements for browsing and discovering torrents.</p>
+          <div class="ne-settings-rows" id="ne-settings-features-rows"></div>
+          <div class="ne-settings-subsection" id="ne-sp-options">
+            <div class="ne-settings-rows" id="ne-settings-screenshot-rows"></div>
+            <p class="ne-settings-disclaimer" id="ne-sp-disclaimer">
+              Each hovered link sends a request to Nyaa to fetch its images.
+              Setting the hover delay to 0 sends a request for every link your mouse passes over.
+              Excessive requests may result in rate limiting. Use at your own risk.
+            </p>
+            <div class="ne-settings-input-grid">
+              <div class="ne-settings-field">
+                <label for="ne-sp-hover-delay">Hover delay (seconds)</label>
+                <input type="number" id="ne-sp-hover-delay" min="0" step="0.5" disabled />
+              </div>
+              <div class="ne-settings-field">
+                <label for="ne-sp-slide-delay">Image change interval (seconds)</label>
+                <input type="number" id="ne-sp-slide-delay" min="0.1" step="0.5" disabled />
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="ne-settings-qbt" class="ne-settings-section" hidden>
+          <h2 class="ne-settings-section__title"><i class="fa fa-folder-open" aria-hidden="true"></i> qBittorrent Categories &amp; Tags</h2>
+          <p class="ne-settings-section__desc">Define categories and tags to apply when sending torrents. Set global defaults or choose per-torrent via the Send dialog.</p>
+          <div class="ne-settings-rows" id="ne-settings-qbt-rows"></div>
+          <div class="ne-settings-subsection">
+            <p class="ne-settings-subsection__title">Default Category</p>
+            <div class="ne-settings-field">
+              <select id="ne-qbt-default-category"><option value="">(none)</option></select>
+            </div>
+          </div>
+          <div class="ne-settings-subsection">
+            <p class="ne-settings-subsection__title">Default Tags</p>
+            <div class="ne-settings-qbt-tags" id="ne-qbt-default-tags">
+              <span class="ne-settings-empty">No tags defined yet.</span>
+            </div>
+          </div>
+          <div class="ne-settings-qbt-grid">
+            <div class="ne-settings-qbt-manage">
+              <p class="ne-settings-subsection__title">Categories</p>
+              <div class="ne-settings-qbt-add-row">
+                <input type="text" id="ne-qbt-new-category" placeholder="New category name" />
+                <button type="button" id="ne-qbt-add-category" class="ne-settings-btn ne-settings-btn--primary ne-settings-btn--small">Add</button>
+              </div>
+              <div class="ne-settings-qbt-list" id="ne-qbt-categories-list">
+                <span class="ne-settings-empty">No categories defined.</span>
+              </div>
+            </div>
+            <div class="ne-settings-qbt-manage">
+              <p class="ne-settings-subsection__title">Tags</p>
+              <div class="ne-settings-qbt-add-row">
+                <input type="text" id="ne-qbt-new-tag" placeholder="New tag name" />
+                <button type="button" id="ne-qbt-add-tag" class="ne-settings-btn ne-settings-btn--primary ne-settings-btn--small">Add</button>
+              </div>
+              <div class="ne-settings-qbt-list" id="ne-qbt-tags-list">
+                <span class="ne-settings-empty">No tags defined.</span>
+              </div>
+            </div>
+          </div>
+          <div class="ne-settings-qbt-actions">
+            <button type="button" id="ne-qbt-sync-btn" class="ne-settings-btn ne-settings-btn--primary">
+              <span id="ne-qbt-sync-icon" class="ne-settings-sync-icon">↻</span> Sync from qBittorrent
+            </button>
+            <span id="ne-qbt-sync-status" class="ne-settings-status"></span>
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+
+  const downloadRows = page.querySelector("#ne-settings-download-rows");
+  downloadRows.append(
+    neSettingsCreateToggleRow("useDisplayName", "Use display name as filename", "Use the torrent display name instead of the original filename when downloading.", "showButtons"),
+    neSettingsCreateToggleRow("useZip", "Combine downloads as ZIP", "Bundle multiple selected torrents into a single ZIP file.", "showButtons"),
+  );
+
+  const interfaceRows = page.querySelector("#ne-settings-interface-rows");
+  interfaceRows.append(
+    neSettingsCreateToggleRow("showButtons", "Show button controls", "Master toggle for the enhancer toolbar, checkboxes, and action buttons."),
+    neSettingsCreateToggleRow("showQuickFilter", "Show Quick Search button", "", "showButtons"),
+    neSettingsCreateToggleRow("showMagnetButtons", "Show Magnet Copy buttons", "", "showButtons"),
+    neSettingsCreateToggleRow("showSendButtons", "Show Send to Client button", "Requires a torrent client configured in the extension popup.", "showButtons"),
+    neSettingsCreateToggleRow("showMonitorButtons", "Show Monitor buttons", "", "showButtons"),
+  );
+
+  page.querySelector("#ne-settings-filters-rows").append(
+    neSettingsCreateToggleRow("showFilterNotifications", "Show filter notifications", "Display a toast when torrents are hidden by active filters."),
+  );
+
+  page.querySelector("#ne-settings-view-rows").append(
+    neSettingsCreateToggleRow("hideComments", "Hide comments", "Hide the comments section on torrent view pages."),
+    neSettingsCreateToggleRow("improvedFileList", "Improved file list", "Show total and per-folder file counts on view pages."),
+  );
+
+  page.querySelector("#ne-settings-animetosho-rows").append(
+    neSettingsCreateToggleRow("showATLinks", "Show AnimeTosho links"),
+    neSettingsCreateToggleRow("useNewATDomain", "Use new AnimeTosho domain", "Switch links between animetosho.org (legacy) and animetosho.xyz (new)."),
+    neSettingsCreateToggleRow("showATComments", "Show AnimeTosho comments"),
+    neSettingsCreateToggleRow("showATScreenshotsSection", "Show Screenshots section"),
+    neSettingsCreateToggleRow("showATFileInfoSection", "Show FileInfo section"),
+    neSettingsCreateToggleRow("showATAttachmentsSection", "Show Downloads section"),
+  );
+
+  page.querySelector("#ne-settings-amenzb-rows").append(
+    neSettingsCreateToggleRow(
+      "showAmeNZBLinks",
+      "Display ameNZB links",
+      "Show ameNZB release links on supported view pages.",
+      "ameNZBApiKey",
+    ),
+    neSettingsCreateToggleRow(
+      "showAmeNZBSection",
+      "Display ameNZB section",
+      "Show release details in the description tabs on supported view pages.",
+      "ameNZBApiKey",
+    ),
+  );
+
+  page.querySelector("#ne-settings-nekobt-rows").append(
+    neSettingsCreateToggleRow("showNekoBTLinks", "Display nekoBT links"),
+    neSettingsCreateToggleRow("showNekoBTSection", "Display nekoBT section"),
+    neSettingsCreateToggleRow("showNekoBTFullLangNames", "Full language names", "Show full language names instead of abbreviations."),
+  );
+
+  page.querySelector("#ne-settings-tsukihime-rows").append(
+    neSettingsCreateToggleRow("showTsukihimeLinks", "Display Tsukihime links"),
+    neSettingsCreateToggleRow("showTsukihimeSection", "Display Tsukihime section"),
+  );
+
+  const featuresRows = page.querySelector("#ne-settings-features-rows");
+  featuresRows.append(
+    neSettingsCreateToggleRow("showSeaDex", "Display Best Release (Seadex)", "Highlight best and alternate releases according to SeaDex."),
+    neSettingsCreateToggleRow("showChangelogNav", "Add Changelog link to navbar"),
+    neSettingsCreateToggleRow("changelogDismissed", "Show changelog popup", "Display the What's New popup when a new version is released."),
+  );
+
+  page.querySelector("#ne-settings-screenshot-rows").append(
+    neSettingsCreateToggleRow(
+      "screenshotPreviewEnabled",
+      "Screenshot preview",
+      "Hover over a torrent link to preview screenshot images.",
+    ),
+  );
+
+  page.querySelector("#ne-settings-qbt-rows").append(
+    neSettingsCreateToggleRow("qbtPromptOnSend", "Prompt on Send", "Show a dialog to pick category and tags each time you Send a torrent."),
+  );
+
+  return page;
+}
+
+async function handleSettingsPage() {
+  if (window.location.pathname !== "/settings") return;
+  if (document.querySelector(".ne-settings-page")) return;
+
+  const mainContainer = document.querySelector(".container > h1")?.parentElement;
+  if (!mainContainer) return;
+
+  document.title = "Settings :: Nyaa";
+  mainContainer.innerHTML = "";
+
+  const settingsPage = neSettingsBuildPageHTML();
+  mainContainer.appendChild(settingsPage);
+
+  neSettingsWireToggles();
+  neSettingsWireNav();
+  neSettingsWireMonitoringSection();
+  neSettingsWireQbtSection();
+  neSettingsWireScreenshotInputs();
+  await neSettingsLoadValues();
+
+  browser.storage.onChanged.addListener((changes, area) => {
+    if ((area !== "sync" && area !== "local") || window.location.pathname !== "/settings") return;
+    if (
+      changes.ameNZBRequestCount ||
+      changes.ameNZBRequestDate ||
+      changes.ameNZBApiKey
+    ) {
+      loadStoredPreferences().then((prefs) => {
+        neSettingsUpdateAmeNZBQuota(prefs);
+        if (changes.ameNZBApiKey) {
+          neSettingsUpdateAmeNZBState(!!prefs.ameNZBApiKey);
+        }
+      });
+    }
+    neSettingsLoadValues();
+    if (changes.monitoredUsers || changes.monitoredKeywords) {
+      neSettingsLoadMonitoringLists();
+    }
+  });
+}
+
+function addSettingsNavItem() {
+  const navList = document.querySelector(".nav.navbar-nav");
+  if (!navList) return;
+
+  const existing = Array.from(navList.querySelectorAll("li")).find(
+    (li) => li.textContent.trim() === "Settings",
+  );
+  if (existing) return;
+
+  const settingsItem = document.createElement("li");
+  const settingsLink = document.createElement("a");
+  settingsLink.href = "/settings";
+  settingsLink.textContent = "Settings";
+  settingsItem.appendChild(settingsLink);
+
+  const changelogItem = Array.from(navList.querySelectorAll("li")).find(
+    (li) => li.textContent.trim() === "Changelog",
+  );
+
+  if (changelogItem) {
+    changelogItem.insertAdjacentElement("afterend", settingsItem);
+  } else {
+    const rssItem = Array.from(navList.querySelectorAll("li")).find(
+      (li) => li.textContent.trim() === "RSS",
+    );
+    if (rssItem) {
+      rssItem.insertAdjacentElement("afterend", settingsItem);
+    } else {
+      navList.appendChild(settingsItem);
+    }
+  }
+}
+
 async function handleChangelogPage() {
   // Only run on the changelog page
   if (window.location.pathname !== "/changelog") return;
@@ -7610,6 +10920,25 @@ async function handleChangelogPage() {
           <i class="fa fa-github"></i> GitHub
         </a>
       </p>
+    </div>
+    <div class="version-entry">
+      <h2>
+        Version 1.13.0
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.13.0" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added a dedicated Settings page on Nyaa (/settings, also in the navbar). Most toggles, monitoring, and qBittorrent category/tag management live there; the extension popup now only holds torrent client connection details and API keys (ameNZB, TMDB)</li>
+        <li>Added an on-page Filters panel above the torrent table for dead torrents, keyword hiding, file size, and completed downloads</li>
+        <li>Replaced the preset file-size dropdown with a min/max range slider (and matching units)</li>
+        <li>Added a Show more button under torrent lists to load the next page in place, skipping pages that are fully hidden by filters</li>
+        <li>Added Send Selected and Send All toolbar buttons to batch-send torrents to the configured client</li>
+        <li>Redesigned the list toolbar into grouped Copy / Download / Send actions, with tighter layout on smaller screens</li>
+        <li>Reworked Quick Search: cleaner UI, optional file-size range, TMDB title autocomplete with TheXEM aliases (requires a TMDB API key in the popup), and a “Remember selection” option</li>
+        <li>API keys, credentials, keywords, and monitoring lists now persist in local storage so they are not synced to browser account for security reasons</li>
+        <li>Fixed AnimeTosho screenshots still using the old domain when the new domain toggle was on, and placeholder styling for categories without AT links</li>
+      </ul>
     </div>
     <div class="version-entry">
       <h2>
@@ -7908,21 +11237,25 @@ async function addChangelogNavItem() {
   const prefs = await loadStoredPreferences();
   if (!prefs.showChangelogNav) return;
 
-  // Find the navigation list that contains "RSS"
   const navList = document.querySelector(".nav.navbar-nav");
-  const rssItem = Array.from(navList?.querySelectorAll("li") || []).find(
+  if (!navList) return;
+
+  const existing = Array.from(navList.querySelectorAll("li")).find(
+    (li) => li.textContent.trim() === "Changelog",
+  );
+  if (existing) return;
+
+  const rssItem = Array.from(navList.querySelectorAll("li")).find(
     (li) => li.textContent.trim() === "RSS",
   );
 
-  if (navList && rssItem) {
-    // Create new changelog list item
+  if (rssItem) {
     const changelogItem = document.createElement("li");
     const changelogLink = document.createElement("a");
     changelogLink.href = "/changelog";
     changelogLink.textContent = "Changelog";
     changelogItem.appendChild(changelogLink);
 
-    // Insert after the RSS item
     rssItem.insertAdjacentElement("afterend", changelogItem);
   }
 }
@@ -8012,7 +11345,7 @@ async function addMonitorButton() {
     }
 
     // Save updated preferences
-    browser.storage.sync.set({ monitoredUsers: currentPrefs.monitoredUsers });
+    savePreferences({ monitoredUsers: currentPrefs.monitoredUsers });
   });
 
   // Insert the Monitor button before the heading text
@@ -8024,9 +11357,7 @@ async function addMonitorButton() {
 async function getLatestTorrentIdForKeyword(keyword) {
   try {
     // Create search URL for this keyword
-    const searchUrl = `https://nyaa.si/?f=0&c=0_0&q=${encodeURIComponent(
-      keyword,
-    )}`;
+    const searchUrl = getKeywordSearchUrl(keyword);
 
     // Fetch the search results page
     const response = await fetch(searchUrl);
@@ -8077,9 +11408,7 @@ async function addKeywordMonitoring(keyword, torrentId) {
     showNotification(`Updated monitoring for "${keyword}"`, true);
   } else {
     // Create search URL for this keyword
-    const searchUrl = `https://nyaa.si/?f=0&c=0_0&q=${encodeURIComponent(
-      keyword,
-    )}`;
+    const searchUrl = getKeywordSearchUrl(keyword);
 
     // Add new entry
     prefs.monitoredKeywords.push({
@@ -8094,7 +11423,7 @@ async function addKeywordMonitoring(keyword, torrentId) {
   }
 
   // Save updated preferences
-  browser.storage.sync.set({ monitoredKeywords: prefs.monitoredKeywords });
+  savePreferences({ monitoredKeywords: prefs.monitoredKeywords });
 }
 
 // Function to check for new uploads from monitored users when on the homepage
@@ -8129,7 +11458,7 @@ async function checkMonitoredUsers() {
     updatedUsers = userResults.updatedUsers;
 
     // Save the updated user data
-    browser.storage.sync.set({ monitoredUsers: updatedUsers });
+    savePreferences({ monitoredUsers: updatedUsers });
   }
 
   // Check for keyword updates if we have monitored keywords
@@ -8142,7 +11471,7 @@ async function checkMonitoredUsers() {
 
     // Save the updated keyword data
     if (keywordResults.updatesFound) {
-      browser.storage.sync.set({ monitoredKeywords: updatedKeywords });
+      savePreferences({ monitoredKeywords: updatedKeywords });
     }
   }
 
@@ -8320,7 +11649,7 @@ async function checkForUpdates(monitoredUsers) {
   for (let i = 0; i < monitoredUsers.length; i++) {
     const user = monitoredUsers[i];
     try {
-      const response = await fetch(user.url);
+      const response = await fetch(toCurrentNyaaUrl(user.url));
       const text = await response.text();
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, "text/html");
@@ -8378,7 +11707,8 @@ async function checkKeywordUpdates(monitoredKeywords) {
   for (let i = 0; i < monitoredKeywords.length; i++) {
     const item = monitoredKeywords[i];
     try {
-      const response = await fetch(item.url);
+      const searchUrl = getKeywordSearchUrl(item.keyword);
+      const response = await fetch(searchUrl);
       const text = await response.text();
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, "text/html");
@@ -8404,7 +11734,7 @@ async function checkKeywordUpdates(monitoredKeywords) {
               // Store the update information
               pendingUpdates.push({
                 keyword: item.keyword,
-                url: item.url,
+                url: searchUrl,
                 torrentId: torrentId,
                 torrentName: viewLink.textContent.trim(),
               });
@@ -8415,6 +11745,7 @@ async function checkKeywordUpdates(monitoredKeywords) {
             // Always update the lastTorrentId but keep lastDismissedTorrentId unchanged
             updatedKeywords[i] = {
               ...item,
+              url: searchUrl,
               lastTorrentId: torrentId,
               lastChecked: Date.now(),
             };
@@ -8494,7 +11825,7 @@ function updateSidebarContent(
 
       // Create the user link
       const userLink = document.createElement("a");
-      userLink.href = update.url;
+      userLink.href = toCurrentNyaaUrl(update.url);
       userLink.textContent = update.username;
       userLink.style.cssText = `
         font-weight: bold;
@@ -8534,7 +11865,7 @@ function updateSidebarContent(
       // Create the keyword link
       const keywordSpan = document.createElement("a");
       keywordSpan.textContent = update.keyword;
-      keywordSpan.href = update.url;
+      keywordSpan.href = toCurrentNyaaUrl(update.url || getKeywordSearchUrl(update.keyword));
       keywordSpan.style.cssText = `
         font-weight: bold;
         color: #5cb8ff;
@@ -8551,12 +11882,14 @@ function updateSidebarContent(
 
       keywordSpan.addEventListener("click", (e) => {
         e.preventDefault();
-        window.location.href = update.url;
+        window.location.href = toCurrentNyaaUrl(
+          update.url || getKeywordSearchUrl(update.keyword),
+        );
       });
 
       // Create the torrent link
       const torrentLink = document.createElement("a");
-      torrentLink.href = `https://nyaa.si/view/${update.torrentId}`;
+      torrentLink.href = getTorrentViewUrl(update.torrentId);
       torrentLink.textContent = update.torrentName;
       torrentLink.style.cssText = `
         color: #5cb8ff;
@@ -8573,7 +11906,7 @@ function updateSidebarContent(
 
       torrentLink.addEventListener("click", (e) => {
         e.preventDefault();
-        window.open(`https://nyaa.si/view/${update.torrentId}`, "_blank");
+        window.open(getTorrentViewUrl(update.torrentId), "_blank");
       });
 
       listItem.appendChild(document.createTextNode("New torrent for keyword "));
@@ -8665,7 +11998,7 @@ function updateSidebarContent(
       }));
 
       // Save the current torrent counts and dismissed state for both users and keywords
-      browser.storage.sync.set({
+      savePreferences({
         monitoredUsers: dismissedUsers,
         monitoredKeywords: dismissedKeywords,
       });
@@ -8717,7 +12050,7 @@ function updateSidebarContent(
       '<i class="fa fa-refresh fa-spin"></i> Refreshing...';
 
     // Save updated counts first
-    browser.storage.sync.set({ monitoredUsers: updatedUsers });
+    savePreferences({ monitoredUsers: updatedUsers });
 
     // Then check again
     await checkMonitoredUsers();

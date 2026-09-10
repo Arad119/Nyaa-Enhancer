@@ -184,17 +184,29 @@ Firefox:
 3. Use **Copy** / **All** to copy selected or all visible magnet links
 4. Use **Download** / **All** to download selected or all visible `.torrent` files
 5. Use **Send** / **All** to send selected or all visible torrents to your configured client
-6. Use Invert / Clear and the selection counter as needed
-7. Use per-row magnet and Send buttons for a single torrent
-8. Use **Show more** under the table to append the next page of results
+6. Use **Keywords** and enter a keyword to check matching torrents on the current page
+7. Use Invert / Clear and the selection counter as needed
+8. Use per-row magnet and Send buttons for a single torrent
+9. Use **Show more** under the table to append the next page of results
 
-![Nyaa-Enhancer Filters][product-filters] ![Nyaa-Enhancer QuickSearch][product-quicksearch]
+![Nyaa-Enhancer Filters][product-filters]
 
-**Filters and search:**
+**Filters:**
 
-- Open the **Filters** panel above the table to hide dead torrents, block keywords, set a file-size range, or filter by completed downloads
-- **Quick Search**: build a query from title, encoder, quality, format, source, category, Dual Audio, Season Pack, Last 30 Days, and optional file size. With a TMDB API key, titles autocomplete and TheXEM aliases can be included. Enable **Remember selection** to keep the last form state
-- **Keyword Select**: enter a keyword to check matching torrents on the current page
+- Open the **Filters** panel above the table
+- Hide dead torrents (0 seeders / leechers)
+- Block torrents with keywords from a custom list
+- Set a file-size range with the min/max slider
+- Filter by completed downloads (greater than, equal to, or less than)
+
+![Nyaa-Enhancer QuickSearch][product-quicksearch]
+
+**Quick Search:**
+
+- Build a query from title, encoder, quality, format, source, category, Dual Audio, Season Pack, Last 30 Days, and optional file size
+- With a TMDB API key (set in the popup), titles autocomplete and TheXEM aliases can be included
+- Enable **Remember selection** to keep the last form state
+
 
 **Send to torrent client:**
 

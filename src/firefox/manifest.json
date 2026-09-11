@@ -24,7 +24,9 @@
     "*://*.amenzb.moe/*",
     "*://*.nekobt.to/*",
     "*://*.tsukihime.org/*",
-    "*://*.releases.moe/*"
+    "*://*.releases.moe/*",
+    "*://api.themoviedb.org/*",
+    "*://thexem.info/*"
   ],
   "icons": {
     "16": "icons/icon16.png",

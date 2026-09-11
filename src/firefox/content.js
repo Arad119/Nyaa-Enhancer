@@ -1387,7 +1387,7 @@ async function showChangelog() {
       </div>
       <div class="changelog-content">
         • Added custom keyword highlighting: color torrent-list rows from Settings → Highlights, with an option to keep SeaDex colors on top<br>
-        • Fixed issue where Firefox version had missing permissions to access the TMDB API and TheXem info
+        • Fixed issue where Firefox version had missing permissions to access the TMDB API and TheXEM
         <div class="changelog-more">Plus more. <a href="/changelog">See the full changelog</a> for everything that's new.</div>
       </div>
       <div class="changelog-actions">
@@ -11176,7 +11176,7 @@ async function handleChangelogPage() {
       </h2>
       <ul>
         <li>Added custom keyword highlighting: color torrent-list rows from Settings → Highlights, with an option to keep SeaDex colors on top</li>
-        <li>Fixed issue where Firefox version had missing permissions to access the TMDB API and TheXem info</li>
+        <li>Fixed issue where Firefox version had missing permissions to access the TMDB API and TheXEM</li>
       </ul>
     </div>
     <div class="version-entry">

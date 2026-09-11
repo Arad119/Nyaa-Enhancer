@@ -3749,6 +3749,61 @@ table.torrent-list tbody tr.ne-show-more-row-enter {
   }
 }
 
+/* ── Keyword row highlighting ─────────────────────────────────────────── */
+
+table.torrent-list tbody tr.ne-kw-highlight,
+table.torrent-list tbody tr.ne-kw-highlight > td {
+  background-color: var(--ne-kw-bg) !important;
+}
+
+table.torrent-list tbody tr.ne-kw-highlight:hover,
+table.torrent-list tbody tr.ne-kw-highlight:hover > td {
+  background-color: var(--ne-kw-bg-hover) !important;
+}
+
+table.torrent-list tbody tr.ne-kw-highlight > td:first-child {
+  box-shadow: inset 3px 0 0 var(--ne-kw-color);
+}
+
+table.torrent-list.ne-prioritize-seadex tbody tr.seadex-best.ne-kw-highlight,
+table.torrent-list.ne-prioritize-seadex tbody tr.seadex-best.ne-kw-highlight > td {
+  background-color: rgba(0, 172, 255, 0.12) !important;
+}
+
+table.torrent-list.ne-prioritize-seadex tbody tr.seadex-best.ne-kw-highlight:hover,
+table.torrent-list.ne-prioritize-seadex
+  tbody
+  tr.seadex-best.ne-kw-highlight:hover
+  > td {
+  background-color: rgba(0, 172, 255, 0.18) !important;
+}
+
+table.torrent-list.ne-prioritize-seadex tbody tr.seadex-best-alt.ne-kw-highlight,
+table.torrent-list.ne-prioritize-seadex
+  tbody
+  tr.seadex-best-alt.ne-kw-highlight
+  > td {
+  background-color: rgba(255, 172, 0, 0.12) !important;
+}
+
+table.torrent-list.ne-prioritize-seadex
+  tbody
+  tr.seadex-best-alt.ne-kw-highlight:hover,
+table.torrent-list.ne-prioritize-seadex
+  tbody
+  tr.seadex-best-alt.ne-kw-highlight:hover
+  > td {
+  background-color: rgba(255, 172, 0, 0.18) !important;
+}
+
+table.torrent-list.ne-prioritize-seadex tbody tr.seadex-best.ne-kw-highlight > td:first-child,
+table.torrent-list.ne-prioritize-seadex
+  tbody
+  tr.seadex-best-alt.ne-kw-highlight
+  > td:first-child {
+  box-shadow: none;
+}
+
 /* ── Settings Page ─────────────────────────────────────────────────────── */
 
 .ne-settings-page {
@@ -4213,6 +4268,111 @@ body.dark .ne-settings-keyword-add input {
   box-shadow: 0 0 0 2px rgba(51, 122, 183, 0.2);
 }
 
+.ne-settings-hl-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 16px 0 12px;
+}
+
+.ne-settings-hl-add input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  color: inherit;
+  font-family: inherit;
+}
+
+body.dark .ne-settings-hl-add input[type="text"] {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.ne-settings-hl-add input[type="text"]:focus {
+  outline: none;
+  border-color: #337ab7;
+  box-shadow: 0 0 0 2px rgba(51, 122, 183, 0.2);
+}
+
+.ne-settings-hl-color,
+.ne-settings-hl-add input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+body.dark .ne-settings-hl-color,
+body.dark .ne-settings-hl-add input[type="color"] {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.ne-settings-hl-color::-webkit-color-swatch-wrapper,
+.ne-settings-hl-add input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.ne-settings-hl-color::-webkit-color-swatch,
+.ne-settings-hl-add input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 7px;
+}
+
+.ne-settings-hl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ne-settings-hl-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: inset 3px 0 0 var(--ne-hl-swatch, transparent);
+}
+
+body.dark .ne-settings-hl-item {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.ne-settings-hl-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ne-settings-hl-item__keyword {
+  font-weight: 600;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.ne-settings-hl-item__hex {
+  font-size: 11px;
+  font-family: Consolas, "Courier New", monospace;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 @media (max-width: 768px) {
   .ne-settings-monitor-item {
     flex-direction: column;
@@ -4226,6 +4386,23 @@ body.dark .ne-settings-keyword-add input {
 
   .ne-settings-keyword-add {
     flex-direction: column;
+  }
+
+  .ne-settings-hl-add {
+    flex-wrap: wrap;
+  }
+
+  .ne-settings-hl-add input[type="text"] {
+    flex: 1 1 100%;
+  }
+
+  .ne-settings-hl-item {
+    flex-wrap: wrap;
+  }
+
+  .ne-settings-hl-item .ne-settings-btn {
+    width: 100%;
+    text-align: center;
   }
 }
 

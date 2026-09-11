@@ -8,6 +8,7 @@ const LOCAL_PREF_KEYS = new Set([
   "transmissionPassword",
   "delugePassword",
   "keywords",
+  "highlightKeywords",
   "monitoredUsers",
   "monitoredKeywords",
   "qbtCategories",

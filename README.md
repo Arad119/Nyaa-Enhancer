@@ -117,6 +117,12 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 - qBittorrent categories and tags, with defaults or a prompt on each send
 - Batch Send Selected / Send All from the list toolbar
 
+**Highlights:**
+
+- Color torrent-list rows when the name contains a custom keyword or phrase
+- Per-keyword color picker in Settings
+- Optional toggle to keep SeaDex colors on top when both apply
+
 **Monitoring:**
 
 - Monitor uploaders from their user page
@@ -223,6 +229,12 @@ Firefox:
 - Use **Keyword Monitor** on the torrent list, or add keywords on the Settings page
 - New matches appear in the sidebar on the left edge of the screen
 
+**Highlights:**
+
+- Open Settings → **Highlights**, add a keyword or phrase, and pick a color
+- Matching torrent names in list tables are tinted with that color
+- Enable **Prioritize SeaDex highlights** if SeaDex colors should win when both apply
+
 **View pages:**
 
 - Copy magnet or Send to client from the view page
@@ -283,6 +295,11 @@ _Additional features:_
 - **Display Best Release (Seadex)**
 - **Screenshot preview** with hover delay and image-change interval
 - **Add Changelog link to navbar** and **Show changelog popup**
+
+_Highlights:_
+
+- Add keywords or phrases with a color picker; matching torrent names in list tables are tinted with that color
+- **Prioritize SeaDex highlights**: when a torrent matches both SeaDex and a custom keyword, keep the SeaDex color
 
 _qBittorrent (when that client is selected):_
 

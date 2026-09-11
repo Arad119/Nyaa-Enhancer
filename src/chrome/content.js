@@ -11,6 +11,7 @@ const LOCAL_PREF_KEYS = new Set([
   "transmissionPassword",
   "delugePassword",
   "keywords",
+  "highlightKeywords",
   "monitoredUsers",
   "monitoredKeywords",
   "qbtCategories",
@@ -46,6 +47,8 @@ const PREF_DEFAULTS = {
   showTsukihimeLinks: false,
   showTsukihimeSection: false,
   showSeaDex: false,
+  highlightKeywords: [],
+  prioritizeSeaDexHighlights: true,
   screenshotPreviewEnabled: false,
   screenshotPreviewHoverDelay: 3,
   screenshotPreviewSlideDelay: 3,
@@ -1383,10 +1386,7 @@ async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added a dedicated Settings page on Nyaa (<a href="/settings">/settings</a>, also in the navbar)<br>
-        • Added an on-page Filters panel above the torrent table for dead torrents, keyword hiding, file size, and completed downloads<br>
-        • Replaced the preset file-size dropdown with a min/max range slider (and matching units)<br>
-        • Added a Show more button under torrent lists to load the next page in place, skipping pages that are fully hidden by filters
+        • Added custom keyword highlighting: color torrent-list rows from Settings → Highlights, with an option to keep SeaDex colors on top
         <div class="changelog-more">Plus more. <a href="/changelog">See the full changelog</a> for everything that's new.</div>
       </div>
       <div class="changelog-actions">
@@ -1690,6 +1690,10 @@ async function handleSettingChange(setting, value) {
       } else {
         removeSeaDexHighlights();
       }
+      break;
+    case "highlightKeywords":
+    case "prioritizeSeaDexHighlights":
+      applyKeywordHighlights();
       break;
     case "screenshotPreviewEnabled":
       screenshotPreview.enabled = !!value;
@@ -5526,6 +5530,99 @@ async function initializeSeaDex() {
   }
 }
 
+// ── Custom keyword row highlighting ─────────────────────────────────────────
+
+const NE_KW_HIGHLIGHT_CLASS = "ne-kw-highlight";
+const NE_PRIORITIZE_SEADEX_CLASS = "ne-prioritize-seadex";
+const NE_DEFAULT_HIGHLIGHT_COLOR = "#8e44ad";
+
+function normalizeHighlightColor(color) {
+  if (typeof color !== "string") return null;
+  const trimmed = color.trim();
+  if (!/^#[0-9A-Fa-f]{6}$/.test(trimmed)) return null;
+  return trimmed.toLowerCase();
+}
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function getHighlightRules(prefs) {
+  const list = Array.isArray(prefs?.highlightKeywords)
+    ? prefs.highlightKeywords
+    : [];
+  return list
+    .map((item) => {
+      const keyword =
+        typeof item?.keyword === "string" ? item.keyword.trim() : "";
+      const color = normalizeHighlightColor(item?.color);
+      if (!keyword || !color) return null;
+      return { keyword, color };
+    })
+    .filter(Boolean);
+}
+
+function findMatchingHighlightRule(title, rules) {
+  if (!title || !rules.length) return null;
+  const lower = title.toLowerCase();
+  let best = null;
+  for (const rule of rules) {
+    const kw = rule.keyword.toLowerCase();
+    if (!kw || !lower.includes(kw)) continue;
+    if (!best || kw.length > best.keyword.length) best = rule;
+  }
+  return best;
+}
+
+function clearKeywordHighlightOnRow(row) {
+  row.classList.remove(NE_KW_HIGHLIGHT_CLASS);
+  row.style.removeProperty("--ne-kw-color");
+  row.style.removeProperty("--ne-kw-bg");
+  row.style.removeProperty("--ne-kw-bg-hover");
+}
+
+function applyKeywordHighlightToRow(row, rules) {
+  if (!isNyaaTorrentDataRow(row)) return;
+  const match = findMatchingHighlightRule(getTitleFromRow(row), rules);
+  if (!match) {
+    clearKeywordHighlightOnRow(row);
+    return;
+  }
+  row.classList.add(NE_KW_HIGHLIGHT_CLASS);
+  row.style.setProperty("--ne-kw-color", match.color);
+  row.style.setProperty("--ne-kw-bg", hexToRgba(match.color, 0.22));
+  row.style.setProperty("--ne-kw-bg-hover", hexToRgba(match.color, 0.34));
+}
+
+function setSeaDexPriorityOnTables(enabled) {
+  document.querySelectorAll("table.torrent-list").forEach((table) => {
+    table.classList.toggle(NE_PRIORITIZE_SEADEX_CLASS, !!enabled);
+  });
+}
+
+function applyKeywordHighlights(targetRows = null, prefs = null) {
+  const run = (resolvedPrefs) => {
+    setSeaDexPriorityOnTables(resolvedPrefs.prioritizeSeaDexHighlights);
+    const rules = getHighlightRules(resolvedPrefs);
+    const rows = targetRows
+      ? Array.from(targetRows)
+      : Array.from(document.querySelectorAll("table.torrent-list tbody tr"));
+    rows.forEach((row) => applyKeywordHighlightToRow(row, rules));
+  };
+
+  if (prefs) {
+    run(prefs);
+    return Promise.resolve();
+  }
+  return loadStoredPreferences().then(run);
+}
+
+async function initializeKeywordHighlights() {
+  if (!document.querySelector("table.torrent-list")) return;
+  await applyKeywordHighlights();
+}
+
 // ── Screenshot Preview (hover thumbnail carousel) ───────────────────────────
 
 const screenshotPreview = {
@@ -7629,6 +7726,7 @@ async function fetchAndAppendNyaaPage(tableBody, prefs) {
 
   await withTorrentTableObserverPaused(async () => {
     newRows.forEach((row) => tableBody.appendChild(row));
+    applyKeywordHighlights(newRows, prefs);
     if (visibleRows.length) {
       animateNewTorrentRows(newRows);
       // Resolve AnimeTosho links only after visible rows are in the table.
@@ -7825,6 +7923,7 @@ async function initializeExtension(isInitialLoad = false) {
   addNekoBTToViewPage();
   addTsukihimeToViewPage();
   initializeSeaDex();
+  initializeKeywordHighlights();
   initializeScreenshotPreview();
   addMagnetButtonToViewPage();
   addSendButtonToViewPage();
@@ -9802,6 +9901,7 @@ const NE_SETTINGS_NAV_SECTIONS = [
   { id: "ne-settings-nekobt", label: "nekoBT" },
   { id: "ne-settings-tsukihime", label: "Tsukihime" },
   { id: "ne-settings-features", label: "Additional Features" },
+  { id: "ne-settings-highlights", label: "Highlights" },
   { id: "ne-settings-qbt", label: "qBittorrent" },
 ];
 
@@ -9979,6 +10079,7 @@ async function neSettingsLoadValues() {
     showAmeNZBSection: prefs.showAmeNZBSection,
     screenshotPreviewEnabled: prefs.screenshotPreviewEnabled,
     showSeaDex: prefs.showSeaDex,
+    prioritizeSeaDexHighlights: prefs.prioritizeSeaDexHighlights !== false,
     showChangelogNav: prefs.showChangelogNav,
     qbtPromptOnSend: prefs.qbtPromptOnSend !== false,
   };
@@ -10008,6 +10109,7 @@ async function neSettingsLoadValues() {
     neSettingsLoadQbtCategoryTagSettings(prefs);
   }
 
+  neSettingsDisplayHighlightKeywords(prefs.highlightKeywords || []);
   await neSettingsLoadMonitoringLists();
 }
 
@@ -10204,6 +10306,125 @@ function neSettingsWireMonitoringSection() {
     ?.addEventListener("keypress", (e) => {
       if (e.key === "Enter") neSettingsAddMonitoredKeyword();
     });
+}
+
+function neSettingsDisplayHighlightKeywords(highlightKeywords) {
+  const listEl = document.getElementById("ne-hl-keywords-list");
+  if (!listEl) return;
+
+  listEl.innerHTML = "";
+  const rules = getHighlightRules({ highlightKeywords });
+  if (!rules.length) {
+    const empty = document.createElement("p");
+    empty.className = "ne-settings-monitor-empty";
+    empty.textContent =
+      "No highlight keywords yet. Add a phrase and color above to tint matching torrent rows.";
+    listEl.appendChild(empty);
+    return;
+  }
+
+  rules.forEach((rule) => {
+    const item = document.createElement("div");
+    item.className = "ne-settings-hl-item";
+    item.style.setProperty("--ne-hl-swatch", rule.color);
+
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.className = "ne-settings-hl-color";
+    colorInput.value = rule.color;
+    colorInput.title = "Change highlight color";
+    colorInput.setAttribute("aria-label", `Color for ${rule.keyword}`);
+    colorInput.addEventListener("change", () => {
+      neSettingsUpdateHighlightColor(rule.keyword, colorInput.value);
+    });
+
+    const info = document.createElement("div");
+    info.className = "ne-settings-hl-item__info";
+    const title = document.createElement("span");
+    title.className = "ne-settings-hl-item__keyword";
+    title.textContent = rule.keyword;
+    const hex = document.createElement("span");
+    hex.className = "ne-settings-hl-item__hex";
+    hex.textContent = rule.color;
+    info.append(title, hex);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className =
+      "ne-settings-btn ne-settings-btn--ghost ne-settings-btn--small";
+    removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", () =>
+      neSettingsRemoveHighlightKeyword(rule.keyword),
+    );
+
+    item.append(colorInput, info, removeBtn);
+    listEl.appendChild(item);
+  });
+}
+
+async function neSettingsAddHighlightKeyword() {
+  const input = document.getElementById("ne-hl-keyword-input");
+  const colorInput = document.getElementById("ne-hl-keyword-color");
+  const keyword = input?.value.trim();
+  if (!keyword) return;
+
+  const color =
+    normalizeHighlightColor(colorInput?.value) || NE_DEFAULT_HIGHLIGHT_COLOR;
+  const prefs = await loadStoredPreferences();
+  const highlightKeywords = [...(prefs.highlightKeywords || [])];
+  if (
+    highlightKeywords.some(
+      (item) => item.keyword?.toLowerCase() === keyword.toLowerCase(),
+    )
+  ) {
+    input.value = "";
+    return;
+  }
+
+  highlightKeywords.push({ keyword, color });
+  await neSettingsSave("highlightKeywords", highlightKeywords);
+  neSettingsDisplayHighlightKeywords(highlightKeywords);
+  input.value = "";
+}
+
+async function neSettingsUpdateHighlightColor(keywordToUpdate, colorValue) {
+  const color = normalizeHighlightColor(colorValue);
+  if (!color) return;
+
+  const prefs = await loadStoredPreferences();
+  const highlightKeywords = (prefs.highlightKeywords || []).map((item) =>
+    item.keyword === keywordToUpdate ? { ...item, color } : item,
+  );
+  await neSettingsSave("highlightKeywords", highlightKeywords);
+  neSettingsDisplayHighlightKeywords(highlightKeywords);
+}
+
+async function neSettingsRemoveHighlightKeyword(keywordToRemove) {
+  const prefs = await loadStoredPreferences();
+  const highlightKeywords = (prefs.highlightKeywords || []).filter(
+    (item) => item.keyword !== keywordToRemove,
+  );
+  await neSettingsSave("highlightKeywords", highlightKeywords);
+  neSettingsDisplayHighlightKeywords(highlightKeywords);
+}
+
+async function neSettingsRemoveAllHighlightKeywords() {
+  await neSettingsSave("highlightKeywords", []);
+  neSettingsDisplayHighlightKeywords([]);
+}
+
+function neSettingsWireHighlightsSection() {
+  document
+    .getElementById("ne-add-hl-keyword")
+    ?.addEventListener("click", neSettingsAddHighlightKeyword);
+  document
+    .getElementById("ne-hl-keyword-input")
+    ?.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") neSettingsAddHighlightKeyword();
+    });
+  document
+    .getElementById("ne-remove-all-hl-keywords")
+    ?.addEventListener("click", neSettingsRemoveAllHighlightKeywords);
 }
 
 function neSettingsLoadQbtCategoryTagSettings(items) {
@@ -10691,6 +10912,21 @@ function neSettingsBuildPageHTML() {
             </div>
           </div>
         </section>
+        <section id="ne-settings-highlights" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-paint-brush" aria-hidden="true"></i> Highlights</h2>
+          <p class="ne-settings-section__desc">Color torrent list rows when the name contains a keyword you choose. Phrases like <code>SubsPlease</code> are matched as-is, ignoring case. If several keywords match the same torrent, the longest one is used.</p>
+          <div class="ne-settings-rows" id="ne-settings-highlights-rows"></div>
+          <div class="ne-settings-hl-add">
+            <input type="text" id="ne-hl-keyword-input" placeholder="Keyword or phrase (e.g. SubsPlease)" />
+            <input type="color" id="ne-hl-keyword-color" value="#8e44ad" title="Highlight color" aria-label="Highlight color" />
+            <button type="button" id="ne-add-hl-keyword" class="ne-settings-btn ne-settings-btn--primary ne-settings-btn--small">Add</button>
+          </div>
+          <div class="ne-settings-monitor-header">
+            <h3>Keyword colors</h3>
+            <button type="button" id="ne-remove-all-hl-keywords" class="ne-settings-btn ne-settings-btn--ghost ne-settings-btn--small">Remove All</button>
+          </div>
+          <div id="ne-hl-keywords-list" class="ne-settings-hl-list"></div>
+        </section>
         <section id="ne-settings-qbt" class="ne-settings-section" hidden>
           <h2 class="ne-settings-section__title"><i class="fa fa-folder-open" aria-hidden="true"></i> qBittorrent Categories &amp; Tags</h2>
           <p class="ne-settings-section__desc">Define categories and tags to apply when sending torrents. Set global defaults or choose per-torrent via the Send dialog.</p>
@@ -10806,6 +11042,14 @@ function neSettingsBuildPageHTML() {
     neSettingsCreateToggleRow("changelogDismissed", "Show changelog popup", "Display the What's New popup when a new version is released."),
   );
 
+  page.querySelector("#ne-settings-highlights-rows").append(
+    neSettingsCreateToggleRow(
+      "prioritizeSeaDexHighlights",
+      "Prioritize SeaDex highlights",
+      "When a torrent matches both SeaDex and a custom keyword, keep the SeaDex color instead of the keyword color.",
+    ),
+  );
+
   page.querySelector("#ne-settings-screenshot-rows").append(
     neSettingsCreateToggleRow(
       "screenshotPreviewEnabled",
@@ -10837,6 +11081,7 @@ async function handleSettingsPage() {
   neSettingsWireToggles();
   neSettingsWireNav();
   neSettingsWireMonitoringSection();
+  neSettingsWireHighlightsSection();
   neSettingsWireQbtSection();
   neSettingsWireScreenshotInputs();
   await neSettingsLoadValues();
@@ -10920,6 +11165,17 @@ async function handleChangelogPage() {
           <i class="fa fa-github"></i> GitHub
         </a>
       </p>
+    </div>
+    <div class="version-entry">
+      <h2>
+        Version 1.13.1
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.13.1" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added custom keyword highlighting: color torrent-list rows from Settings → Highlights, with an option to keep SeaDex colors on top</li>
+      </ul>
     </div>
     <div class="version-entry">
       <h2>

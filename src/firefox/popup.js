@@ -8,6 +8,7 @@
   "transmissionPassword",
   "delugePassword",
   "keywords",
+  "highlightKeywords",
   "monitoredUsers",
   "monitoredKeywords",
   "qbtCategories",

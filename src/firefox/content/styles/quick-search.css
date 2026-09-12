@@ -1,0 +1,808 @@
+/* Quick Search modal */
+.quick-filter-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  animation: qfOverlayFadeIn 0.3s ease;
+}
+
+.quick-filter-overlay.hiding {
+  animation: qfOverlayFadeOut 0.3s ease;
+}
+
+.quick-filter-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1001;
+  width: min(680px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  background: #fff;
+  color: #222;
+  padding: 22px 24px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  animation: qfPopupFadeIn 0.3s ease;
+}
+
+.quick-filter-popup.hiding {
+  animation: qfPopupFadeOut 0.3s ease;
+}
+
+@keyframes qfPopupFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes qfPopupFadeOut {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+}
+
+@keyframes qfOverlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes qfOverlayFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.qf-title {
+  margin: 0 0 18px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.qf-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.qf-grid {
+  display: grid;
+  gap: 12px 14px;
+}
+
+.qf-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.qf-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.qf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.qf-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #444;
+}
+
+.qf-input,
+.qf-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: inherit;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.qf-select {
+  cursor: pointer;
+}
+
+.qf-input:hover,
+.qf-select:hover {
+  border-color: #337ab7;
+}
+
+.qf-input:focus,
+.qf-select:focus {
+  outline: none;
+  border-color: #337ab7;
+  box-shadow: 0 0 0 3px rgba(51, 122, 183, 0.12);
+}
+
+.qf-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding-top: 2px;
+}
+
+.qf-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+}
+
+.qf-checkbox input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.qf-size-filter {
+  padding: 12px 14px;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  background: #f8f9fb;
+}
+
+.qf-size-filter[hidden] {
+  display: none;
+}
+
+.qf-size-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.qf-size-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.qf-size-field > label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+}
+
+.qf-size-value-row {
+  display: flex;
+  gap: 6px;
+}
+
+.qf-size-value-row input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  color: inherit;
+}
+
+.qf-size-value-row select {
+  width: 58px;
+  min-width: 58px;
+  padding: 6px 4px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  color: inherit;
+}
+
+.qf-size-slider {
+  position: relative;
+  height: 24px;
+  margin: 4px 0 8px;
+}
+
+.qf-size-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  background: #ddd;
+  border-radius: 2px;
+}
+
+.qf-size-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: #337ab7;
+  border-radius: 2px;
+}
+
+.qf-size-slider input[type="range"] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.qf-size-slider input[type="range"]::-webkit-slider-thumb {
+  pointer-events: auto;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #337ab7;
+  cursor: pointer;
+}
+
+.qf-size-slider input[type="range"]::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #337ab7;
+  cursor: pointer;
+}
+
+.qf-size-slider input[type="range"]::-webkit-slider-runnable-track,
+.qf-size-slider input[type="range"]::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+#qs-file-size-max-slider {
+  z-index: 4;
+}
+
+#qs-file-size-min-slider {
+  z-index: 3;
+}
+
+.qf-size-summary {
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+
+.qf-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.qf-footer-spacer {
+  flex: 1 1 auto;
+  min-width: 12px;
+}
+
+.qf-remember-selection {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  color: #444;
+}
+
+.qf-remember-selection input[type="checkbox"] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.qf-remember-selection span {
+  line-height: 1;
+}
+
+.qf-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.qf-btn--primary {
+  background: #337ab7;
+  color: #fff;
+}
+
+.qf-btn--primary:hover {
+  background: #286090;
+}
+
+.qf-btn--secondary {
+  background: #337ab7;
+  color: #fff;
+}
+
+.qf-btn--secondary:hover {
+  background: #286090;
+}
+
+.qf-btn--ghost {
+  background: #6c757d;
+  color: #fff;
+}
+
+.qf-btn--ghost:hover {
+  background: #5a6268;
+}
+
+.qf-btn--outline {
+  background: #fff;
+  color: #555;
+  border: 1px solid #d5dbe3;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+
+.qf-btn--outline:hover {
+  background: #fff;
+  color: #333;
+  border-color: #b8c2ce;
+}
+
+.qf-btn--compact {
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.qf-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.dark .quick-filter-popup {
+  background: #34353b;
+  color: #fff;
+}
+
+.dark .qf-label {
+  color: #ccc;
+}
+
+.dark .qf-input,
+.dark .qf-select,
+.dark .qf-size-value-row input[type="number"],
+.dark .qf-size-value-row select {
+  background: #232327;
+  color: #fff;
+  border-color: #666;
+}
+
+.dark .qf-input:hover,
+.dark .qf-select:hover,
+.dark .qf-size-value-row input[type="number"]:hover,
+.dark .qf-size-value-row select:hover {
+  border-color: #4a89dc;
+}
+
+.dark .qf-input:focus,
+.dark .qf-select:focus,
+.dark .qf-size-value-row input[type="number"]:focus,
+.dark .qf-size-value-row select:focus {
+  border-color: #4a89dc;
+  box-shadow: 0 0 0 3px rgba(74, 137, 220, 0.15);
+}
+
+.dark .qf-size-filter {
+  background: #2a2b30;
+  border-color: #555;
+}
+
+.dark .qf-size-field > label,
+.dark .qf-size-summary {
+  color: #aaa;
+}
+
+.dark .qf-size-track {
+  background: #555;
+}
+
+.dark .qf-size-fill {
+  background: #4a89dc;
+}
+
+.dark .qf-size-slider input[type="range"]::-webkit-slider-thumb,
+.dark .qf-size-slider input[type="range"]::-moz-range-thumb {
+  border-color: #4a89dc;
+}
+
+.dark .qf-footer {
+  border-top-color: #555;
+}
+
+.dark .qf-remember-selection {
+  color: #ccc;
+}
+
+.dark .qf-btn--outline {
+  background: #2d2d2d;
+  color: #ccc;
+  border-color: #666;
+  box-shadow: none;
+}
+
+.dark .qf-btn--outline:hover {
+  background: #3a3a3a;
+  color: #fff;
+  border-color: #777;
+}
+
+.qf-field--anime-name {
+  position: relative;
+}
+
+.qf-grid--anime-row .qf-anime-hint,
+.qf-grid--anime-row .qf-anime-aliases {
+  grid-column: 1 / -1;
+}
+
+.qf-anime-search {
+  position: relative;
+}
+
+.qf-anime-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.qf-anime-suggestions[hidden] {
+  display: none;
+}
+
+.qf-anime-suggestion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.qf-anime-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.qf-anime-suggestion:hover,
+.qf-anime-suggestion:focus {
+  background: #f5f9fd;
+  outline: none;
+}
+
+.qf-anime-suggestion-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.qf-anime-suggestion-meta {
+  font-size: 12px;
+  color: #777;
+}
+
+.qf-anime-suggestion--status {
+  cursor: default;
+  color: #777;
+}
+
+.qf-anime-suggestion--status:hover {
+  background: #fff;
+}
+
+.qf-anime-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.4;
+}
+
+.qf-anime-hint[hidden],
+.qf-anime-aliases[hidden] {
+  display: none;
+}
+
+.qf-anime-aliases {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  background: #f8f9fb;
+}
+
+.qf-anime-aliases-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.qf-anime-aliases-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  min-width: 0;
+}
+
+.qf-anime-aliases-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+}
+
+.qf-anime-aliases-meta {
+  font-size: 12px;
+  font-weight: 400;
+  color: #888;
+  line-height: 1.35;
+}
+
+.qf-anime-aliases-actions {
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.qf-anime-aliases.is-ready .qf-anime-aliases-actions {
+  display: flex;
+}
+
+.qf-anime-aliases-actions .qf-btn {
+  flex: 0 1 auto;
+}
+
+.qf-anime-aliases-actions #anime-aliases-apply {
+  margin-left: auto;
+}
+
+.qf-anime-aliases-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(220px, 36vh);
+  overflow-y: auto;
+  padding-right: 2px;
+  user-select: none;
+}
+
+@media (min-width: 561px) {
+  .qf-anime-aliases-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 10px;
+    max-height: min(280px, 38vh);
+  }
+}
+
+.qf-anime-alias-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+  user-select: none;
+}
+
+.qf-anime-alias-item:hover {
+  background: rgba(51, 122, 183, 0.08);
+}
+
+.qf-anime-alias-item:has(input:checked) {
+  background: rgba(51, 122, 183, 0.12);
+}
+
+.qf-anime-alias-item:has(input:focus-visible) {
+  outline: 2px solid #66afe9;
+  outline-offset: 1px;
+}
+
+.qf-anime-alias-item input {
+  margin-top: 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.qf-anime-alias-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.qf-anime-aliases-preview {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px dashed #ccd7e3;
+  font-size: 12px;
+  color: #555;
+  word-break: break-word;
+}
+
+.qf-anime-aliases-preview:empty,
+.qf-anime-aliases-meta:empty {
+  display: none;
+}
+
+.dark .qf-anime-suggestions,
+.dark .qf-anime-suggestion {
+  background: #2d2d2d;
+  border-color: #555;
+  color: #eee;
+}
+
+.dark .qf-anime-suggestion:hover,
+.dark .qf-anime-suggestion:focus {
+  background: #3a3a3a;
+}
+
+.dark .qf-anime-suggestion-meta {
+  color: #aaa;
+}
+
+.dark .qf-anime-aliases {
+  background: #333;
+  border-color: #555;
+}
+
+.dark .qf-anime-aliases-title,
+.dark .qf-anime-alias-item {
+  color: #ccc;
+}
+
+.dark .qf-anime-aliases-meta {
+  color: #aaa;
+}
+
+.dark .qf-anime-alias-item:hover {
+  background: rgba(74, 137, 220, 0.12);
+}
+
+.dark .qf-anime-alias-item:has(input:checked) {
+  background: rgba(74, 137, 220, 0.2);
+}
+
+.dark .qf-anime-hint {
+  color: #aaa;
+}
+
+.dark .qf-anime-aliases-preview {
+  background: #2d2d2d;
+  border-color: #555;
+  color: #ccc;
+}
+
+@media (max-width: 700px) {
+  .qf-grid--3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .quick-filter-popup {
+    width: calc(100vw - 16px);
+    padding: 18px 16px;
+    max-height: calc(100vh - 16px);
+  }
+
+  .qf-grid--2,
+  .qf-grid--3,
+  .qf-size-inputs {
+    grid-template-columns: 1fr;
+  }
+
+  .qf-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .qf-footer-spacer {
+    display: none;
+  }
+
+  .qf-footer .qf-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .qf-remember-selection {
+    justify-content: center;
+  }
+
+  .qf-anime-aliases-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .qf-anime-aliases-actions .qf-btn {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+    text-align: center;
+  }
+
+  .qf-anime-aliases-actions #anime-aliases-apply {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 380px) {
+  .qf-anime-aliases-actions .qf-btn {
+    flex-basis: 100%;
+  }
+}

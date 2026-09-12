@@ -1,0 +1,424 @@
+/* ── Show more pagination ─────────────────────────────────────────────────── */
+
+.ne-show-more {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0 16px;
+}
+
+.ne-show-more__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 220px;
+  padding: 9px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: #337ab7;
+  color: #fff;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    transform 0.1s ease,
+    opacity 0.15s ease;
+}
+
+.ne-show-more__button:hover:not(:disabled) {
+  background: #286090;
+}
+
+.ne-show-more__button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.ne-show-more__button:focus-visible {
+  outline: 2px solid #66afe9;
+  outline-offset: 2px;
+}
+
+.ne-show-more__button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.ne-show-more__button .fa {
+  font-size: 14px;
+}
+
+@keyframes ne-show-more-row-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+table.torrent-list tbody tr.ne-show-more-row-enter {
+  animation: ne-show-more-row-in 0.35s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  table.torrent-list tbody tr.ne-show-more-row-enter {
+    animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .ne-show-more {
+    margin: 10px 0 14px;
+  }
+
+  .ne-show-more__button {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Compact torrent tables on smaller screens */
+@media (max-width: 1920px) {
+  .container:has(table.torrent-list) {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  table.torrent-list > thead > tr > th,
+  table.torrent-list > tbody > tr > td {
+    padding: 7px 6px;
+  }
+
+  .magnet-checkbox-column {
+    width: 48px;
+  }
+
+  .button-container.nyaa-enhancer-toolbar {
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    gap: 8px 10px;
+  }
+
+  .button-container .copy-magnets-button {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .magnet-selection-counter {
+    min-width: 80px;
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 1440px) {
+  .container:has(table.torrent-list) {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  table.torrent-list > thead > tr > th,
+  table.torrent-list > tbody > tr > td {
+    padding: 6px 5px;
+  }
+
+  table.torrent-list > thead > tr > th {
+    font-size: 14px;
+  }
+
+  .magnet-checkbox-column {
+    width: 44px;
+  }
+
+  .button-container.nyaa-enhancer-toolbar {
+    margin-bottom: 7px;
+    padding: 7px 9px;
+  }
+
+  .button-container .copy-magnets-button {
+    padding: 5px 9px;
+    font-size: 12px;
+  }
+
+  .nyaa-enhancer-toolbar__group:not(:first-child) {
+    padding-left: 8px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .nyaa-enhancer-toolbar__main {
+    justify-content: space-between;
+  }
+
+  .nyaa-enhancer-toolbar__group {
+    flex: 1 1 auto;
+  }
+
+  .nyaa-enhancer-toolbar__group .copy-magnets-button {
+    flex: 1;
+  }
+
+  .nyaa-enhancer-toolbar__group--split .ne-btn-icon-compact {
+    display: none;
+  }
+
+  .nyaa-enhancer-toolbar__main .copy-magnets-button .ne-btn-label {
+    display: inline;
+  }
+
+  .nyaa-enhancer-toolbar__aside .quick-filter-button .ne-btn-label {
+    display: none;
+  }
+
+  .nyaa-enhancer-toolbar__aside .quick-filter-button {
+    gap: 0;
+    min-width: 36px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+@media (max-width: 992px) {
+  .container:has(table.torrent-list) {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .table-responsive:has(table.torrent-list) {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  table.torrent-list > thead > tr > th,
+  table.torrent-list > tbody > tr > td {
+    padding: 5px 4px;
+  }
+
+  table.torrent-list > thead > tr > th {
+    font-size: 13px;
+  }
+
+  .magnet-checkbox-column {
+    width: 34px;
+  }
+
+  .button-container.nyaa-enhancer-toolbar {
+    margin-bottom: 6px;
+    padding: 8px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .nyaa-enhancer-toolbar__main {
+    flex: 1 1 100%;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .nyaa-enhancer-toolbar__group {
+    flex: 1 1 auto;
+    gap: 3px;
+  }
+
+  .nyaa-enhancer-toolbar__group .copy-magnets-button {
+    flex: 1;
+  }
+
+  .nyaa-enhancer-toolbar__group:not(:first-child) {
+    padding-left: 6px;
+  }
+
+  .nyaa-enhancer-toolbar__group--split .ne-btn-icon-compact {
+    display: none;
+  }
+
+  .nyaa-enhancer-toolbar__main .copy-magnets-button .ne-btn-label,
+  .nyaa-enhancer-toolbar__aside .quick-filter-button .ne-btn-label {
+    display: inline;
+  }
+
+  .nyaa-enhancer-toolbar__aside {
+    flex: 1 1 100%;
+    margin-left: 0;
+    justify-content: space-between;
+    padding-top: 8px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .nyaa-enhancer-toolbar__aside .quick-filter-button {
+    gap: 6px;
+    min-width: 0;
+    padding: 5px 10px;
+  }
+
+  body.dark .nyaa-enhancer-toolbar__aside {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .button-container .copy-magnets-button {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  .magnet-selection-counter {
+    min-width: 0;
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 768px) {
+  .container:has(table.torrent-list) {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  table.torrent-list > thead > tr > th,
+  table.torrent-list > tbody > tr > td {
+    padding: 3px 2px;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  table.torrent-list > thead > tr > th {
+    font-size: 11px;
+  }
+
+  table.torrent-list td:first-child {
+    padding-left: 1px;
+    padding-right: 1px;
+  }
+
+  .magnet-checkbox-column {
+    width: 26px;
+  }
+
+  .magnet-checkbox,
+  .magnet-select-all {
+    margin: 0;
+  }
+
+  .button-container.nyaa-enhancer-toolbar {
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .nyaa-enhancer-toolbar__main {
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .nyaa-enhancer-toolbar__group {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .nyaa-enhancer-toolbar__group .copy-magnets-button {
+    flex: 1;
+  }
+
+  .nyaa-enhancer-toolbar__group:not(:first-child) {
+    padding-left: 6px;
+  }
+
+  .nyaa-enhancer-toolbar__group--split .ne-btn-icon-compact {
+    display: inline-block;
+  }
+
+  .nyaa-enhancer-toolbar__aside {
+    gap: 6px;
+    padding-top: 6px;
+  }
+
+  .button-container .copy-magnets-button {
+    padding: 6px 7px;
+    font-size: 11px;
+    gap: 0;
+  }
+
+  .button-container .copy-magnets-button .ne-btn-label,
+  .nyaa-enhancer-toolbar__main .copy-magnets-button .ne-btn-label,
+  .nyaa-enhancer-toolbar__aside .quick-filter-button .ne-btn-label {
+    display: none;
+  }
+
+  .button-container .copy-magnets-button i {
+    font-size: 14px;
+  }
+
+  .magnet-selection-counter {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 576px) {
+  .container:has(table.torrent-list) {
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+
+  .table-responsive:has(table.torrent-list) {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  table.torrent-list > thead > tr > th,
+  table.torrent-list > tbody > tr > td {
+    padding: 2px 1px;
+    font-size: 11px;
+  }
+
+  table.torrent-list > thead > tr > th {
+    font-size: 10px;
+  }
+
+  .magnet-checkbox-column {
+    width: 22px;
+  }
+
+  .nyaa-enhancer-toolbar__main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+
+  .nyaa-enhancer-toolbar__group {
+    justify-content: center;
+    padding: 6px 0;
+    border-left: none !important;
+    flex: 1 1 auto;
+  }
+
+  .nyaa-enhancer-toolbar__group--split .copy-magnets-button {
+    flex: 1;
+  }
+
+  .nyaa-enhancer-toolbar__group--split .ne-btn-icon-compact {
+    display: inline-block;
+  }
+
+  .nyaa-enhancer-toolbar__group:not(:last-child) {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  body.dark .nyaa-enhancer-toolbar__group:not(:last-child) {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .nyaa-enhancer-toolbar__aside {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .magnet-selection-counter,
+  .nyaa-enhancer-toolbar__aside .quick-filter-button {
+    width: 100%;
+  }
+}

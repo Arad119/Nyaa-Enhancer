@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Nyaa Enhancer",
-  "version": "1.13.1",
+  "version": "1.14.0",
   "description": "Enhances Nyaa with batch magnet copying, torrent file downloading, and customizable filename options.",
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background/index.js",
+    "type": "module"
   },
   "permissions": ["clipboardWrite", "storage", "activeTab"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
@@ -25,7 +26,10 @@
     "*://*.tsukihime.org/*",
     "*://*.releases.moe/*",
     "*://api.themoviedb.org/*",
-    "*://thexem.info/*"
+    "*://thexem.info/*",
+    "*://api.tenrai.org/*",
+    "*://graphql.anilist.co/*",
+    "*://animeapi.my.id/*"
   ],
   "icons": {
     "16": "icons/icon16.png",
@@ -42,17 +46,54 @@
         "*://*.nyaa.digital/*",
         "*://*.ny.iss.one/*"
       ],
-      "css": ["content.css"],
-      "js": ["assets/jszip.min.js", "content.js"]
+      "css": [
+        "content/styles/base.css",
+        "content/styles/view-page.css",
+        "content/styles/screenshot-preview.css",
+        "content/styles/description-tabs.css",
+        "content/styles/animetosho.css",
+        "content/styles/send-to-client.css",
+        "content/styles/filters.css",
+        "content/styles/show-more.css",
+        "content/styles/quick-search.css",
+        "content/styles/highlights.css",
+        "content/styles/similar.css",
+        "content/styles/settings.css"
+      ],
+      "js": ["assets/jszip.min.js"]
+    },
+    {
+      "matches": [
+        "*://*.nyaa.si/*",
+        "*://*.nya.iss.one/*",
+        "*://*.nyaa.ink/*",
+        "*://*.nyaa.land/*",
+        "*://*.nyaa.digital/*",
+        "*://*.ny.iss.one/*"
+      ],
+      "js": ["content/loader.js"]
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["assets/jszip.min.js"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "assets/jszip.min.js",
+        "content/*",
+        "content/*/*",
+        "content/*/*/*",
+        "shared/*"
+      ],
+      "matches": [
+        "*://*.nyaa.si/*",
+        "*://*.nya.iss.one/*",
+        "*://*.nyaa.ink/*",
+        "*://*.nyaa.land/*",
+        "*://*.nyaa.digital/*",
+        "*://*.ny.iss.one/*"
+      ]
     }
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup/popup.html"
   }
 }

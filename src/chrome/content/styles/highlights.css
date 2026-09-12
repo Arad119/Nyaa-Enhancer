@@ -1,0 +1,54 @@
+/* ── Keyword row highlighting ─────────────────────────────────────────── */
+
+table.torrent-list tbody tr.ne-kw-highlight,
+table.torrent-list tbody tr.ne-kw-highlight > td {
+  background-color: var(--ne-kw-bg) !important;
+}
+
+table.torrent-list tbody tr.ne-kw-highlight:hover,
+table.torrent-list tbody tr.ne-kw-highlight:hover > td {
+  background-color: var(--ne-kw-bg-hover) !important;
+}
+
+table.torrent-list tbody tr.ne-kw-highlight > td:first-child {
+  box-shadow: inset 3px 0 0 var(--ne-kw-color);
+}
+
+table.torrent-list.ne-prioritize-seadex tbody tr.seadex-best.ne-kw-highlight,
+table.torrent-list.ne-prioritize-seadex tbody tr.seadex-best.ne-kw-highlight > td {
+  background-color: rgba(0, 172, 255, 0.12) !important;
+}
+
+table.torrent-list.ne-prioritize-seadex tbody tr.seadex-best.ne-kw-highlight:hover,
+table.torrent-list.ne-prioritize-seadex
+  tbody
+  tr.seadex-best.ne-kw-highlight:hover
+  > td {
+  background-color: rgba(0, 172, 255, 0.18) !important;
+}
+
+table.torrent-list.ne-prioritize-seadex tbody tr.seadex-best-alt.ne-kw-highlight,
+table.torrent-list.ne-prioritize-seadex
+  tbody
+  tr.seadex-best-alt.ne-kw-highlight
+  > td {
+  background-color: rgba(255, 172, 0, 0.12) !important;
+}
+
+table.torrent-list.ne-prioritize-seadex
+  tbody
+  tr.seadex-best-alt.ne-kw-highlight:hover,
+table.torrent-list.ne-prioritize-seadex
+  tbody
+  tr.seadex-best-alt.ne-kw-highlight:hover
+  > td {
+  background-color: rgba(255, 172, 0, 0.18) !important;
+}
+
+table.torrent-list.ne-prioritize-seadex tbody tr.seadex-best.ne-kw-highlight > td:first-child,
+table.torrent-list.ne-prioritize-seadex
+  tbody
+  tr.seadex-best-alt.ne-kw-highlight
+  > td:first-child {
+  box-shadow: none;
+}

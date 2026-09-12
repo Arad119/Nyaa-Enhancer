@@ -27,7 +27,7 @@
 <h3 align="center">Nyaa Enhancer</h3>
 
   <p align="center">
-    A comprehensive browser extension that enhances Nyaa torrent sites with batch copy/download/send, on-page filtering, monitoring, torrent-client integration, and metadata from external websites (AnimeTosho, ameNZB, nekoBT, Tsukihime, and SeaDex).
+    A comprehensive browser extension that enhances Nyaa torrent sites with batch copy/download/send, on-page filtering, monitoring, torrent-client integration, metadata from external websites (AnimeTosho, ameNZB, nekoBT, Tsukihime, and SeaDex), and a Similar tab for related, recommended, and same-vibe anime.
   </p>
 </div>
 
@@ -60,14 +60,23 @@
 
 ![Nyaa-Enhancer Screenshot][product-screenshot]
 
-Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workflow. It adds batch magnet copy, torrent download, and send-to-client actions, an on-page Filters panel, Quick Search, user and keyword monitoring, and optional metadata from AnimeTosho, ameNZB, nekoBT, Tsukihime, and SeaDex. Most options live on a Settings page in the Nyaa navbar; the extension popup is reserved for torrent-client connection details and API keys.
+Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workflow. It adds batch magnet copy, torrent download, and send-to-client actions, an on-page Filters panel, Quick Search, user and keyword monitoring, optional metadata from AnimeTosho, ameNZB, nekoBT, Tsukihime, and SeaDex, and a Similar tab that finds related, recommended, and same-vibe anime. Most options live on a Settings page in the Nyaa navbar; the extension popup is reserved for torrent-client connection details and API keys.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 ### Built With
 
-- [Chrome Extensions API](https://developer.chrome.com/docs/extensions/reference/api) - Core extension functionality
 - [JSZip](https://cdnjs.com/libraries/jszip) - ZIP file creation for batch downloads
+- [TMDB](https://developer.themoviedb.org/docs) - Quick Search autocomplete and optional Similar recommendations
+- [TheXEM](https://thexem.info) - Alternate titles for Quick Search
+- [AnimeTosho](https://animetosho.xyz) - Torrent metadata, screenshots, FileInfo, and comments
+- [ameNZB](https://amenzb.moe) - NZB release metadata
+- [nekoBT](https://nekobt.to) - Release metadata
+- [Tsukihime](https://tsukihime.org) - Release metadata and MediaInfo
+- [SeaDex](https://releases.moe) - Best/alternate release highlighting
+- [Tenrai](https://api.tenrai.org) - Similar identification, MAL recommendations, and vibe data
+- [AniList](https://docs.anilist.co) - Similar relations, recommendations, and details
+- [AnimeAPI](https://github.com/nattadasu/animeApi) - Cross-site ID mapping for Similar
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -90,6 +99,7 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 **Filters panel (above the torrent table):**
 
 - Hide dead torrents (0 seeders / leechers)
+- Minimum seeders threshold (hide torrents below a seeder count)
 - Keyword hiding with a custom block list
 - File size filter with a min/max range slider and unit selectors
 - Completed-downloads threshold (greater than, equal to, or less than)
@@ -104,12 +114,21 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 **Torrent view pages:**
 
 - Magnet copy and Send-to-client on the view page
-- Tabbed panels: Description plus optional AnimeTosho, ameNZB, nekoBT, and Tsukihime tabs
+- Click the torrent title or info hash to copy them (on by default)
+- Tabbed panels: Description, Similar (anime, on by default), plus optional AnimeTosho, ameNZB, nekoBT, and Tsukihime
 - AnimeTosho screenshots, FileInfo, downloads/attachments, and comments
 - Improved file list with total and per-folder counts
 - Optional comment hiding
 - SeaDex best/alternate release highlighting
 - Hover screenshot preview from the torrent description
+
+**Similar Anime (view-page tab):**
+
+- Identifies the anime via SeaDex, AnimeTosho series, Tenrai, then AniList — nothing is fetched until you open the tab
+- **Related** (sequel, prequel, spin-off, movie), **Recommended** (MyAnimeList + AniList by default, or TMDB if enabled), and **Same vibe** (shared genres, tags, and studio)
+- Adjustable same-vibe mix in Settings; changing it re-scores cached titles without extra API calls
+- Click a card for synopsis, score, and links; Ctrl/Cmd-click still searches Nyaa (or opens Quick Search if enabled)
+- Results are cached (ID mappings up to 30 days; recs and details 24 hours); clear from Settings if needed
 
 **Torrent client integration:**
 
@@ -131,7 +150,7 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 
 **Settings and changelog:**
 
-- Dedicated **Settings** page at `/settings` (also in the Nyaa navbar)
+- Dedicated **Settings** page at `/settings` (also in the Nyaa navbar), with a search box to jump to any option
 - Extension popup for torrent-client URL/credentials and API keys
 - Changelog page at `/changelog` with a dismissible What’s New popup
 - Toggles sync across devices; API keys, credentials, and monitoring lists stay in local storage
@@ -201,6 +220,7 @@ Firefox:
 
 - Open the **Filters** panel above the table
 - Hide dead torrents (0 seeders / leechers)
+- Require a minimum seeder count
 - Block torrents with keywords from a custom list
 - Set a file-size range with the min/max slider
 - Filter by completed downloads (greater than, equal to, or less than)
@@ -238,12 +258,21 @@ Firefox:
 **View pages:**
 
 - Copy magnet or Send to client from the view page
+- Click the torrent title or info hash to copy them
 - Optional tabs and links for AnimeTosho (screenshots, FileInfo, downloads, comments), ameNZB, nekoBT, and Tsukihime
 - SeaDex highlighting and hover screenshot preview when enabled
+
+**Similar Anime:**
+
+- On an anime torrent view page, open the **Similar** tab (nothing is fetched until then)
+- Browse **Related**, **Recommended**, and **Same vibe**; click a card for details, or Ctrl/Cmd-click to search
+- Tune the same-vibe mix, TMDB recommendations, and Quick Search behavior in Settings → Similar Anime
 
 ![Nyaa-Enhancer Settings][product-settings]
 
 **Settings page** (`/settings`, also in the Nyaa navbar):
+
+- Use the search box at the top to filter settings by name or description
 
 _Download:_
 
@@ -260,12 +289,14 @@ _Interface:_
 
 _Filters:_
 
-- **Show filter notifications**: toast when torrents are hidden. Active filters themselves are set in the on-page Filters panel
+- **Show filter notifications**: toast when torrents are hidden. Active filters themselves (dead torrents, minimum seeders, keywords, file size, and completed downloads) are set in the on-page Filters panel
 
 _Torrent view page:_
 
 - **Hide comments**
 - **Improved file list**: total and per-folder file counts
+- **Copy title on click**: click the torrent title to copy it
+- **Copy info hash on click**: click the info hash to copy it
 
 _Monitoring:_
 
@@ -290,6 +321,16 @@ _Tsukihime:_
 
 - **Display Tsukihime links** and **Display Tsukihime section**
 
+_Similar Anime:_
+
+- **Show Similar tab**: related, recommended, and same-vibe anime on view pages (nothing is fetched until you open the tab)
+- **Use TMDB similar and recommendations**: replace MAL/AniList user recommendations with TMDB (needs a TMDB API key in the popup)
+- **Auto-open extra results**: expand the “more” lists under each shelf
+- **Show details on card click**: synopsis, score, and links in a modal (Ctrl/Cmd-click still searches)
+- **Open Quick Search from Similar**: fill Quick Search with the title instead of searching Nyaa
+- **Same vibe mix**: two knobs split 100% across genres, tags, and studio
+- **Clear Similar cache**: ID mappings last up to 30 days; recs and details last 24 hours
+
 _Additional features:_
 
 - **Display Best Release (Seadex)**
@@ -313,7 +354,7 @@ _qBittorrent (when that client is selected):_
 
 - **Torrent Client**: client type, URL, credentials, Test Connection / Save
 - **ameNZB API key** (from [amenzb.moe/profile](https://amenzb.moe/profile))
-- **TMDB API key** for Quick Search autocomplete (from [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api))
+- **TMDB API key** for Quick Search autocomplete and optional Similar recommendations (from [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api))
 
 **Supported Domains:**
 

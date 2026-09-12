@@ -1,0 +1,30 @@
+.panel-heading.nyaa-enhancer-copy-title .panel-title {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.15s ease;
+}
+
+.panel-heading.nyaa-enhancer-copy-title .panel-title:hover,
+.panel-heading.nyaa-enhancer-copy-title .panel-title:focus-visible {
+  text-decoration-color: currentColor;
+}
+
+.panel-body.nyaa-enhancer-copy-infohash kbd {
+  cursor: pointer;
+  transition:
+    filter 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.panel-body.nyaa-enhancer-copy-infohash kbd:hover,
+.panel-body.nyaa-enhancer-copy-infohash kbd:focus-visible {
+  filter: brightness(1.18);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+body:not(.dark) .panel-body.nyaa-enhancer-copy-infohash kbd:hover,
+body:not(.dark) .panel-body.nyaa-enhancer-copy-infohash kbd:focus-visible {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
+}

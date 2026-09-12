@@ -1,0 +1,568 @@
+.link-action-at-placeholder {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.magnet-checkbox-column {
+  width: 50px;
+}
+
+.magnet-checkbox,
+.magnet-select-all {
+  cursor: pointer;
+}
+
+.magnet-select-all {
+  vertical-align: middle;
+}
+
+.magnet-select-all:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.copy-magnets-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 12px;
+  background-color: #337ab7;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
+}
+
+.copy-magnets-button:hover {
+  background-color: #286090;
+}
+
+.copy-magnets-button:active {
+  transform: translateY(1px);
+}
+
+.copy-magnets-button:focus-visible {
+  outline: 2px solid #66afe9;
+  outline-offset: 2px;
+}
+
+.copy-magnets-button i {
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.magnet-notification-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  z-index: 9999;
+}
+
+.magnet-notification {
+  padding: 15px 25px;
+  color: white;
+  border-radius: 4px;
+  transition:
+    opacity 0.3s,
+    transform 0.3s;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.magnet-notification.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.clear-button {
+  background-color: #d9534f !important;
+}
+
+.clear-button:hover {
+  background-color: #c9302c !important;
+}
+
+.download-button {
+  background-color: #5cb85c !important;
+}
+
+.send-batch-button {
+  background-color: #17a2b8 !important;
+}
+
+.send-batch-button:hover {
+  background-color: #117a8b !important;
+}
+
+.send-batch-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.changelog-container {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: #2a2a2a;
+  border-radius: 8px;
+  padding: 16px;
+  width: 300px;
+  color: #fff;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  animation: slideIn 0.3s ease;
+  opacity: 1;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+.changelog-container.hiding {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.changelog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.changelog-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #4caf50;
+}
+
+.changelog-version {
+  font-size: 14px;
+  color: #999;
+}
+
+.changelog-content {
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+  color: #ccc;
+}
+
+.changelog-more {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #aaa;
+}
+
+.changelog-more a {
+  color: #337ab7;
+  text-decoration: underline;
+}
+
+.changelog-more a:hover {
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+.changelog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.changelog-button {
+  background: #4caf50;
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.changelog-button:hover {
+  background: #66bb6a;
+}
+
+.changelog-button.dont-show {
+  background: #f44336;
+}
+
+.changelog-button.dont-show:hover {
+  background: #d32f2f;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(100px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.magnet-button {
+  padding: 5px 10px;
+  background-color: #337ab7;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.magnet-button:hover {
+  background-color: #286090;
+}
+
+.magnet-button i {
+  font-size: 14px;
+}
+
+.button-container,
+.magnet-checkbox-column {
+  transition: opacity 0.3s ease;
+}
+
+.button-container.nyaa-enhancer-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: rgba(248, 249, 251, 0.95);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-weight: 500;
+  container-type: inline-size;
+  container-name: ne-toolbar;
+}
+
+body.dark .button-container.nyaa-enhancer-toolbar {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(35, 35, 39, 0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.nyaa-enhancer-toolbar__main {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nyaa-enhancer-toolbar__group {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.nyaa-enhancer-toolbar__group:not(:first-child) {
+  padding-left: 8px;
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+body.dark .nyaa-enhancer-toolbar__group:not(:first-child) {
+  border-left-color: rgba(255, 255, 255, 0.12);
+}
+
+.nyaa-enhancer-toolbar__group--split {
+  gap: 0;
+  isolation: isolate;
+}
+
+.nyaa-enhancer-toolbar__group--split .copy-magnets-button {
+  position: relative;
+  border-radius: 0;
+  padding: 6px 10px;
+}
+
+.nyaa-enhancer-toolbar__group--split .copy-magnets-button:first-child {
+  border-radius: 5px 0 0 5px;
+}
+
+.nyaa-enhancer-toolbar__group--split .copy-magnets-button:last-child {
+  border-radius: 0 5px 5px 0;
+}
+
+.nyaa-enhancer-toolbar__group--split .copy-magnets-button:last-child::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+}
+
+.nyaa-enhancer-toolbar__group--split .ne-btn-icon-compact {
+  display: none;
+}
+
+.nyaa-enhancer-toolbar__aside {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.magnet-selection-counter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
+  color: #6c7a89;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+body.dark .magnet-selection-counter {
+  background: rgba(255, 255, 255, 0.08);
+  color: #a8b4c0;
+}
+
+.magnet-selection-counter--active {
+  background: rgba(51, 122, 183, 0.14);
+  color: #286090;
+}
+
+body.dark .magnet-selection-counter--active {
+  background: rgba(74, 137, 220, 0.22);
+  color: #9ec5f0;
+}
+
+.nyaa-enhancer-toolbar__btn--hidden {
+  display: none !important;
+}
+
+.button-container.nyaa-enhancer-toolbar .copy-magnets-button {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+@container ne-toolbar (max-width: 1100px) {
+  .nyaa-enhancer-toolbar__main {
+    justify-content: space-between;
+  }
+
+  .nyaa-enhancer-toolbar__group {
+    flex: 1 1 auto;
+  }
+
+  .nyaa-enhancer-toolbar__group .copy-magnets-button {
+    flex: 1;
+  }
+
+  .nyaa-enhancer-toolbar__aside .quick-filter-button .ne-btn-label {
+    display: none;
+  }
+
+  .nyaa-enhancer-toolbar__aside .quick-filter-button {
+    gap: 0;
+    min-width: 36px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .magnet-selection-counter {
+    min-width: 0;
+    padding: 5px 8px;
+  }
+}
+
+@container ne-toolbar (max-width: 720px) {
+  .nyaa-enhancer-toolbar__main {
+    gap: 6px;
+  }
+
+  .nyaa-enhancer-toolbar__group:not(:first-child) {
+    padding-left: 6px;
+  }
+}
+
+.quick-filter-button {
+  background-color: #5bc0de !important;
+  transition: opacity 0.3s ease;
+}
+
+.quick-filter-button:hover {
+  background-color: #46b8da !important;
+}
+
+.quick-filter-button.hiding {
+  opacity: 0;
+}
+
+.button-container.hiding,
+.magnet-checkbox-column.hiding {
+  opacity: 0;
+}
+
+.custom-column {
+  transition: opacity 0.3s ease;
+}
+
+.custom-column.hiding {
+  opacity: 0;
+}
+
+.changelog-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.changelog-page h1 {
+  text-align: center;
+  margin-bottom: 40px;
+  color: #4caf50;
+}
+
+.version-entry {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.version-entry h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #337ab7;
+  font-size: 1.5em;
+  margin-bottom: 15px;
+}
+
+.version-entry ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.version-entry li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+/* Dark mode support */
+body.dark .version-entry {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.changelog-footer {
+  text-align: center;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.changelog-footer a:hover {
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+.version-link {
+  font-size: 14px;
+  padding: 5px 10px;
+  background: #4caf50;
+  color: white;
+  text-decoration: none;
+  border-radius: 4px;
+  transition:
+    background-color 0.2s,
+    transform 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.version-link:hover {
+  background: #45a049;
+  transform: translateY(-1px);
+  text-decoration: none;
+  color: white;
+}
+
+.version-link .fa {
+  font-size: 16px;
+}
+
+/* Dark mode support */
+body.dark .version-link {
+  background: #2196f3;
+}
+
+body.dark .version-link:hover {
+  background: #1976d2;
+}
+
+.changelog-repo {
+  text-align: center;
+  margin-bottom: 30px;
+  color: #666;
+}
+
+.changelog-repo .repo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2196f3;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.changelog-repo .repo-link:hover {
+  color: #1976d2;
+  text-decoration: underline;
+}
+
+.changelog-repo .fa {
+  font-size: 18px;
+}
+
+/* Dark mode support */
+body.dark .changelog-repo {
+  color: #999;
+}

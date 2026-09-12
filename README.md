@@ -114,8 +114,8 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 **Torrent view pages:**
 
 - Magnet copy and Send-to-client on the view page
-- Click the torrent title or info hash to copy them (on by default)
-- Tabbed panels: Description, Similar (anime, on by default), plus optional AnimeTosho, ameNZB, nekoBT, and Tsukihime
+- Click the torrent title or info hash to copy them
+- Tabbed panels: Description, AnimeTosho, Similar, ameNZB, nekoBT, and Tsukihime
 - AnimeTosho screenshots, FileInfo, downloads/attachments, and comments
 - Improved file list with total and per-folder counts
 - Optional comment hiding
@@ -124,7 +124,7 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 
 **Similar Anime (view-page tab):**
 
-- Identifies the anime via SeaDex, AnimeTosho series, Tenrai, then AniList — nothing is fetched until you open the tab
+- Identifies the anime via SeaDex, AnimeTosho series, Tenrai, then AniList - nothing is fetched until you open the tab
 - **Related** (sequel, prequel, spin-off, movie), **Recommended** (MyAnimeList + AniList by default, or TMDB if enabled), and **Same vibe** (shared genres, tags, and studio)
 - Adjustable same-vibe mix in Settings; changing it re-scores cached titles without extra API calls
 - Click a card for synopsis, score, and links; Ctrl/Cmd-click still searches Nyaa (or opens Quick Search if enabled)
@@ -169,12 +169,12 @@ To install the extension in your browser, follow these steps.
 
 ### Installation
 
-**Chrome Web Store (pending update, currently at 1.12.2):**  
+**Chrome Web Store (pending update, currently at 1.13.1):**  
 <a href="https://chromewebstore.google.com/detail/nyaa-enhancer/donibkpnifppkihgmnoocogmmbbocpdd" target="_blank">
 <img src="https://developer.chrome.com/static/docs/webstore/branding/image/HRs9MPufa1J1h5glNhut.png" alt="Chrome Web Store" height="50px" >
 </a>
 
-**Firefox Add-Ons Store (up-to-date at 1.13.1):**  
+**Firefox Add-Ons Store (up-to-date at 1.14.0):**  
 <a href="https://addons.mozilla.org/en-US/firefox/addon/nyaa-enhancer/" target="_blank">
 <img src="https://extensionworkshop.com/assets/img/documentation/publish/get-the-addon-178x60px.dad84b42.png" alt="Firefox Add-Ons Store" height="50px" >
 </a>

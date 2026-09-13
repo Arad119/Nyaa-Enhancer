@@ -7,5 +7,6 @@ export function getPageFlags() {
     isUser: path.startsWith("/user/"),
     isSettings: path === "/settings",
     isChangelog: path === "/changelog",
+    isHistory: path === "/history",
   };
 }

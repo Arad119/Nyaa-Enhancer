@@ -7,8 +7,8 @@ export function initMessaging() {
     if (message.type === "settingChanged") {
       handleSettingChange(message.setting, message.value);
     } else if (message.type === "keywordsUpdated") {
-      savePreferences({ keywords: message.keywords }, () => {
-        neDisplayFilterKeywords(message.keywords);
+      savePreferences({ blockKeywords: message.keywords || [] }, () => {
+        neDisplayFilterKeywords("block", message.keywords || []);
         applyAllTorrentFilters({ notify: true });
       });
     } else if (message.type === "monitoredUsersUpdated") {

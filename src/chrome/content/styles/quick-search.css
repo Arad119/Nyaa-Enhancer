@@ -321,6 +321,147 @@
   min-width: 12px;
 }
 
+.qf-presets {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #eee;
+}
+
+.qf-presets-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.qf-presets-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.qf-presets-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qf-preset-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.qf-preset-editor .qf-input {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.qf-preset-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.qf-presets-empty {
+  margin: 0;
+  color: #888;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.qf-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.qf-preset-chip {
+  max-width: 220px;
+  overflow: hidden;
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f7f7f8;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qf-preset-chip:hover,
+.qf-preset.is-active .qf-preset-chip {
+  border-color: #337ab7;
+  background: rgba(51, 122, 183, 0.12);
+}
+
+.qf-preset-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.qf-preset-icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+}
+
+.qf-preset-icon:hover:not(:disabled) {
+  background: #eee;
+  color: #222;
+}
+
+.qf-preset-icon:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.qf-preset-icon--danger:hover:not(:disabled) {
+  color: #c0392b;
+}
+
+.qf-btn[aria-pressed="true"] {
+  border-color: #337ab7;
+  background: rgba(51, 122, 183, 0.12);
+}
+
+.dark .qf-presets {
+  border-top-color: #555;
+}
+
+.dark .qf-presets-empty,
+.dark .qf-preset-icon {
+  color: #aaa;
+}
+
+.dark .qf-preset-chip {
+  border-color: #555;
+  background: #2d2d2d;
+  color: inherit;
+}
+
+.dark .qf-preset-chip:hover,
+.dark .qf-preset.is-active .qf-preset-chip,
+.dark .qf-btn[aria-pressed="true"] {
+  border-color: #4a89dc;
+  background: rgba(74, 137, 220, 0.18);
+}
+
+.dark .qf-preset-icon:hover:not(:disabled) {
+  background: #3a3a3a;
+  color: #fff;
+}
+
 .qf-remember-selection {
   display: inline-flex;
   align-items: center;

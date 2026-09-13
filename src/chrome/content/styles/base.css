@@ -450,13 +450,39 @@ body.dark .magnet-selection-counter--active {
 .changelog-page {
   max-width: 800px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 20px 16px 48px;
 }
 
-.changelog-page h1 {
+.changelog-page__header {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 32px;
+}
+
+.changelog-page__header h1 {
   color: #4caf50;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  margin: 0 0 12px;
+}
+
+.changelog-page__subtitle {
+  color: #888;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 auto;
+  max-width: 560px;
+}
+
+.changelog-page__subtitle a {
+  color: #337ab7;
+  text-decoration: none;
+}
+
+.changelog-page__subtitle a:hover {
+  text-decoration: underline;
+}
+
+.changelog-page__subtitle .fa {
+  font-size: 16px;
 }
 
 .version-entry {
@@ -537,32 +563,3 @@ body.dark .version-link:hover {
   background: #1976d2;
 }
 
-.changelog-repo {
-  text-align: center;
-  margin-bottom: 30px;
-  color: #666;
-}
-
-.changelog-repo .repo-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #2196f3;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.2s;
-}
-
-.changelog-repo .repo-link:hover {
-  color: #1976d2;
-  text-decoration: underline;
-}
-
-.changelog-repo .fa {
-  font-size: 18px;
-}
-
-/* Dark mode support */
-body.dark .changelog-repo {
-  color: #999;
-}

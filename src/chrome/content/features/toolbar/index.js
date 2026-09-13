@@ -1,5 +1,6 @@
 import { loadStoredPreferences } from "../../../shared/prefs.js";
-import { createProgressNotification, dismissProgressNotification, getSelectedVisibleMagnetUrls, getSelectedVisibleTorrentRows, getTitleFromRow, getVisibleTorrentDataRows, isNyaaTorrentDataRow, isTorrentRowHidden, removeLegacyTorrentListActionColumns, sanitizeFilename, sendAllVisibleTorrents, sendSelectedTorrents, setProgressNotificationStatus, showKeywordMonitorPopup, showKeywordSelectPopup, showNotification, showQuickFilterPopup, updateAllTorrentListLinkActions } from "../../internal.js";
+import { createProgressNotification, dismissProgressNotification, getSelectedVisibleTorrentRows, getTitleFromRow, getTorrentIdFromRow, getTorrentInfoHashFromRow, getVisibleTorrentDataRows, isNyaaTorrentDataRow, isTorrentRowHidden, removeLegacyTorrentListActionColumns, sanitizeFilename, sendAllVisibleTorrents, sendSelectedTorrents, setProgressNotificationStatus, showKeywordMonitorPopup, showKeywordSelectPopup, showNotification, showQuickFilterPopup, updateAllTorrentListLinkActions } from "../../internal.js";
+import { historyItemFromDownload, historyItemsFromRows, recordHistoryAction } from "../history/index.js";
 
 export async function addCopyButton() {
   const prefs = await loadStoredPreferences();
@@ -318,14 +319,17 @@ export async function addCheckboxColumn() {
 }
 
 export function copySelectedMagnets() {
-  const selectedMagnets = getSelectedVisibleMagnetUrls();
+  const selectedRows = getSelectedVisibleTorrentRows();
+  const selectedMagnets = selectedRows
+    .map((row) => row.querySelector('a[href^="magnet:"]')?.href)
+    .filter(Boolean);
 
-  // If we found any magnet links, copy them to clipboard
   if (selectedMagnets.length > 0) {
-    const magnetText = selectedMagnets.join("\n"); // One link per line
+    const magnetText = selectedMagnets.join("\n");
     navigator.clipboard
       .writeText(magnetText)
       .then(() => {
+        recordHistoryAction("save", historyItemsFromRows(selectedRows));
         showNotification(
           `${selectedMagnets.length} Magnet links copied to clipboard!`,
           true,
@@ -344,25 +348,29 @@ export function copySelectedMagnets() {
 // This ignores the checkbox selection state
 export function copyAllMagnets() {
   const allMagnets = [];
+  const items = [];
   const rows = document.querySelectorAll("table.torrent-list tbody tr");
 
-  // Loop through all visible rows and collect magnet links
   rows.forEach((row) => {
-    // Skip hidden rows (dead torrents)
     if (row.style.display === "none") return;
 
     const magnetLink = row.querySelector('a[href^="magnet:"]');
     if (magnetLink) {
       allMagnets.push(magnetLink.href);
+      items.push({
+        id: getTorrentIdFromRow(row),
+        title: getTitleFromRow(row),
+        hash: getTorrentInfoHashFromRow(row),
+      });
     }
   });
 
-  // If we found any magnet links, copy them to clipboard
   if (allMagnets.length > 0) {
-    const magnetText = allMagnets.join("\n"); // One link per line
+    const magnetText = allMagnets.join("\n");
     navigator.clipboard
       .writeText(magnetText)
       .then(() => {
+        recordHistoryAction("save", items);
         showNotification(
           `Copied ${allMagnets.length} magnet links to clipboard!`,
           true,
@@ -417,6 +425,8 @@ export async function downloadSelectedTorrents() {
       selectedTorrents.push({
         url: torrentLink.href,
         filename: title,
+        id: getTorrentIdFromRow(row),
+        hash: getTorrentInfoHashFromRow(row),
       });
     }
   });
@@ -446,6 +456,8 @@ export async function downloadAllTorrents() {
       allTorrents.push({
         url: torrentLink.href,
         filename: title,
+        id: getTorrentIdFromRow(row),
+        hash: getTorrentInfoHashFromRow(row),
       });
     }
   });
@@ -464,6 +476,7 @@ export async function downloadTorrentsAsZip(torrents, zipName) {
     const zip = new globalThis.JSZip();
     let completedDownloads = 0;
     const failedNames = [];
+    const savedItems = [];
     const prefs = await loadStoredPreferences();
 
     progressNotification.textContent = `Progress: 0/${torrents.length} files`;
@@ -497,6 +510,9 @@ export async function downloadTorrentsAsZip(torrents, zipName) {
 
         zip.file(filename, base64Data.split(",")[1], { base64: true });
 
+        const saved = historyItemFromDownload(torrent);
+        if (saved) savedItems.push(saved);
+
         completedDownloads++;
         progressNotification.textContent = `Progress: ${completedDownloads}/${torrents.length} files`;
       } catch (error) {
@@ -529,6 +545,7 @@ export async function downloadTorrentsAsZip(torrents, zipName) {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(zipUrl);
+    if (savedItems.length) recordHistoryAction("download", savedItems);
 
     if (failedNames.length) {
       setProgressNotificationStatus(progressNotification, "warning");
@@ -554,6 +571,7 @@ export async function downloadIndividualTorrents(torrents) {
   const progressNotification = createProgressNotification();
   let completedDownloads = 0;
   const failedNames = [];
+  const savedItems = [];
 
   progressNotification.textContent = `Progress: 0/${torrents.length} files`;
 
@@ -576,6 +594,8 @@ export async function downloadIndividualTorrents(torrents) {
       document.body.removeChild(link);
 
       URL.revokeObjectURL(link.href);
+      const saved = historyItemFromDownload(torrent);
+      if (saved) savedItems.push(saved);
 
       completedDownloads++;
       progressNotification.textContent = `Progress: ${completedDownloads}/${torrents.length} files`;
@@ -595,6 +615,7 @@ export async function downloadIndividualTorrents(torrents) {
   } else {
     progressNotification.textContent = "Download complete!";
   }
+  if (savedItems.length) recordHistoryAction("download", savedItems);
   dismissProgressNotification(progressNotification);
 }
 

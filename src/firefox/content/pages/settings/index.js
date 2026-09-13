@@ -6,6 +6,12 @@ import {
 import { getKeywordSearchUrl, setNyaaOriginFallback } from "../../../shared/urls.js";
 import { NE_DEFAULT_HIGHLIGHT_COLOR, checkMonitoredUsers, getHighlightRules, handleSettingChange, normalizeHighlightColor } from "../../internal.js";
 import { clearSimilarCaches, formatSimilarCacheBytes, getSimilarCacheUsage, isSimilarCacheKey } from "../../features/similar/cache.js";
+import {
+  HISTORY_MAX_EVENTS_MAX,
+  HISTORY_MAX_EVENTS_MIN,
+  clearHistory,
+  neNormalizeHistoryMaxEvents,
+} from "../../features/history/store.js";
 
 // ── Settings Page ───────────────────────────────────────────────────────────
 
@@ -13,6 +19,7 @@ export const NE_SETTINGS_NAV_SECTIONS = [
   { id: "ne-settings-download", label: "Download" },
   { id: "ne-settings-interface", label: "Interface" },
   { id: "ne-settings-filters", label: "Filters" },
+  { id: "ne-settings-history", label: "History" },
   { id: "ne-settings-view", label: "View Page" },
   { id: "ne-settings-monitoring", label: "Monitoring" },
   { id: "ne-settings-animetosho", label: "AnimeTosho" },
@@ -39,6 +46,12 @@ export function neSettingsCreateToggleRow(settingKey, label, hint = "", dependsO
     </button>
   `;
   return row;
+}
+
+export function neSettingsNormalizeShowMoreUntilVisible(value) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 150;
+  return Math.min(1000, parsed);
 }
 
 export async function neSettingsSave(settingKey, value) {
@@ -307,6 +320,7 @@ export async function neSettingsLoadValues() {
     showSendButtons: prefs.showSendButtons,
     showMonitorButtons: prefs.showMonitorButtons,
     showFilterNotifications: prefs.showFilterNotifications,
+    showMoreAutoEnabled: !!prefs.showMoreAutoEnabled,
     hideComments: prefs.hideComments,
     improvedFileList: prefs.improvedFileList,
     copyTorrentTitle: prefs.copyTorrentTitle,
@@ -333,6 +347,7 @@ export async function neSettingsLoadValues() {
     showSeaDex: prefs.showSeaDex,
     prioritizeSeaDexHighlights: prefs.prioritizeSeaDexHighlights !== false,
     showChangelogNav: prefs.showChangelogNav,
+    historyEnabled: !!prefs.historyEnabled,
     qbtPromptOnSend: prefs.qbtPromptOnSend !== false,
   };
 
@@ -351,6 +366,18 @@ export async function neSettingsLoadValues() {
   const slideInput = document.getElementById("ne-sp-slide-delay");
   if (hoverInput) hoverInput.value = prefs.screenshotPreviewHoverDelay;
   if (slideInput) slideInput.value = prefs.screenshotPreviewSlideDelay;
+  const historyMaxInput = document.getElementById("ne-history-max-events");
+  if (historyMaxInput) {
+    historyMaxInput.value = String(
+      neNormalizeHistoryMaxEvents(prefs.historyMaxEvents),
+    );
+  }
+  const showMoreUntil = document.getElementById("ne-show-more-until-visible");
+  if (showMoreUntil) {
+    showMoreUntil.value = String(
+      neSettingsNormalizeShowMoreUntilVisible(prefs.showMoreUntilVisible),
+    );
+  }
   neSettingsSetVibeMix(
     prefs.similarVibeGenreWeight,
     prefs.similarVibeTagWeight,
@@ -1393,6 +1420,45 @@ export function neSettingsWireScreenshotInputs() {
   attach("ne-sp-slide-delay", "screenshotPreviewSlideDelay", 2, 0.1);
 }
 
+export function neSettingsWireShowMoreSection() {
+  const input = document.getElementById("ne-show-more-until-visible");
+  const commit = async () => {
+    if (!input) return;
+    const value = neSettingsNormalizeShowMoreUntilVisible(input.value);
+    input.value = String(value);
+    await neSettingsSave("showMoreUntilVisible", value);
+  };
+  input?.addEventListener("change", commit);
+  input?.addEventListener("blur", commit);
+}
+
+export function neSettingsWireHistorySection() {
+  const input = document.getElementById("ne-history-max-events");
+  const commitCap = async () => {
+    if (!input) return;
+    const value = neNormalizeHistoryMaxEvents(input.value);
+    input.value = String(value);
+    await neSettingsSave("historyMaxEvents", value);
+  };
+  input?.addEventListener("change", commitCap);
+  input?.addEventListener("blur", commitCap);
+
+  const button = document.getElementById("ne-history-clear-settings");
+  const status = document.getElementById("ne-history-clear-settings-status");
+  button?.addEventListener("click", async () => {
+    button.disabled = true;
+    if (status) status.textContent = "Clearing…";
+    try {
+      await clearHistory();
+      if (status) status.textContent = "History cleared.";
+    } catch {
+      if (status) status.textContent = "Couldn't clear history.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
 export function neSettingsBuildPageHTML() {
   const navLinks = NE_SETTINGS_NAV_SECTIONS
     .map(
@@ -1405,7 +1471,7 @@ export function neSettingsBuildPageHTML() {
   page.className = "ne-settings-page";
   page.innerHTML = `
     <header class="ne-settings-page__header">
-      <h1>Nyaa Enhancer Settings</h1>
+      <h1>Settings</h1>
       <p class="ne-settings-page__subtitle">
         Configure how Nyaa Enhancer behaves on this site.
         Torrent client connection and API keys (ameNZB, TMDB) are managed in the
@@ -1447,8 +1513,39 @@ export function neSettingsBuildPageHTML() {
         </section>
         <section id="ne-settings-filters" class="ne-settings-section">
           <h2 class="ne-settings-section__title"><i class="fa fa-filter" aria-hidden="true"></i> Filters</h2>
-          <p class="ne-settings-section__desc">Filter options for the torrent list. Active filters (dead torrents, minimum seeders, keywords, file size, and completed downloads) are configured in the Filters panel above the torrent table.</p>
+          <p class="ne-settings-section__desc">Filter options for the torrent list. Active filters (dead torrents, minimum seeders, blocked/required keywords, file size, completed downloads, upload date, and history) and saved presets are configured in the Filters panel above the torrent table.</p>
           <div class="ne-settings-rows" id="ne-settings-filters-rows"></div>
+          <div class="ne-settings-subsection">
+            <div class="ne-settings-input-grid">
+              <div class="ne-settings-field">
+                <label for="ne-show-more-until-visible">Show more until N visible</label>
+                <input type="number" id="ne-show-more-until-visible" min="0" max="1000" step="1" />
+              </div>
+            </div>
+            <p class="ne-settings-row__hint">Used when Auto-load is on above the torrent table. Keeps loading pages until this many torrents remain visible (max 1000). 0 loads one extra page at a time. Requests are spaced out and capped so Nyaa is not hammered.</p>
+          </div>
+        </section>
+        <section id="ne-settings-history" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-history" aria-hidden="true"></i> History</h2>
+          <p class="ne-settings-section__desc">Local log of torrent pages you visit, magnets you copy, files you download, and torrents you send. Off by default.</p>
+          <div class="ne-settings-rows" id="ne-settings-history-rows"></div>
+          <div class="ne-settings-subsection" id="ne-history-options">
+            <div class="ne-settings-input-grid">
+              <div class="ne-settings-field">
+                <label for="ne-history-max-events">Event cap</label>
+                <input type="number" id="ne-history-max-events" min="${HISTORY_MAX_EVENTS_MIN}" max="${HISTORY_MAX_EVENTS_MAX}" step="50" />
+              </div>
+            </div>
+            <p class="ne-settings-row__hint">Oldest entries are dropped when the cap is reached. Set 0 to keep nothing. Open the <a href="/history">History page</a> to browse the log.</p>
+            <div class="ne-similar-cache-actions">
+              <button type="button" id="ne-history-clear-settings" class="ne-settings-btn ne-settings-btn--secondary">
+                <i class="fa fa-trash" aria-hidden="true"></i>
+                Clear history
+              </button>
+              <span id="ne-history-clear-settings-status" class="ne-settings-status" role="status"></span>
+            </div>
+          </div>
+          <p class="ne-settings-notice">When History is off, nothing is logged. When it is on, all entries stay on this device in local storage. History is never synced, uploaded, or sent anywhere.</p>
         </section>
         <section id="ne-settings-view" class="ne-settings-section">
           <h2 class="ne-settings-section__title"><i class="fa fa-file-text-o" aria-hidden="true"></i> Torrent View Page</h2>
@@ -1697,6 +1794,15 @@ export function neSettingsBuildPageHTML() {
 
   page.querySelector("#ne-settings-filters-rows").append(
     neSettingsCreateToggleRow("showFilterNotifications", "Show filter notifications", "Display a toast when torrents are hidden by active filters."),
+    neSettingsCreateToggleRow("showMoreAutoEnabled", "Auto-load more results", "Turn on Auto-load above the torrent table. Pages keep loading until the visible-count target is reached, with delays and a per-burst page cap to avoid rate limits."),
+  );
+
+  page.querySelector("#ne-settings-history-rows").append(
+    neSettingsCreateToggleRow(
+      "historyEnabled",
+      "Enable history",
+      "Log torrent visits, magnet copies, downloads, and sends. Adds a History link to the navbar and records info hashes for the hide-from-history filter.",
+    ),
   );
 
   page.querySelector("#ne-settings-view-rows").append(
@@ -1823,6 +1929,8 @@ export async function handleSettingsPage() {
   neSettingsWireHighlightsSection();
   neSettingsWireQbtSection();
   neSettingsWireScreenshotInputs();
+  neSettingsWireHistorySection();
+  neSettingsWireShowMoreSection();
   await neSettingsLoadValues();
   neSettingsWireVibeWeights();
   neSettingsWireSimilarCache();

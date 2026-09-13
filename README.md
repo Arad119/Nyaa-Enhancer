@@ -94,15 +94,31 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 - Per-row magnet copy and Send-to-client buttons
 - Quick Search, Keyword Select, and Keyword Monitor buttons
 - **Show more** under the table to load the next page in place (skips pages fully hidden by filters)
+- Optional **Auto-load** bar above the table: one-click loading until N torrents are visible (max 1000), with rate-limit guardrails
 - Toast notifications with progress tracking for batch operations
+
+**History** (`/history`; enable in Settings → History):
+
+- Off by default. When enabled, logs torrent page visits, magnet copies (Save), `.torrent` downloads, and sends to your client — including actions on torrent view pages
+- Each entry stores the torrent info hash from the magnet link (`urn:btih:…`)
+- Filter by action (all on by default; click to hide any combination)
+- Date range: last 24 hours (default), week, month, 3/6 months, year, or a custom from/to calendar
+- Search by name, torrent ID, or info hash
+- Copy magnet, download the `.torrent`, or send to your client from any row
+- Stored locally in a compact log with a user-set event cap, not synced
+- Clear from the History page or Settings → History
 
 **Filters panel (above the torrent table):**
 
 - Hide dead torrents (0 seeders / leechers)
 - Minimum seeders threshold (hide torrents below a seeder count)
-- Keyword hiding with a custom block list
+- Keyword filtering with independent Block and Require lists (both can be on at once)
+- Named filter presets (save, apply, rename, replace, remove, reorder)
 - File size filter with a min/max range slider and unit selectors
 - Completed-downloads threshold (greater than, equal to, or less than)
+- Upload date (last 24 hours, 7 days, 30 days, 90 days, 180 days, 365 days, or a custom from/to range)
+- Hide torrents already in History (pick Visit / Download / Save / Send)
+- Reset all to turn every filter off at once
 
 **Quick Search:**
 
@@ -110,6 +126,7 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 - Dual Audio, Season Pack, Last 30 Days, and optional file-size range
 - TMDB title autocomplete with TheXEM aliases (requires a TMDB API key in the popup)
 - Optional “Remember selection” to restore the last search form
+- Named search presets (save, apply, rename, replace, remove, reorder)
 
 **Torrent view pages:**
 
@@ -151,6 +168,7 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 **Settings and changelog:**
 
 - Dedicated **Settings** page at `/settings` (also in the Nyaa navbar), with a search box to jump to any option
+- **History** page at `/history` (navbar link appears after you enable History in Settings)
 - Extension popup for torrent-client URL/credentials and API keys
 - Changelog page at `/changelog` with a dismissible What’s New popup
 - Toggles sync across devices; API keys, credentials, and monitoring lists stay in local storage
@@ -212,7 +230,7 @@ Firefox:
 6. Use **Keywords** and enter a keyword to check matching torrents on the current page
 7. Use Invert / Clear and the selection counter as needed
 8. Use per-row magnet and Send buttons for a single torrent
-9. Use **Show more** under the table to append the next page of results
+9. Use **Auto-load** above the table to keep fetching until N torrents are visible, or **Show more** under the table to append the next page
 
 ![Nyaa-Enhancer Filters][product-filters]
 
@@ -221,9 +239,23 @@ Firefox:
 - Open the **Filters** panel above the table
 - Hide dead torrents (0 seeders / leechers)
 - Require a minimum seeder count
-- Block torrents with keywords from a custom list
+- Block keywords from a custom list (hide matching titles) and/or require keywords (show only titles that contain at least one)
+- Save the current combination as a named preset; apply, rename, replace, remove, or reorder presets at the bottom of the panel
 - Set a file-size range with the min/max slider
 - Filter by completed downloads (greater than, equal to, or less than)
+- Filter by upload date (Day, Week, Month, 3 Months, 6 Months, Year, or a custom from/to range)
+- Hide torrents already in History by action (Visit, Download, Save, Send)
+- Use **Reset all** to turn every filter off without clearing your keyword list or ranges
+
+**History:**
+
+- Enable History in **Settings → History** (off by default); the navbar link appears once it is on
+- Open **History** in the navbar or visit `/history`
+- Leave every action chip on, or turn off Visit / Download / Save / Send
+- Pick Day (default) or a wider window; Custom opens from/to dates
+- Search if you remember part of the title, torrent ID, or info hash
+- Copy magnet, download, or send from a row without opening the torrent page
+- Set an event cap or clear the log from Settings → History
 
 ![Nyaa-Enhancer QuickSearch][product-quicksearch]
 
@@ -232,6 +264,7 @@ Firefox:
 - Build a query from title, encoder, quality, format, source, category, Dual Audio, Season Pack, Last 30 Days, and optional file size
 - With a TMDB API key (set in the popup), titles autocomplete and TheXEM aliases can be included
 - Enable **Remember selection** to keep the last form state
+- Save the current form as a named preset; apply, rename, replace, remove, or reorder presets at the bottom of the popup
 
 
 **Send to torrent client:**
@@ -289,7 +322,15 @@ _Interface:_
 
 _Filters:_
 
-- **Show filter notifications**: toast when torrents are hidden. Active filters themselves (dead torrents, minimum seeders, keywords, file size, and completed downloads) are set in the on-page Filters panel
+- **Show filter notifications**: toast when torrents are hidden. Active filters themselves (dead torrents, minimum seeders, blocked/required keywords, file size, completed downloads, upload date, and history) and presets are set in the on-page Filters panel
+- **Auto-load more results**: turn on Auto-load above the torrent table and keep fetching until the visible-count target
+- **Show more until N visible**: keep auto-loading until this many torrents remain visible (max 1000; 0 = one extra page at a time)
+
+_History:_
+
+- **Enable history**: log visits, magnet copies, downloads, and sends (including torrent view pages). Adds History to the navbar
+- **Event cap**: drop oldest entries when the cap is reached (0 keeps nothing)
+- **Clear history**: wipe the local log
 
 _Torrent view page:_
 

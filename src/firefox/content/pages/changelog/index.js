@@ -34,9 +34,9 @@ export async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added Similar Anime tab on torrent view pages: related, recommended, and same-vibe titles<br>
-        • Added a minimum seeders filter in the Filters panel<br>
-        • Added click-to-copy for the torrent title and info hash on view pages
+        • Added a History page (off by default; enable in Settings) that logs visits, magnet copies, downloads, and sends<br>
+        • Added independent Block and Require keyword lists, named filter and Quick Search presets, and Auto-load<br>
+        • Added an upload date filter in the Filters panel, including a custom from/to date range
         <div class="changelog-more">Plus more. <a href="/changelog">See the full changelog</a> for everything that's new.</div>
       </div>
       <div class="changelog-actions">
@@ -80,30 +80,40 @@ export async function showChangelog() {
 }
 
 export async function handleChangelogPage() {
-  // Only run on the changelog page
   if (window.location.pathname !== "/changelog") return;
+  if (document.querySelector(".changelog-page")) return;
 
-  // Get the main container element (where the 404 message is)
-  const mainContainer = document.querySelector(".container h1")?.parentElement;
+  const mainContainer = document.querySelector(".container > h1")?.parentElement;
   if (!mainContainer) return;
 
-  // Update page title
   document.title = "Changelog :: Nyaa";
-
-  // Clear the 404 content
   mainContainer.innerHTML = "";
 
-  // Add changelog content
   const changelogContent = document.createElement("div");
   changelogContent.className = "changelog-page";
   changelogContent.innerHTML = `
-    <h1>Nyaa Enhancer Changelog</h1>
-    <div class="changelog-repo">
-      <p>This is an open source project. View the source code and contribute on 
-        <a href="https://github.com/Arad119/Nyaa-Enhancer" target="_blank" class="repo-link">
-          <i class="fa fa-github"></i> GitHub
-        </a>
+    <header class="changelog-page__header">
+      <h1>Changelog</h1>
+      <p class="changelog-page__subtitle">
+        What's new in each release. This is an open source project — view the source and contribute on
+        <a href="https://github.com/Arad119/Nyaa-Enhancer" target="_blank" rel="noopener noreferrer">
+          <i class="fa fa-github" aria-hidden="true"></i> GitHub
+        </a>.
       </p>
+    </header>
+    <div class="version-entry">
+      <h2>
+        Version 1.15.0
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.15.0" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added a History page (off by default; enable in Settings) that logs visits, magnet copies, downloads, and sends</li>
+        <li>Added independent Block and Require keyword lists, named filter and Quick Search presets, and Auto-load</li>
+        <li>Added an upload date filter in the Filters panel, including a custom from/to date range</li>
+        <li>Added hide-from-history chips and a Reset all button in the Filters panel</li>
+      </ul>
     </div>
     <div class="version-entry">
       <h2>

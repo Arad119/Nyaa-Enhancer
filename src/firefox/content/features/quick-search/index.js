@@ -1,5 +1,15 @@
 import { getPreferences, loadStoredPreferences, savePreferences } from "../../../shared/prefs.js";
 import { convertToBytes, fetchJsonViaBackground, formatNekoBTBytes, isNyaaTorrentDataRow, showNotification, syncSelectionToVisibleRows } from "../../internal.js";
+import {
+  QUICK_SEARCH_PRESETS_MAX,
+  addQuickSearchPreset,
+  loadQuickSearchPresets,
+  moveQuickSearchPreset,
+  neNormalizeQuickSearchPresetName,
+  removeQuickSearchPreset,
+  renameQuickSearchPreset,
+  updateQuickSearchPresetFromCurrent,
+} from "./presets.js";
 
 // Function to filter torrents by last 30 days
 export function filterByLast30Days() {
@@ -1007,6 +1017,222 @@ export function closeQuickFilterPopup(immediate = false) {
   });
 }
 
+export function qsIsPresetsManageMode() {
+  return (
+    document.getElementById("qs-preset-manage")?.getAttribute("aria-pressed") ===
+    "true"
+  );
+}
+
+export function qsSetPresetEditorOpen(open, { name = "", presetId = "" } = {}) {
+  const editor = document.getElementById("qs-preset-editor");
+  const input = document.getElementById("qs-preset-name");
+  const confirm = document.getElementById("qs-preset-confirm");
+  if (!editor || !input) return;
+  editor.hidden = !open;
+  editor.dataset.presetId = open ? presetId : "";
+  editor.dataset.mode = presetId ? "rename" : "create";
+  input.value = name;
+  if (confirm) confirm.textContent = presetId ? "Rename" : "Save";
+  if (open) {
+    input.focus();
+    input.select();
+  }
+}
+
+export async function qsRenderPresets(presets) {
+  const list = document.getElementById("qs-preset-list");
+  const popup = document.querySelector(".quick-filter-popup");
+  if (!list) return;
+  const items = presets || (await loadQuickSearchPresets());
+  const managing = qsIsPresetsManageMode();
+  const activeId = popup?.dataset.activePresetId || "";
+  list.innerHTML = "";
+
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "qf-presets-empty";
+    empty.textContent = managing
+      ? "No presets yet. Save the current search to create one."
+      : "No presets yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach((preset, index) => {
+    const row = document.createElement("div");
+    row.className = "qf-preset";
+    row.dataset.presetId = preset.id;
+    if (preset.id === activeId) row.classList.add("is-active");
+
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.className = "qf-preset-chip";
+    apply.textContent = preset.name;
+    apply.title = `Apply “${preset.name}”`;
+    apply.addEventListener("click", () => qsApplyPreset(preset.id));
+    row.appendChild(apply);
+
+    if (managing) {
+      const tools = document.createElement("div");
+      tools.className = "qf-preset-actions";
+
+      const up = document.createElement("button");
+      up.type = "button";
+      up.className = "qf-preset-icon";
+      up.title = "Move up";
+      up.disabled = index === 0;
+      up.innerHTML = '<i class="fa fa-angle-up" aria-hidden="true"></i>';
+      up.addEventListener("click", async () => {
+        const result = await moveQuickSearchPreset(preset.id, -1);
+        await qsRenderPresets(result.presets);
+      });
+
+      const down = document.createElement("button");
+      down.type = "button";
+      down.className = "qf-preset-icon";
+      down.title = "Move down";
+      down.disabled = index === items.length - 1;
+      down.innerHTML = '<i class="fa fa-angle-down" aria-hidden="true"></i>';
+      down.addEventListener("click", async () => {
+        const result = await moveQuickSearchPreset(preset.id, 1);
+        await qsRenderPresets(result.presets);
+      });
+
+      const rename = document.createElement("button");
+      rename.type = "button";
+      rename.className = "qf-preset-icon";
+      rename.title = "Rename";
+      rename.innerHTML = '<i class="fa fa-pencil" aria-hidden="true"></i>';
+      rename.addEventListener("click", () => {
+        qsSetPresetEditorOpen(true, {
+          name: preset.name,
+          presetId: preset.id,
+        });
+      });
+
+      const update = document.createElement("button");
+      update.type = "button";
+      update.className = "qf-preset-icon";
+      update.title = "Replace with current search";
+      update.innerHTML = '<i class="fa fa-refresh" aria-hidden="true"></i>';
+      update.addEventListener("click", async () => {
+        const result = await updateQuickSearchPresetFromCurrent(
+          preset.id,
+          readQuickSearchFormState(),
+        );
+        await qsRenderPresets(result.presets);
+        showNotification(`Updated “${preset.name}”`, true);
+      });
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "qf-preset-icon qf-preset-icon--danger";
+      remove.title = "Remove preset";
+      remove.innerHTML = '<i class="fa fa-times" aria-hidden="true"></i>';
+      remove.addEventListener("click", async () => {
+        const result = await removeQuickSearchPreset(preset.id);
+        if (popup?.dataset.activePresetId === preset.id) {
+          delete popup.dataset.activePresetId;
+        }
+        await qsRenderPresets(result.presets);
+      });
+
+      tools.append(up, down, rename, update, remove);
+      row.appendChild(tools);
+    }
+
+    list.appendChild(row);
+  });
+}
+
+export async function qsApplyPreset(id) {
+  const presets = await loadQuickSearchPresets();
+  const preset = presets.find((item) => item.id === id);
+  if (!preset) return;
+
+  applyQuickSearchFormState(preset.state);
+  const popup = document.querySelector(".quick-filter-popup");
+  if (popup) popup.dataset.activePresetId = preset.id;
+  const remember = document.getElementById("qs-remember-selection");
+  if (remember?.checked) {
+    await saveQuickSearchState(readQuickSearchFormState());
+  }
+  await qsRenderPresets(presets);
+  showNotification(`Applied “${preset.name}”`, true);
+}
+
+export async function qsConfirmPresetEditor() {
+  const editor = document.getElementById("qs-preset-editor");
+  const input = document.getElementById("qs-preset-name");
+  const name = neNormalizeQuickSearchPresetName(input?.value);
+  if (!name) {
+    showNotification("Enter a name for this preset.", false);
+    input?.focus();
+    return;
+  }
+
+  if (editor?.dataset.mode === "rename" && editor.dataset.presetId) {
+    const result = await renameQuickSearchPreset(editor.dataset.presetId, name);
+    if (result.error) {
+      showNotification("Enter a name for this preset.", false);
+      return;
+    }
+    qsSetPresetEditorOpen(false);
+    await qsRenderPresets(result.presets);
+    return;
+  }
+
+  const result = await addQuickSearchPreset(name, readQuickSearchFormState());
+  if (result.error === "limit") {
+    showNotification(
+      `You can save up to ${QUICK_SEARCH_PRESETS_MAX} presets.`,
+      false,
+    );
+    return;
+  }
+  if (result.error) {
+    showNotification("Enter a name for this preset.", false);
+    return;
+  }
+  const popup = document.querySelector(".quick-filter-popup");
+  if (popup && result.preset) popup.dataset.activePresetId = result.preset.id;
+  qsSetPresetEditorOpen(false);
+  await qsRenderPresets(result.presets);
+  showNotification(`Saved “${name}”`, true);
+}
+
+export function qsWirePresets() {
+  document.getElementById("qs-preset-save")?.addEventListener("click", () => {
+    qsSetPresetEditorOpen(true);
+  });
+  document
+    .getElementById("qs-preset-manage")
+    ?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const next = button.getAttribute("aria-pressed") !== "true";
+      button.setAttribute("aria-pressed", String(next));
+      button.textContent = next ? "Done" : "Manage";
+      if (!next) qsSetPresetEditorOpen(false);
+      await qsRenderPresets();
+    });
+  document
+    .getElementById("qs-preset-confirm")
+    ?.addEventListener("click", () => qsConfirmPresetEditor());
+  document.getElementById("qs-preset-cancel")?.addEventListener("click", () => {
+    qsSetPresetEditorOpen(false);
+  });
+  document.getElementById("qs-preset-name")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      qsConfirmPresetEditor();
+    }
+    if (event.key === "Escape") {
+      qsSetPresetEditorOpen(false);
+    }
+  });
+}
+
 // Function to show Quick Filter popup
 export function showQuickFilterPopup(options = {}) {
   closeQuickFilterPopup(true);
@@ -1149,6 +1375,22 @@ export function showQuickFilterPopup(options = {}) {
       </div>
     </div>
 
+    <div class="qf-presets">
+      <div class="qf-presets-head">
+        <h4 class="qf-presets-title">Presets</h4>
+        <div class="qf-presets-tools">
+          <button type="button" class="qf-btn qf-btn--outline qf-btn--compact" id="qs-preset-save">Save current</button>
+          <button type="button" class="qf-btn qf-btn--outline qf-btn--compact" id="qs-preset-manage" aria-pressed="false">Manage</button>
+        </div>
+      </div>
+      <div class="qf-preset-editor" id="qs-preset-editor" hidden>
+        <input type="text" id="qs-preset-name" class="qf-input" maxlength="40" placeholder="Preset name" aria-label="Preset name" />
+        <button type="button" class="qf-btn qf-btn--secondary qf-btn--compact" id="qs-preset-confirm">Save</button>
+        <button type="button" class="qf-btn qf-btn--outline qf-btn--compact" id="qs-preset-cancel">Cancel</button>
+      </div>
+      <div class="qf-preset-list" id="qs-preset-list"></div>
+    </div>
+
     <div class="qf-footer">
       <button id="reset-filter" type="button" class="qf-btn qf-btn--outline qf-btn--compact">Reset filters</button>
       <label class="qf-checkbox qf-remember-selection" for="qs-remember-selection">
@@ -1190,6 +1432,8 @@ export function showQuickFilterPopup(options = {}) {
       input?.select();
     }
   });
+  qsWirePresets();
+  qsRenderPresets();
 
   rememberSelectionCheckbox.addEventListener("change", () => {
     savePreferences({
@@ -1254,6 +1498,9 @@ export function showQuickFilterPopup(options = {}) {
       document.getElementById("season-pack").checked = false;
       document.getElementById("last-30-days").checked = false;
       resetQuickSearchFileSizeControls();
+      const popup = document.querySelector(".quick-filter-popup");
+      if (popup) delete popup.dataset.activePresetId;
+      await qsRenderPresets();
       if (rememberSelectionCheckbox.checked) {
         await clearQuickSearchState();
       }

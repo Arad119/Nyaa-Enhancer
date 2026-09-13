@@ -22,3 +22,4 @@ export * from './features/view-page/index.js';
 export * from './features/monitoring/index.js';
 export * from './pages/changelog/index.js';
 export * from './pages/settings/index.js';
+export * from './pages/history/index.js';

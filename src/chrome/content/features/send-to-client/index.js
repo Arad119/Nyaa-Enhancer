@@ -1,5 +1,6 @@
 import { loadStoredPreferences, savePreferences } from "../../../shared/prefs.js";
-import { createProgressNotification, dismissProgressNotification, escapeHtml, getSelectedVisibleMagnetUrls, getVisibleMagnetUrls, setProgressNotificationStatus, showNotification } from "../../internal.js";
+import { createProgressNotification, dismissProgressNotification, escapeHtml, getSelectedVisibleMagnetUrls, getVisibleMagnetUrls, getVisibleTorrentDataRows, getMagnetUrlFromRow, setProgressNotificationStatus, showNotification } from "../../internal.js";
+import { getViewPageHistoryItem, historyItemFromRow, recordHistoryAction } from "../history/index.js";
 
 // Shared helper: wires up the click → torrent client flow
 export const SEND_TORRENT_CONCURRENCY = 3;
@@ -75,7 +76,23 @@ export function setBatchSendButtonsBusy(busy) {
   });
 }
 
-export async function sendMagnetsToClient(magnetUrls, prefs, category, tags) {
+export function historyItemsByMagnetUrl() {
+  const map = new Map();
+  getVisibleTorrentDataRows().forEach((row) => {
+    const magnet = getMagnetUrlFromRow(row);
+    const item = historyItemFromRow(row);
+    if (magnet && item) map.set(magnet, item);
+  });
+  return map;
+}
+
+export async function sendMagnetsToClient(
+  magnetUrls,
+  prefs,
+  category,
+  tags,
+  itemByMagnet = historyItemsByMagnetUrl(),
+) {
   const progressNotification = createProgressNotification();
   const total = magnetUrls.length;
   let sent = 0;
@@ -87,6 +104,7 @@ export async function sendMagnetsToClient(magnetUrls, prefs, category, tags) {
 
   progressNotification.textContent = `Sending: 0/${total}`;
   setBatchSendButtonsBusy(true);
+  const sentItems = [];
 
   const worker = async () => {
     while (nextIndex < total) {
@@ -100,8 +118,11 @@ export async function sendMagnetsToClient(magnetUrls, prefs, category, tags) {
       }
 
       processed++;
-      if (result?.ok) sent++;
-      else if (result?.error === "already_exists") alreadyExists++;
+      if (result?.ok) {
+        sent++;
+        const item = itemByMagnet?.get(magnetUrl) || getViewPageHistoryItem();
+        if (item) sentItems.push(item);
+      } else if (result?.error === "already_exists") alreadyExists++;
       else {
         failed++;
         if (SEND_FATAL_ERRORS.has(result?.error)) abortError = result;
@@ -116,6 +137,8 @@ export async function sendMagnetsToClient(magnetUrls, prefs, category, tags) {
   } finally {
     setBatchSendButtonsBusy(false);
   }
+
+  if (sentItems.length) recordHistoryAction("send", sentItems);
 
   if (abortError) {
     setProgressNotificationStatus(progressNotification, "error");
@@ -270,6 +293,10 @@ export function wireSendTorrentAction(element, magnetUrl) {
         return;
       }
 
+      recordHistoryAction(
+        "send",
+        historyItemFromRow(element.closest("tr")) || getViewPageHistoryItem(),
+      );
       showNotification("Torrent sent to client!", true);
     };
 

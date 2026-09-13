@@ -55,8 +55,11 @@ import {
   setupTitleSuppression,
   teardownTitleSuppression,
 } from "./screenshot-preview/index.js";
+import { initHistoryLogging } from "./history/index.js";
+import { invalidateHistoryHashIndex, trimHistoryToCap } from "./history/store.js";
+import { addHistoryNavItem, handleHistoryPage, removeHistoryNavItem } from "../pages/history/index.js";
 import { addSettingsNavItem, handleSettingsPage } from "../pages/settings/index.js";
-import { initShowMorePagination } from "./show-more/index.js";
+import { initShowMorePagination, scheduleAutoShowMore, syncShowMoreAutoControls, updateAutoLoadStatus } from "./show-more/index.js";
 import { loadStoredPreferences } from "../../shared/prefs.js";
 import { addCopyButton, addCheckboxColumn } from "./toolbar/index.js";
 import {
@@ -84,14 +87,23 @@ const FILTER_PANEL_SETTINGS = [
   "hideDeadTorrents",
   "minSeedersFilterEnabled",
   "minSeedersFilterValue",
-  "keywordFilterEnabled",
+  "blockKeywordsFilterEnabled",
+  "requireKeywordsFilterEnabled",
+  "blockKeywords",
+  "requireKeywords",
   "fileSizeFilterEnabled",
   "fileSizeMinBytes",
   "fileSizeMaxBytes",
   "completedDownloadsFilterEnabled",
   "completedDownloadsFilterOperator",
   "completedDownloadsFilterValue",
-  "keywords",
+  "uploadDateFilterEnabled",
+  "uploadDateFilterRange",
+  "uploadDateFilterFrom",
+  "uploadDateFilterTo",
+  "historyHideFilterEnabled",
+  "historyHideActions",
+  "filterPresets",
 ];
 
 export const features = [
@@ -111,17 +123,28 @@ export const features = [
         setting === "hideDeadTorrents" ||
         setting === "minSeedersFilterEnabled" ||
         setting === "minSeedersFilterValue" ||
-        setting === "keywordFilterEnabled" ||
+        setting === "blockKeywordsFilterEnabled" ||
+        setting === "requireKeywordsFilterEnabled" ||
+        setting === "blockKeywords" ||
+        setting === "requireKeywords" ||
         setting === "fileSizeFilterEnabled" ||
         setting === "fileSizeMinBytes" ||
         setting === "fileSizeMaxBytes" ||
         setting === "completedDownloadsFilterEnabled" ||
         setting === "completedDownloadsFilterOperator" ||
-        setting === "completedDownloadsFilterValue"
+        setting === "completedDownloadsFilterValue" ||
+        setting === "uploadDateFilterEnabled" ||
+        setting === "uploadDateFilterRange" ||
+        setting === "uploadDateFilterFrom" ||
+        setting === "uploadDateFilterTo" ||
+        setting === "historyHideFilterEnabled" ||
+        setting === "historyHideActions"
       ) {
         await applyAllTorrentFilters({
           notify: setting !== "fileSizeMinBytes",
         });
+        updateAutoLoadStatus();
+        scheduleAutoShowMore();
       }
       if (FILTER_PANEL_SETTINGS.includes(setting)) {
         await syncFiltersPanelUI(setting, value);
@@ -433,8 +456,48 @@ export const features = [
   },
   {
     id: "showMore",
+    async afterObserver() {
+      await initShowMorePagination();
+    },
+    onTableMutated() {
+      updateAutoLoadStatus();
+      scheduleAutoShowMore();
+    },
+    async onSettingChanged(setting) {
+      if (
+        setting === "showMoreAutoEnabled" ||
+        setting === "showMoreUntilVisible"
+      ) {
+        const prefs = await loadStoredPreferences();
+        syncShowMoreAutoControls(prefs);
+        scheduleAutoShowMore();
+      }
+    },
+  },
+  {
+    id: "history",
+    init() {
+      initHistoryLogging();
+      browser.storage.onChanged.addListener((changes, area) => {
+        if (area !== "local" || !changes.neHistory) return;
+        invalidateHistoryHashIndex();
+        if (document.querySelector("table.torrent-list")) {
+          applyAllTorrentFilters();
+        }
+      });
+    },
     afterObserver() {
-      initShowMorePagination();
+      handleHistoryPage();
+      addHistoryNavItem();
+    },
+    onSettingChanged(setting, value) {
+      if (setting === "historyEnabled") {
+        if (value) addHistoryNavItem();
+        else removeHistoryNavItem();
+      }
+      if (setting === "historyMaxEvents") {
+        trimHistoryToCap(value);
+      }
     },
   },
   {

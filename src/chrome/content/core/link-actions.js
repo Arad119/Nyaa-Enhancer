@@ -1,5 +1,6 @@
 import { loadStoredPreferences } from "../../shared/prefs.js";
 import { createAnimetoshoListAnchor, createAnimetoshoListPlaceholder, createSendListLink, getTorrentInfoHashFromRow, isAnimetoshoListCategoryRow, isNyaaTorrentDataRow, showNotification } from "../internal.js";
+import { historyItemFromElement, recordHistoryAction } from "../features/history/index.js";
 
 export function getTorrentLinkCell(row) {
   return row.querySelector('td:has(a[href^="magnet:"])');
@@ -147,6 +148,7 @@ export function createMagnetCopyLink(magnetLink) {
     navigator.clipboard
       .writeText(magnetLink.href)
       .then(() => {
+        recordHistoryAction("save", historyItemFromElement(copyLink));
         showNotification("Magnet link copied to clipboard!", true);
       })
       .catch((err) => {
@@ -169,6 +171,7 @@ export function createMagnetCopyButton(magnetLink, { extraStyles = {} } = {}) {
     navigator.clipboard
       .writeText(magnetLink.href)
       .then(() => {
+        recordHistoryAction("save", historyItemFromElement(magnetButton));
         showNotification("Magnet link copied to clipboard!", true);
       })
       .catch((err) => {

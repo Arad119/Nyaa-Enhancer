@@ -1,5 +1,5 @@
 // Secrets and large lists stay in browser.storage.local (no 8KB/item sync quota,
-// and credentials are not uploaded to the user's Browser account).
+// and credentials are not uploaded to the user's browser account).
 // Booleans/toggles remain in browser.storage.sync so they follow the user.
 export const LOCAL_PREF_KEYS = new Set([
   "ameNZBApiKey",
@@ -11,6 +11,9 @@ export const LOCAL_PREF_KEYS = new Set([
   "transmissionPassword",
   "delugePassword",
   "keywords",
+  "blockKeywords",
+  "requireKeywords",
+  "filterPresets",
   "highlightKeywords",
   "monitoredUsers",
   "monitoredKeywords",
@@ -21,9 +24,12 @@ export const LOCAL_PREF_KEYS = new Set([
   "qbtLastCategory",
   "qbtLastTags",
   "quickSearchState",
+  "quickSearchPresets",
   "ameNZBRequestCount",
   "ameNZBRequestDate",
   "lastNyaaOrigin",
+  "showMoreAutoEnabled",
+  "showMoreUntilVisible",
 ]);
 
 export const PREF_DEFAULTS = {
@@ -70,6 +76,16 @@ export const PREF_DEFAULTS = {
   minSeedersFilterValue: 5,
   keywords: [],
   keywordFilterEnabled: false,
+  keywordFilterMode: "block",
+  keywordFilterMigrated: false,
+  blockKeywords: [],
+  requireKeywords: [],
+  blockKeywordsFilterEnabled: false,
+  requireKeywordsFilterEnabled: false,
+  filterPresets: [],
+  quickSearchPresets: [],
+  showMoreAutoEnabled: false,
+  showMoreUntilVisible: 150,
   showFilterNotifications: true,
   hideComments: false,
   improvedFileList: true,
@@ -82,6 +98,14 @@ export const PREF_DEFAULTS = {
   completedDownloadsFilterEnabled: false,
   completedDownloadsFilterOperator: "gt",
   completedDownloadsFilterValue: 0,
+  uploadDateFilterEnabled: false,
+  uploadDateFilterRange: "month",
+  uploadDateFilterFrom: "",
+  uploadDateFilterTo: "",
+  historyHideFilterEnabled: false,
+  historyHideActions: ["visit", "download", "save", "send"],
+  historyEnabled: false,
+  historyMaxEvents: 400,
   showChangelogNav: true,
   monitoredUsers: [],
   monitoredKeywords: [],
@@ -114,9 +138,71 @@ export function registerFeaturePrefs({ defaults = {}, localKeys = [] } = {}) {
 }
 
 function notifyStorageSaveError(area, err) {
+  if (isExtensionContextInvalidated(err)) return;
   const message = err?.message || String(err);
   console.error(`Nyaa Enhancer: failed to save to storage.${area}:`, message);
   saveErrorHandler?.(message);
+}
+
+function isExtensionContextInvalidated(err) {
+  const message = err?.message || String(err || "");
+  return /extension context invalidated/i.test(message);
+}
+
+function getRuntimeLastError() {
+  try {
+    return browser.runtime?.lastError || null;
+  } catch (err) {
+    return err;
+  }
+}
+
+function callStorageArea(area, method, payload, fallback) {
+  return new Promise((resolve, reject) => {
+    const finishOk = (value) => resolve(value);
+    const finishInvalid = () => resolve(fallback);
+
+    try {
+      const api = browser?.storage?.[area];
+      if (typeof api?.[method] !== "function") {
+        finishInvalid();
+        return;
+      }
+
+      api[method](payload, (result) => {
+        const err = getRuntimeLastError();
+        if (!err) {
+          finishOk(method === "get" ? result || {} : undefined);
+          return;
+        }
+        if (isExtensionContextInvalidated(err)) {
+          finishInvalid();
+          return;
+        }
+        if (method === "set") notifyStorageSaveError(area, err);
+        else {
+          console.error(
+            `Nyaa Enhancer: failed to ${method} storage.${area}:`,
+            err.message || err,
+          );
+        }
+        reject(new Error(err.message || String(err)));
+      });
+    } catch (err) {
+      if (isExtensionContextInvalidated(err)) {
+        finishInvalid();
+        return;
+      }
+      if (method === "set") notifyStorageSaveError(area, err);
+      else {
+        console.error(
+          `Nyaa Enhancer: failed to ${method} storage.${area}:`,
+          err?.message || err,
+        );
+      }
+      reject(err);
+    }
+  });
 }
 
 function areaGet(area, query) {
@@ -125,53 +211,17 @@ function areaGet(area, query) {
     (Array.isArray(query) && query.length === 0) ||
     (!Array.isArray(query) && Object.keys(query).length === 0);
   if (empty) return Promise.resolve({});
-  return new Promise((resolve, reject) => {
-    browser.storage[area].get(query, (items) => {
-      const err = browser.runtime.lastError;
-      if (err) {
-        console.error(
-          `Nyaa Enhancer: failed to read storage.${area}:`,
-          err.message,
-        );
-        reject(new Error(err.message));
-        return;
-      }
-      resolve(items || {});
-    });
-  });
+  return callStorageArea(area, "get", query, {});
 }
 
 function areaSet(area, items) {
   if (!items || !Object.keys(items).length) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    browser.storage[area].set(items, () => {
-      const err = browser.runtime.lastError;
-      if (err) {
-        notifyStorageSaveError(area, err);
-        reject(new Error(err.message));
-        return;
-      }
-      resolve();
-    });
-  });
+  return callStorageArea(area, "set", items, undefined);
 }
 
 function areaRemove(area, keys) {
   if (!keys?.length) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    browser.storage[area].remove(keys, () => {
-      const err = browser.runtime.lastError;
-      if (err) {
-        console.error(
-          `Nyaa Enhancer: failed to remove from storage.${area}:`,
-          err.message,
-        );
-        reject(new Error(err.message));
-        return;
-      }
-      resolve();
-    });
-  });
+  return callStorageArea(area, "remove", keys, undefined);
 }
 
 function splitPrefPayload(items) {
@@ -236,24 +286,75 @@ function migrateLocalKeysFromSync() {
   return localPrefMigrationPromise;
 }
 
+let showMoreLocalMigrationPromise = null;
+
+function migrateShowMorePrefsToLocal() {
+  if (showMoreLocalMigrationPromise) return showMoreLocalMigrationPromise;
+  showMoreLocalMigrationPromise = (async () => {
+    try {
+      const local = await areaGet("local", [
+        "__neShowMoreLocal",
+        "showMoreUntilVisible",
+        "showMoreAutoEnabled",
+      ]);
+      if (local.__neShowMoreLocal) return;
+      const syncItems = await areaGet("sync", [
+        "showMoreUntilVisible",
+        "showMoreAutoEnabled",
+      ]);
+      const toLocal = { __neShowMoreLocal: true };
+      const toRemove = [];
+      for (const key of ["showMoreUntilVisible", "showMoreAutoEnabled"]) {
+        if (
+          Object.prototype.hasOwnProperty.call(syncItems, key) &&
+          local[key] === undefined
+        ) {
+          toLocal[key] = syncItems[key];
+          toRemove.push(key);
+        }
+      }
+      await areaSet("local", toLocal);
+      if (toRemove.length) await areaRemove("sync", toRemove);
+    } catch (err) {
+      console.error("Nyaa Enhancer: show-more storage migration failed:", err);
+      showMoreLocalMigrationPromise = null;
+    }
+  })();
+  return showMoreLocalMigrationPromise;
+}
+
 export async function getPreferencesAsync(keysOrDefaults) {
-  await migrateLocalKeysFromSync();
-  const { localQuery, syncQuery } = splitPrefQuery(keysOrDefaults);
-  const [syncItems, localItems] = await Promise.all([
-    areaGet("sync", syncQuery).catch(() =>
-      Array.isArray(syncQuery) ? {} : syncQuery,
-    ),
-    areaGet("local", localQuery).catch(() =>
-      Array.isArray(localQuery) ? {} : localQuery,
-    ),
-  ]);
-  return { ...syncItems, ...localItems };
+  try {
+    await migrateLocalKeysFromSync();
+    await migrateShowMorePrefsToLocal();
+    const { localQuery, syncQuery } = splitPrefQuery(keysOrDefaults);
+    const [syncItems, localItems] = await Promise.all([
+      areaGet("sync", syncQuery).catch(() =>
+        Array.isArray(syncQuery) ? {} : syncQuery,
+      ),
+      areaGet("local", localQuery).catch(() =>
+        Array.isArray(localQuery) ? {} : localQuery,
+      ),
+    ]);
+    return { ...syncItems, ...localItems };
+  } catch (err) {
+    if (isExtensionContextInvalidated(err)) {
+      return Array.isArray(keysOrDefaults) ? {} : { ...(keysOrDefaults || {}) };
+    }
+    throw err;
+  }
 }
 
 export async function savePreferencesAsync(items) {
-  await migrateLocalKeysFromSync();
-  const { localItems, syncItems } = splitPrefPayload(items);
-  await Promise.all([areaSet("sync", syncItems), areaSet("local", localItems)]);
+  try {
+    await migrateLocalKeysFromSync();
+    await migrateShowMorePrefsToLocal();
+    const { localItems, syncItems } = splitPrefPayload(items);
+    await Promise.all([areaSet("sync", syncItems), areaSet("local", localItems)]);
+  } catch (err) {
+    if (isExtensionContextInvalidated(err)) return;
+    throw err;
+  }
 }
 
 export function getPreferences(keysOrDefaults, callback) {
@@ -281,8 +382,56 @@ export function savePreferences(items, callback) {
   return promise;
 }
 
-export function loadStoredPreferences() {
-  return getPreferencesAsync(PREF_DEFAULTS);
+function migrateLegacyKeywordFilter(prefs) {
+  if (prefs.keywordFilterMigrated) return null;
+
+  const keywords = Array.isArray(prefs.keywords) ? prefs.keywords : [];
+  const blockKeywords = Array.isArray(prefs.blockKeywords)
+    ? prefs.blockKeywords
+    : [];
+  const requireKeywords = Array.isArray(prefs.requireKeywords)
+    ? prefs.requireKeywords
+    : [];
+  const hasNewLists = blockKeywords.length > 0 || requireKeywords.length > 0;
+
+  const payload = {
+    keywordFilterMigrated: true,
+    blockKeywords,
+    requireKeywords,
+    blockKeywordsFilterEnabled: !!prefs.blockKeywordsFilterEnabled,
+    requireKeywordsFilterEnabled: !!prefs.requireKeywordsFilterEnabled,
+  };
+
+  if (!hasNewLists && keywords.length) {
+    if (prefs.keywordFilterMode === "require") {
+      payload.requireKeywords = keywords;
+      payload.requireKeywordsFilterEnabled = !!prefs.keywordFilterEnabled;
+    } else {
+      payload.blockKeywords = keywords;
+      payload.blockKeywordsFilterEnabled = !!prefs.keywordFilterEnabled;
+    }
+  } else if (
+    !hasNewLists &&
+    prefs.keywordFilterEnabled &&
+    !payload.blockKeywordsFilterEnabled &&
+    !payload.requireKeywordsFilterEnabled
+  ) {
+    if (prefs.keywordFilterMode === "require") {
+      payload.requireKeywordsFilterEnabled = true;
+    } else {
+      payload.blockKeywordsFilterEnabled = true;
+    }
+  }
+
+  return payload;
+}
+
+export async function loadStoredPreferences() {
+  const prefs = await getPreferencesAsync(PREF_DEFAULTS);
+  const migration = migrateLegacyKeywordFilter(prefs);
+  if (!migration) return prefs;
+  await savePreferencesAsync(migration);
+  return { ...prefs, ...migration };
 }
 
 export function savePreference(key, value) {

@@ -43,3 +43,14 @@ export function getAnimeSearchUrl(query) {
 export function getTorrentViewUrl(torrentId) {
   return `${getNyaaOrigin()}/view/${torrentId}`;
 }
+
+export function getTorrentDownloadUrl(torrentId) {
+  return `${getNyaaOrigin()}/download/${torrentId}.torrent`;
+}
+
+export function buildNyaaMagnetUrl(hash, title) {
+  const infoHash = String(hash || "").trim();
+  if (!infoHash) return "";
+  const dn = encodeURIComponent(title || "torrent");
+  return `magnet:?xt=urn:btih:${infoHash}&dn=${dn}`;
+}

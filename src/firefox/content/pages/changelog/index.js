@@ -103,8 +103,8 @@ export async function handleChangelogPage() {
     </header>
     <div class="version-entry">
       <h2>
-        Version 1.15.1
-        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.15.1" target="_blank" class="version-link">
+        Version 1.15.3
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.15.3" target="_blank" class="version-link">
           <i class="fa fa-github"></i> View Release
         </a>
       </h2>
@@ -113,6 +113,7 @@ export async function handleChangelogPage() {
         <li>Auto-load now fetches one page at a time until the visible-count target, instead of bursting then pausing</li>
         <li>Added a Cancel button on ZIP and torrent download progress toasts</li>
         <li>Fixed issue where Settings and Filters panel toggles could look saved even when the write failed; they now properly work and show a toast incase of failure</li>
+        <li>Fixed issue where opening the RSS page caused an extension error</li>
       </ul>
     </div>
     <div class="version-entry">

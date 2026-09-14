@@ -506,7 +506,7 @@ export function neReadFileSizeBoundsFromControls() {
   return neClampFileSizeBounds(minBytes, maxBytes);
 }
 
-export function neSyncFileSizeControlsFromBounds(
+export async function neSyncFileSizeControlsFromBounds(
   minBytes,
   maxBytes,
   { updateStorage = false } = {},
@@ -532,10 +532,15 @@ export function neSyncFileSizeControlsFromBounds(
   neUpdateFileSizeRangeFill();
 
   if (updateStorage) {
-    savePreferences({
-      fileSizeMinBytes: bounds.min,
-      fileSizeMaxBytes: bounds.max,
-    });
+    try {
+      await savePreferences({
+        fileSizeMinBytes: bounds.min,
+        fileSizeMaxBytes: bounds.max,
+      });
+    } catch {
+      const prefs = await loadStoredPreferences();
+      return neSyncFileSizeControlsFromBounds(prefs.fileSizeMinBytes, prefs.fileSizeMaxBytes);
+    }
     handleSettingChange("fileSizeMinBytes", bounds.min);
     handleSettingChange("fileSizeMaxBytes", bounds.max);
   }
@@ -662,24 +667,24 @@ export function neCountActiveFilters(prefs) {
 }
 
 export async function resetAllTorrentFilters() {
-  await new Promise((resolve) =>
-    savePreferences(
-      {
-        hideDeadTorrents: false,
-        minSeedersFilterEnabled: false,
-        blockKeywordsFilterEnabled: false,
-        requireKeywordsFilterEnabled: false,
-        fileSizeFilterEnabled: false,
-        completedDownloadsFilterEnabled: false,
-        uploadDateFilterEnabled: false,
-        historyHideFilterEnabled: false,
-      },
-      resolve,
-    ),
-  );
+  try {
+    await savePreferences({
+      hideDeadTorrents: false,
+      minSeedersFilterEnabled: false,
+      blockKeywordsFilterEnabled: false,
+      requireKeywordsFilterEnabled: false,
+      fileSizeFilterEnabled: false,
+      completedDownloadsFilterEnabled: false,
+      uploadDateFilterEnabled: false,
+      historyHideFilterEnabled: false,
+    });
+  } catch {
+    return false;
+  }
   const prefs = await loadStoredPreferences();
   await neSyncFiltersPanelFromPrefs(prefs);
   await applyAllTorrentFilters({ notify: false });
+  return true;
 }
 
 export function neUpdateActiveFilterBadge(prefs) {
@@ -693,12 +698,16 @@ export function neUpdateActiveFilterBadge(prefs) {
 }
 
 export async function neSaveFilterSetting(key, value) {
-  await new Promise((resolve) =>
-    savePreferences({ [key]: value }, resolve),
-  );
+  try {
+    await savePreferences({ [key]: value });
+  } catch {
+    await neSyncFiltersPanelFromPrefs(await loadStoredPreferences());
+    return false;
+  }
   await handleSettingChange(key, value);
   const prefs = await loadStoredPreferences();
   neUpdateActiveFilterBadge(prefs);
+  return true;
 }
 
 export function neIsFilterPresetsManageMode() {
@@ -855,7 +864,11 @@ export async function neApplyFilterPreset(id) {
 
   const prefs = await loadStoredPreferences();
   const payload = snapshotFilterState({ ...prefs, ...preset.filters });
-  await new Promise((resolve) => savePreferences(payload, resolve));
+  try {
+    await savePreferences(payload);
+  } catch {
+    return;
+  }
   const next = await loadStoredPreferences();
   await neSyncFiltersPanelFromPrefs(next);
   await applyAllTorrentFilters({ notify: true });
@@ -1010,9 +1023,11 @@ export async function neAddFilterKeyword(kind) {
   }
 
   const keywords = [...current, keyword];
-  await new Promise((resolve) =>
-    savePreferences({ [prefKey]: keywords }, resolve),
-  );
+  try {
+    await savePreferences({ [prefKey]: keywords });
+  } catch {
+    return;
+  }
   input.value = "";
   neDisplayFilterKeywords(kind, keywords);
   await applyAllTorrentFilters({ notify: true });
@@ -1024,17 +1039,21 @@ export async function neRemoveFilterKeyword(kind, keywordToRemove) {
   const keywords = neKeywordList(prefs, kind).filter(
     (item) => item !== keywordToRemove,
   );
-  await new Promise((resolve) =>
-    savePreferences({ [prefKey]: keywords }, resolve),
-  );
+  try {
+    await savePreferences({ [prefKey]: keywords });
+  } catch {
+    return;
+  }
   neDisplayFilterKeywords(kind, keywords);
   await applyAllTorrentFilters({ notify: true });
 }
 
 export async function neRemoveAllFilterKeywords(kind) {
-  await new Promise((resolve) =>
-    savePreferences({ [neKeywordPrefKey(kind)]: [] }, resolve),
-  );
+  try {
+    await savePreferences({ [neKeywordPrefKey(kind)]: [] });
+  } catch {
+    return;
+  }
   neDisplayFilterKeywords(kind, []);
   await applyAllTorrentFilters({ notify: true });
 }
@@ -1054,9 +1073,9 @@ export function neInitFileSizeRangeControls(prefs) {
   neSetFileSizeRangeControlsEnabled(prefs.fileSizeFilterEnabled);
 }
 
-export function nePersistFileSizeBoundsFromControls() {
+export async function nePersistFileSizeBoundsFromControls() {
   const bounds = neReadFileSizeBoundsFromControls();
-  neSyncFileSizeControlsFromBounds(bounds.min, bounds.max, {
+  await neSyncFileSizeControlsFromBounds(bounds.min, bounds.max, {
     updateStorage: true,
   });
 }
@@ -1088,7 +1107,7 @@ export function neHandleFileSizeSliderInput(isMinSlider) {
   );
 }
 
-export function neHandleFileSizeSliderCommit(isMinSlider) {
+export async function neHandleFileSizeSliderCommit(isMinSlider) {
   const minSlider = document.getElementById("ne-fileSizeMinSlider");
   const maxSlider = document.getElementById("ne-fileSizeMaxSlider");
   let minMb = parseInt(minSlider.value, 10);
@@ -1102,7 +1121,7 @@ export function neHandleFileSizeSliderCommit(isMinSlider) {
     maxSlider.value = String(maxMb);
   }
 
-  neSyncFileSizeControlsFromBounds(
+  await neSyncFileSizeControlsFromBounds(
     neSliderMbToBytes(minMb),
     neSliderMbToBytes(maxMb),
     { updateStorage: true },
@@ -1116,10 +1135,14 @@ export function neWireFilterToggle(toggleId, settingKey, onChange) {
   if (!toggle) return;
 
   toggle.addEventListener("click", async () => {
+    if (toggle.disabled) return;
     const newState = toggle.getAttribute("aria-checked") !== "true";
+    toggle.disabled = true;
+    const saved = await neSaveFilterSetting(settingKey, newState);
+    toggle.disabled = false;
+    if (!saved) return;
     toggle.setAttribute("aria-checked", String(newState));
     if (onChange) onChange(newState);
-    await neSaveFilterSetting(settingKey, newState);
   });
 }
 
@@ -1187,9 +1210,12 @@ export async function neSyncFiltersPanelFromPrefs(prefs) {
   await neRenderFilterPresets(normalizeFilterPresets(prefs.filterPresets), prefs);
 }
 
+export function removeFiltersPanel() {
+  document.querySelector(".ne-filters-panel")?.remove();
+}
+
 export async function addFiltersPanel() {
   if (!hasTorrentListTable()) return;
-  if (document.querySelector(".ne-filters-panel")) return;
 
   const tableResponsive = document.querySelector(
     ".table-responsive:has(table.torrent-list)",
@@ -1197,6 +1223,11 @@ export async function addFiltersPanel() {
   if (!tableResponsive) return;
 
   const prefs = await loadStoredPreferences();
+  if (prefs.showFiltersPanel === false) {
+    removeFiltersPanel();
+    return;
+  }
+  if (document.querySelector(".ne-filters-panel")) return;
 
   const panel = document.createElement("div");
   panel.className = "ne-filters-panel";
@@ -1533,16 +1564,16 @@ export async function addFiltersPanel() {
           );
           fromEl.value = monthAgo;
           toEl.value = today;
-          await new Promise((resolve) =>
-            savePreferences(
-              {
-                uploadDateFilterRange: "custom",
-                uploadDateFilterFrom: monthAgo,
-                uploadDateFilterTo: today,
-              },
-              resolve,
-            ),
-          );
+          try {
+            await savePreferences({
+              uploadDateFilterRange: "custom",
+              uploadDateFilterFrom: monthAgo,
+              uploadDateFilterTo: today,
+            });
+          } catch {
+            await neSyncFiltersPanelFromPrefs(await loadStoredPreferences());
+            return;
+          }
           await handleSettingChange("uploadDateFilterRange", "custom");
           neUpdateActiveFilterBadge(await loadStoredPreferences());
           return;
@@ -1564,12 +1595,15 @@ export async function addFiltersPanel() {
       if (fromEl) fromEl.value = from;
       if (toEl) toEl.value = to;
     }
-    await new Promise((resolve) =>
-      savePreferences(
-        { uploadDateFilterFrom: from, uploadDateFilterTo: to },
-        resolve,
-      ),
-    );
+    try {
+      await savePreferences({
+        uploadDateFilterFrom: from,
+        uploadDateFilterTo: to,
+      });
+    } catch {
+      await neSyncFiltersPanelFromPrefs(await loadStoredPreferences());
+      return;
+    }
     await handleSettingChange("uploadDateFilterFrom", from);
     neUpdateActiveFilterBadge(await loadStoredPreferences());
   };

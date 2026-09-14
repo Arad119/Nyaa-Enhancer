@@ -30,6 +30,7 @@ export const LOCAL_PREF_KEYS = new Set([
   "lastNyaaOrigin",
   "showMoreAutoEnabled",
   "showMoreUntilVisible",
+  "showMoreAutoDelayMs",
 ]);
 
 export const PREF_DEFAULTS = {
@@ -86,6 +87,9 @@ export const PREF_DEFAULTS = {
   quickSearchPresets: [],
   showMoreAutoEnabled: false,
   showMoreUntilVisible: 150,
+  showMoreAutoDelayMs: 2500,
+  showFiltersPanel: true,
+  showAutoLoad: true,
   showFilterNotifications: true,
   hideComments: false,
   improvedFileList: true,
@@ -157,40 +161,30 @@ function getRuntimeLastError() {
   }
 }
 
+function toStorageError(err) {
+  return err instanceof Error ? err : new Error(err?.message || String(err));
+}
+
 function callStorageArea(area, method, payload, fallback) {
   return new Promise((resolve, reject) => {
-    const finishOk = (value) => resolve(value);
-    const finishInvalid = () => resolve(fallback);
+    let settled = false;
+    const finishOk = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const finishInvalid = () => finishOk(fallback);
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(toStorageError(err));
+    };
 
-    try {
-      const api = browser?.storage?.[area];
-      if (typeof api?.[method] !== "function") {
-        finishInvalid();
-        return;
-      }
-
-      api[method](payload, (result) => {
-        const err = getRuntimeLastError();
-        if (!err) {
-          finishOk(method === "get" ? result || {} : undefined);
-          return;
-        }
-        if (isExtensionContextInvalidated(err)) {
-          finishInvalid();
-          return;
-        }
-        if (method === "set") notifyStorageSaveError(area, err);
-        else {
-          console.error(
-            `Nyaa Enhancer: failed to ${method} storage.${area}:`,
-            err.message || err,
-          );
-        }
-        reject(new Error(err.message || String(err)));
-      });
-    } catch (err) {
+    const handleFailure = (err) => {
+      if (settled) return;
       if (isExtensionContextInvalidated(err)) {
-        finishInvalid();
+        if (method === "set" || method === "remove") fail(err);
+        else finishInvalid();
         return;
       }
       if (method === "set") notifyStorageSaveError(area, err);
@@ -200,7 +194,47 @@ function callStorageArea(area, method, payload, fallback) {
           err?.message || err,
         );
       }
-      reject(err);
+      fail(err);
+    };
+
+    try {
+      const api = browser?.storage?.[area];
+      if (typeof api?.[method] !== "function") {
+        if (method === "set" || method === "remove") {
+          fail(new Error("Extension storage is unavailable."));
+          return;
+        }
+        finishInvalid();
+        return;
+      }
+
+      let maybePromise;
+      try {
+        maybePromise = api[method](payload, (result) => {
+          try {
+            const err = getRuntimeLastError();
+            if (!err) {
+              finishOk(method === "get" ? result || {} : undefined);
+              return;
+            }
+            handleFailure(err);
+          } catch (err) {
+            handleFailure(err);
+          }
+        });
+      } catch (err) {
+        handleFailure(err);
+        return;
+      }
+
+      // Firefox returns a Promise even when a callback is passed. After a reload
+      // that Promise rejects with "Extension context invalidated" and is
+      // otherwise uncaught, even if lastError is handled in the callback.
+      if (maybePromise && typeof maybePromise.catch === "function") {
+        maybePromise.catch(handleFailure);
+      }
+    } catch (err) {
+      handleFailure(err);
     }
   });
 }
@@ -346,15 +380,10 @@ export async function getPreferencesAsync(keysOrDefaults) {
 }
 
 export async function savePreferencesAsync(items) {
-  try {
-    await migrateLocalKeysFromSync();
-    await migrateShowMorePrefsToLocal();
-    const { localItems, syncItems } = splitPrefPayload(items);
-    await Promise.all([areaSet("sync", syncItems), areaSet("local", localItems)]);
-  } catch (err) {
-    if (isExtensionContextInvalidated(err)) return;
-    throw err;
-  }
+  await migrateLocalKeysFromSync();
+  await migrateShowMorePrefsToLocal();
+  const { localItems, syncItems } = splitPrefPayload(items);
+  await Promise.all([areaSet("sync", syncItems), areaSet("local", localItems)]);
 }
 
 export function getPreferences(keysOrDefaults, callback) {
@@ -377,7 +406,9 @@ export function getPreferences(keysOrDefaults, callback) {
 export function savePreferences(items, callback) {
   const promise = savePreferencesAsync(items);
   if (typeof callback === "function") {
-    promise.then(() => callback(), () => callback());
+    promise.then(() => callback(), () => {});
+  } else {
+    promise.catch(() => {});
   }
   return promise;
 }
@@ -430,7 +461,11 @@ export async function loadStoredPreferences() {
   const prefs = await getPreferencesAsync(PREF_DEFAULTS);
   const migration = migrateLegacyKeywordFilter(prefs);
   if (!migration) return prefs;
-  await savePreferencesAsync(migration);
+  try {
+    await savePreferencesAsync(migration);
+  } catch (err) {
+    if (!isExtensionContextInvalidated(err)) throw err;
+  }
   return { ...prefs, ...migration };
 }
 

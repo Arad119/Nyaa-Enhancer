@@ -5,8 +5,8 @@ import { getHistoryHashIndex } from "../history/store.js";
 
 export const NE_SHOW_MORE_SKIP_DELAY_MS = 1500;
 export const NE_SHOW_MORE_AUTO_DELAY_MS = 2500;
-export const NE_SHOW_MORE_AUTO_MAX_PAGES = 6;
-export const NE_SHOW_MORE_AUTO_BURST_COOLDOWN_MS = 25000;
+export const NE_SHOW_MORE_AUTO_DELAY_MIN_MS = 100;
+export const NE_SHOW_MORE_AUTO_DELAY_MAX_MS = 60000;
 export const NE_SHOW_MORE_RATE_LIMIT_COOLDOWN_MS = 60000;
 export const NE_SHOW_MORE_UNTIL_DEFAULT = 150;
 export const NE_SHOW_MORE_UNTIL_MAX = 1000;
@@ -21,6 +21,8 @@ export const neShowMoreState = {
   hasMore: false,
   autoBusy: false,
   autoPausedUntil: 0,
+  autoAbort: null,
+  autoDelayMs: NE_SHOW_MORE_AUTO_DELAY_MS,
   observer: null,
 };
 
@@ -129,8 +131,36 @@ export function updateShowMoreButtonState() {
   updateAutoLoadStatus();
 }
 
-export function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export function delay(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function isAbortError(error) {
+  return error?.name === "AbortError";
+}
+
+export function stopAutoShowMore() {
+  window.clearTimeout(scheduleAutoShowMore.timer);
+  scheduleAutoShowMore.timer = 0;
+  neShowMoreState.autoAbort?.abort();
+}
+
+function isAutoShowMoreStopped(signal) {
+  return !isShowMoreAutoEnabled() || !!signal?.aborted;
 }
 
 export function applyFiltersToShowMoreRows(rows, prefs, historyIndex = null) {
@@ -185,10 +215,13 @@ export function prepareImportedShowMoreRow(sourceRow, pageNumber, prefs) {
   return row;
 }
 
-export async function fetchAndAppendNyaaPage(tableBody, prefs) {
+export async function fetchAndAppendNyaaPage(tableBody, prefs, signal) {
   const nextPage = neShowMoreState.currentPage + 1;
   const nextUrl = buildNyaaPageUrl(nextPage);
-  const response = await fetch(nextUrl, { credentials: "include" });
+  const response = await fetch(nextUrl, {
+    credentials: "include",
+    signal,
+  });
 
   if (!response.ok) {
     const error = new Error(`Failed to load page (${response.status})`);
@@ -197,6 +230,9 @@ export async function fetchAndAppendNyaaPage(tableBody, prefs) {
   }
 
   const html = await response.text();
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
   const doc = new DOMParser().parseFromString(html, "text/html");
   const sourceRows = Array.from(
     doc.querySelectorAll("table.torrent-list tbody tr"),
@@ -210,6 +246,10 @@ export async function fetchAndAppendNyaaPage(tableBody, prefs) {
     if (torrentId && existingIds.has(torrentId)) continue;
     if (torrentId) existingIds.add(torrentId);
     newRows.push(prepareImportedShowMoreRow(sourceRow, nextPage, prefs));
+  }
+
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
   }
 
   neShowMoreState.currentPage = nextPage;
@@ -245,9 +285,10 @@ export async function fetchAndAppendNyaaPage(tableBody, prefs) {
   };
 }
 
-export async function loadNextNyaaResultsPage({ auto = false } = {}) {
+export async function loadNextNyaaResultsPage({ auto = false, signal } = {}) {
   if (neShowMoreState.loading || !neShowMoreState.hasMore) return;
   if (auto && Date.now() < neShowMoreState.autoPausedUntil) return;
+  if (auto && isAutoShowMoreStopped(signal)) return;
 
   const tableBody = document.querySelector("table.torrent-list tbody");
   if (!tableBody) return;
@@ -258,8 +299,11 @@ export async function loadNextNyaaResultsPage({ auto = false } = {}) {
 
   try {
     const prefs = await loadStoredPreferences();
+    if (auto && (isAutoShowMoreStopped(signal) || !prefs.showMoreAutoEnabled)) {
+      return;
+    }
     if (auto) {
-      const pageResult = await fetchAndAppendNyaaPage(tableBody, prefs);
+      const pageResult = await fetchAndAppendNyaaPage(tableBody, prefs, signal);
       if (pageResult.visible > 0 && prefs.showSeaDex) {
         applySeaDexToListPage(pageResult.visibleRows);
       }
@@ -278,7 +322,7 @@ export async function loadNextNyaaResultsPage({ auto = false } = {}) {
       }
       isFirstFetch = false;
 
-      const pageResult = await fetchAndAppendNyaaPage(tableBody, prefs);
+      const pageResult = await fetchAndAppendNyaaPage(tableBody, prefs, signal);
 
       if (pageResult.visible > 0) {
         foundVisible = true;
@@ -314,6 +358,7 @@ export async function loadNextNyaaResultsPage({ auto = false } = {}) {
       );
     }
   } catch (error) {
+    if (isAbortError(error)) return;
     console.error("Failed to load more Nyaa results:", error);
     if (error?.status === 429) {
       pauseShowMoreAuto(NE_SHOW_MORE_RATE_LIMIT_COOLDOWN_MS);
@@ -339,6 +384,34 @@ export function neNormalizeShowMoreUntilVisible(value) {
   const parsed = parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 0) return NE_SHOW_MORE_UNTIL_DEFAULT;
   return Math.min(NE_SHOW_MORE_UNTIL_MAX, parsed);
+}
+
+export function neNormalizeShowMoreAutoDelayMs(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return NE_SHOW_MORE_AUTO_DELAY_MS;
+  return Math.min(
+    NE_SHOW_MORE_AUTO_DELAY_MAX_MS,
+    Math.max(NE_SHOW_MORE_AUTO_DELAY_MIN_MS, Math.round(parsed)),
+  );
+}
+
+export function neNormalizeShowMoreAutoDelaySeconds(value) {
+  const parsed = parseFloat(value);
+  if (!Number.isFinite(parsed)) return NE_SHOW_MORE_AUTO_DELAY_MS / 1000;
+  const minSec = NE_SHOW_MORE_AUTO_DELAY_MIN_MS / 1000;
+  const maxSec = NE_SHOW_MORE_AUTO_DELAY_MAX_MS / 1000;
+  const clamped = Math.min(maxSec, Math.max(minSec, parsed));
+  return Math.round(clamped * 10) / 10;
+}
+
+export function neShowMoreAutoDelaySecondsToMs(seconds) {
+  return neNormalizeShowMoreAutoDelayMs(
+    neNormalizeShowMoreAutoDelaySeconds(seconds) * 1000,
+  );
+}
+
+export function neShowMoreAutoDelayMsToSeconds(ms) {
+  return neNormalizeShowMoreAutoDelaySeconds(neNormalizeShowMoreAutoDelayMs(ms) / 1000);
 }
 
 export function countVisibleTorrentRows() {
@@ -413,6 +486,9 @@ export function updateAutoLoadStatus() {
 
 export function syncShowMoreAutoControls(prefs) {
   setShowMoreAutoToggle(!!prefs.showMoreAutoEnabled);
+  neShowMoreState.autoDelayMs = neNormalizeShowMoreAutoDelayMs(
+    prefs.showMoreAutoDelayMs,
+  );
   const until = document.getElementById("ne-show-more-until");
   if (until) {
     until.value = String(
@@ -427,45 +503,59 @@ export async function runAutoShowMore() {
   if (!neShowMoreState.hasMore) return;
   if (document.hidden) return;
   if (Date.now() < neShowMoreState.autoPausedUntil) return;
+  if (!isShowMoreAutoEnabled()) return;
 
   const prefs = await loadStoredPreferences();
-  if (!prefs.showMoreAutoEnabled) return;
+  if (
+    prefs.showAutoLoad === false ||
+    !prefs.showMoreAutoEnabled ||
+    !isShowMoreAutoEnabled()
+  ) {
+    return;
+  }
 
   const target = neNormalizeShowMoreUntilVisible(prefs.showMoreUntilVisible);
+  neShowMoreState.autoDelayMs = neNormalizeShowMoreAutoDelayMs(
+    prefs.showMoreAutoDelayMs,
+  );
+  neShowMoreState.autoAbort = new AbortController();
+  const signal = neShowMoreState.autoAbort.signal;
   neShowMoreState.autoBusy = true;
   let pages = 0;
 
   try {
     while (
       neShowMoreState.hasMore &&
-      pages < NE_SHOW_MORE_AUTO_MAX_PAGES &&
       !document.hidden &&
-      Date.now() >= neShowMoreState.autoPausedUntil
+      Date.now() >= neShowMoreState.autoPausedUntil &&
+      !isAutoShowMoreStopped(signal)
     ) {
       const visible = countVisibleTorrentRows();
       if (target > 0 && visible >= target) break;
       if (target === 0 && pages >= 1) break;
-      if (pages > 0) await delay(NE_SHOW_MORE_AUTO_DELAY_MS);
-      if (!neShowMoreState.hasMore || document.hidden) break;
-      await loadNextNyaaResultsPage({ auto: true });
+      if (pages > 0) await delay(neShowMoreState.autoDelayMs, signal);
+      if (
+        !neShowMoreState.hasMore ||
+        document.hidden ||
+        isAutoShowMoreStopped(signal)
+      ) {
+        break;
+      }
+      await loadNextNyaaResultsPage({ auto: true, signal });
       pages++;
       updateAutoLoadStatus();
     }
-
-    if (pages >= NE_SHOW_MORE_AUTO_MAX_PAGES && neShowMoreState.hasMore) {
-      pauseShowMoreAuto(NE_SHOW_MORE_AUTO_BURST_COOLDOWN_MS);
-      window.setTimeout(
-        () => scheduleAutoShowMore(),
-        NE_SHOW_MORE_AUTO_BURST_COOLDOWN_MS + 50,
-      );
-    }
   } finally {
     neShowMoreState.autoBusy = false;
+    if (neShowMoreState.autoAbort?.signal === signal) {
+      neShowMoreState.autoAbort = null;
+    }
   }
 }
 
 export function scheduleAutoShowMore() {
   if (!neShowMoreState.initialized) return;
+  if (!isShowMoreAutoEnabled()) return;
   window.clearTimeout(scheduleAutoShowMore.timer);
   scheduleAutoShowMore.timer = window.setTimeout(() => {
     runAutoShowMore();
@@ -491,24 +581,57 @@ export function setupShowMoreAutoObserver() {
 export async function commitShowMoreUntilVisible(rawValue) {
   const value = neNormalizeShowMoreUntilVisible(rawValue);
   const until = document.getElementById("ne-show-more-until");
+  const previous = until?.value;
   if (until) until.value = String(value);
-  await savePreferences({ showMoreUntilVisible: value });
+  try {
+    await savePreferences({ showMoreUntilVisible: value });
+  } catch {
+    if (until) {
+      try {
+        const prefs = await loadStoredPreferences();
+        until.value = String(
+          neNormalizeShowMoreUntilVisible(prefs.showMoreUntilVisible),
+        );
+      } catch {
+        until.value = previous ?? String(NE_SHOW_MORE_UNTIL_DEFAULT);
+      }
+    }
+    updateAutoLoadStatus();
+    return;
+  }
   await handleSettingChange("showMoreUntilVisible", value);
 }
 
 export function wireShowMoreAutoControls() {
   const toggle = document.getElementById("ne-show-more-auto");
+  if (!toggle || toggle.dataset.neWired === "1") return;
+  toggle.dataset.neWired = "1";
   const until = document.getElementById("ne-show-more-until");
   const minus = document.getElementById("ne-auto-load-minus");
   const plus = document.getElementById("ne-auto-load-plus");
 
   toggle?.addEventListener("click", async () => {
+    if (toggle.disabled) return;
     const next = toggle.getAttribute("aria-checked") !== "true";
-    setShowMoreAutoToggle(next);
-    updateAutoLoadStatus();
-    await savePreferences({ showMoreAutoEnabled: next });
-    await handleSettingChange("showMoreAutoEnabled", next);
-    if (next) scheduleAutoShowMore();
+    toggle.disabled = true;
+    if (!next) {
+      setShowMoreAutoToggle(false);
+      stopAutoShowMore();
+      updateAutoLoadStatus();
+    }
+    try {
+      await savePreferences({ showMoreAutoEnabled: next });
+      setShowMoreAutoToggle(next);
+      updateAutoLoadStatus();
+      await handleSettingChange("showMoreAutoEnabled", next);
+      if (next) scheduleAutoShowMore();
+    } catch {
+      setShowMoreAutoToggle(!next);
+      updateAutoLoadStatus();
+      if (!next) scheduleAutoShowMore();
+    } finally {
+      toggle.disabled = false;
+    }
   });
 
   const commitUntil = async () => {
@@ -541,6 +664,27 @@ export function wireShowMoreAutoControls() {
       await commitShowMoreUntilVisible(chip.dataset.neUntilChip);
     });
   });
+}
+
+export function unmountAutoLoadBar() {
+  stopAutoShowMore();
+  document.querySelector(".ne-auto-load")?.remove();
+}
+
+export async function applyAutoLoadBarVisibility(prefs = null) {
+  const resolved = prefs || (await loadStoredPreferences());
+  if (resolved.showAutoLoad === false) {
+    unmountAutoLoadBar();
+    return;
+  }
+  const tableResponsive = document.querySelector(
+    ".table-responsive:has(table.torrent-list)",
+  );
+  if (!tableResponsive || !neShowMoreState.initialized) return;
+  mountAutoLoadBar(tableResponsive);
+  wireShowMoreAutoControls();
+  syncShowMoreAutoControls(resolved);
+  if (neShowMoreState.hasMore) scheduleAutoShowMore();
 }
 
 export function mountAutoLoadBar(tableResponsive) {
@@ -629,15 +773,17 @@ export async function initShowMorePagination() {
   neShowMoreState.currentPage = currentPage;
   neShowMoreState.hasMore = hasMore;
 
-  mountAutoLoadBar(tableResponsive);
+  const prefs = await loadStoredPreferences();
+  if (prefs.showAutoLoad !== false) {
+    mountAutoLoadBar(tableResponsive);
+    wireShowMoreAutoControls();
+  }
   if (hasMore) {
     mountShowMoreButton(tableResponsive);
     setupShowMoreAutoObserver();
   }
 
-  const prefs = await loadStoredPreferences();
   syncShowMoreAutoControls(prefs);
-  wireShowMoreAutoControls();
   document.addEventListener("visibilitychange", () => {
     updateAutoLoadStatus();
     if (!document.hidden) scheduleAutoShowMore();

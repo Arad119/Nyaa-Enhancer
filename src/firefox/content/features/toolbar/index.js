@@ -1,5 +1,5 @@
 import { loadStoredPreferences } from "../../../shared/prefs.js";
-import { createProgressNotification, dismissProgressNotification, getSelectedVisibleTorrentRows, getTitleFromRow, getTorrentIdFromRow, getTorrentInfoHashFromRow, getVisibleTorrentDataRows, isNyaaTorrentDataRow, isTorrentRowHidden, removeLegacyTorrentListActionColumns, sanitizeFilename, sendAllVisibleTorrents, sendSelectedTorrents, setProgressNotificationStatus, showKeywordMonitorPopup, showKeywordSelectPopup, showNotification, showQuickFilterPopup, updateAllTorrentListLinkActions } from "../../internal.js";
+import { createCancellableProgressNotification, getSelectedVisibleTorrentRows, getTitleFromRow, getTorrentIdFromRow, getTorrentInfoHashFromRow, getVisibleTorrentDataRows, isNyaaTorrentDataRow, isTorrentRowHidden, removeLegacyTorrentListActionColumns, sanitizeFilename, sendAllVisibleTorrents, sendSelectedTorrents, showKeywordMonitorPopup, showKeywordSelectPopup, showNotification, showQuickFilterPopup, updateAllTorrentListLinkActions } from "../../internal.js";
 import { historyItemFromDownload, historyItemsFromRows, recordHistoryAction } from "../history/index.js";
 
 export async function addCopyButton() {
@@ -470,8 +470,100 @@ export async function downloadAllTorrents() {
   }
 }
 
+const DOWNLOAD_FETCH_TIMEOUT_MS = 20000;
+const DOWNLOAD_FILE_GAP_MS = 500;
+
+let torrentBatchDownloadBusy = false;
+
+function isAbortError(error) {
+  return error?.name === "AbortError";
+}
+
+function delayWithSignal(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fetchTorrentBlob(url, userSignal) {
+  const timeoutController = new AbortController();
+  const timer = window.setTimeout(
+    () => timeoutController.abort(),
+    DOWNLOAD_FETCH_TIMEOUT_MS,
+  );
+  const onUserAbort = () => timeoutController.abort();
+  if (userSignal) {
+    if (userSignal.aborted) timeoutController.abort();
+    else userSignal.addEventListener("abort", onUserAbort, { once: true });
+  }
+
+  try {
+    const response = await fetch(url, { signal: timeoutController.signal });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.blob();
+  } catch (error) {
+    if (userSignal?.aborted) {
+      throw isAbortError(error)
+        ? error
+        : new DOMException("Aborted", "AbortError");
+    }
+    if (timeoutController.signal.aborted) {
+      throw new Error("Timed out");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+    userSignal?.removeEventListener("abort", onUserAbort);
+  }
+}
+
+function torrentDownloadFilename(torrent, prefs) {
+  return prefs.useDisplayName
+    ? sanitizeFilename(torrent.filename) + ".torrent"
+    : torrent.url.split("/").pop();
+}
+
+function finishCancelledDownload(progress, completedDownloads, total, { keptFiles = false } = {}) {
+  progress.setStatus("warning");
+  progress.setCancelVisible(false);
+  progress.setText(
+    keptFiles && completedDownloads
+      ? `Cancelled (${completedDownloads}/${total} downloaded).`
+      : "Download cancelled.",
+  );
+  progress.dismiss();
+}
+
 export async function downloadTorrentsAsZip(torrents, zipName) {
-  const progressNotification = createProgressNotification();
+  const controller = new AbortController();
+  const abortSignal = controller.signal;
+  const progress = createCancellableProgressNotification({
+    onCancel: () => controller.abort(),
+  });
+
   try {
     const zip = new globalThis.JSZip();
     let completedDownloads = 0;
@@ -479,63 +571,65 @@ export async function downloadTorrentsAsZip(torrents, zipName) {
     const savedItems = [];
     const prefs = await loadStoredPreferences();
 
-    progressNotification.textContent = `Progress: 0/${torrents.length} files`;
-
-    const blobToBase64 = (blob) => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    };
+    progress.setText(`Progress: 0/${torrents.length} files`);
 
     for (const torrent of torrents) {
+      if (abortSignal.aborted) break;
       try {
         if (completedDownloads > 0) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          await delayWithSignal(DOWNLOAD_FILE_GAP_MS, abortSignal);
         }
 
-        const response = await fetch(torrent.url);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const blob = await response.blob();
+        const blob = await fetchTorrentBlob(torrent.url, abortSignal);
         const base64Data = await blobToBase64(blob);
-
-        const filename = prefs.useDisplayName
-          ? sanitizeFilename(torrent.filename) + ".torrent"
-          : torrent.url.split("/").pop();
-
-        zip.file(filename, base64Data.split(",")[1], { base64: true });
+        zip.file(
+          torrentDownloadFilename(torrent, prefs),
+          base64Data.split(",")[1],
+          { base64: true },
+        );
 
         const saved = historyItemFromDownload(torrent);
         if (saved) savedItems.push(saved);
 
         completedDownloads++;
-        progressNotification.textContent = `Progress: ${completedDownloads}/${torrents.length} files`;
+        progress.setText(
+          `Progress: ${completedDownloads}/${torrents.length} files`,
+        );
       } catch (error) {
+        if (isAbortError(error) || abortSignal.aborted) break;
         failedNames.push(torrent.filename);
         console.error(`Failed to fetch torrent: ${torrent.filename}`, error);
       }
     }
 
-    if (completedDownloads === 0) {
-      setProgressNotificationStatus(progressNotification, "error");
-      progressNotification.textContent =
-        "ZIP failed: none of the torrent files could be downloaded.";
-      dismissProgressNotification(progressNotification);
+    if (abortSignal.aborted) {
+      finishCancelledDownload(progress, completedDownloads, torrents.length);
       return;
     }
 
-    progressNotification.textContent = "Generating ZIP file...";
+    if (completedDownloads === 0) {
+      progress.setStatus("error");
+      progress.setCancelVisible(false);
+      progress.setText(
+        "ZIP failed: none of the torrent files could be downloaded.",
+      );
+      progress.dismiss();
+      return;
+    }
+
+    progress.setText("Generating ZIP file...");
+    progress.setCancelEnabled(true);
 
     const zipBlob = await zip.generateAsync({
       type: "blob",
       compression: "DEFLATE",
       compressionOptions: { level: 5 },
     });
+
+    if (abortSignal.aborted) {
+      finishCancelledDownload(progress, completedDownloads, torrents.length);
+      return;
+    }
 
     const zipUrl = URL.createObjectURL(zipBlob);
     const link = document.createElement("a");
@@ -547,44 +641,47 @@ export async function downloadTorrentsAsZip(torrents, zipName) {
     URL.revokeObjectURL(zipUrl);
     if (savedItems.length) recordHistoryAction("download", savedItems);
 
+    progress.setCancelVisible(false);
     if (failedNames.length) {
-      setProgressNotificationStatus(progressNotification, "warning");
-      progressNotification.textContent = `ZIP downloaded with ${failedNames.length} failed file${failedNames.length === 1 ? "" : "s"} (${completedDownloads}/${torrents.length} ok).`;
+      progress.setStatus("warning");
+      progress.setText(
+        `ZIP downloaded with ${failedNames.length} failed file${failedNames.length === 1 ? "" : "s"} (${completedDownloads}/${torrents.length} ok).`,
+      );
     } else {
-      progressNotification.textContent = "ZIP file download complete!";
+      progress.setText("ZIP file download complete!");
     }
-    dismissProgressNotification(progressNotification);
+    progress.dismiss();
   } catch (error) {
+    if (isAbortError(error) || abortSignal.aborted) {
+      finishCancelledDownload(progress, 0, torrents.length);
+      return;
+    }
     console.error("Download failed:", error);
-    setProgressNotificationStatus(progressNotification, "error");
-    progressNotification.textContent =
-      "Failed to create ZIP file: " + error.message;
-    dismissProgressNotification(progressNotification);
+    progress.setStatus("error");
+    progress.setCancelVisible(false);
+    progress.setText("Failed to create ZIP file: " + error.message);
+    progress.dismiss();
   }
 }
 
-// Function to download individual torrent files one at a time
-// This is used when ZIP option is disabled or only one file is selected
-// torrents: Array of torrent objects with url and filename
 export async function downloadIndividualTorrents(torrents) {
+  const controller = new AbortController();
+  const abortSignal = controller.signal;
+  const progress = createCancellableProgressNotification({
+    onCancel: () => controller.abort(),
+  });
   const prefs = await loadStoredPreferences();
-  const progressNotification = createProgressNotification();
   let completedDownloads = 0;
   const failedNames = [];
   const savedItems = [];
 
-  progressNotification.textContent = `Progress: 0/${torrents.length} files`;
+  progress.setText(`Progress: 0/${torrents.length} files`);
 
   for (const torrent of torrents) {
+    if (abortSignal.aborted) break;
     try {
-      const response = await fetch(torrent.url);
-      if (!response.ok)
-        throw new Error(`HTTP error! status: ${response.status}`);
-      const blob = await response.blob();
-
-      const filename = prefs.useDisplayName
-        ? sanitizeFilename(torrent.filename) + ".torrent"
-        : torrent.url.split("/").pop();
+      const blob = await fetchTorrentBlob(torrent.url, abortSignal);
+      const filename = torrentDownloadFilename(torrent, prefs);
 
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
@@ -592,46 +689,64 @@ export async function downloadIndividualTorrents(torrents) {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
       URL.revokeObjectURL(link.href);
+
       const saved = historyItemFromDownload(torrent);
       if (saved) savedItems.push(saved);
 
       completedDownloads++;
-      progressNotification.textContent = `Progress: ${completedDownloads}/${torrents.length} files`;
+      progress.setText(
+        `Progress: ${completedDownloads}/${torrents.length} files`,
+      );
     } catch (error) {
+      if (isAbortError(error) || abortSignal.aborted) break;
       failedNames.push(torrent.filename);
       console.error(`Failed to download torrent: ${torrent.filename}`, error);
     }
   }
 
+  if (abortSignal.aborted) {
+    if (savedItems.length) recordHistoryAction("download", savedItems);
+    finishCancelledDownload(progress, completedDownloads, torrents.length, {
+      keptFiles: true,
+    });
+    return;
+  }
+
+  progress.setCancelVisible(false);
   if (completedDownloads === 0) {
-    setProgressNotificationStatus(progressNotification, "error");
-    progressNotification.textContent =
-      "Download failed: none of the torrent files could be downloaded.";
+    progress.setStatus("error");
+    progress.setText(
+      "Download failed: none of the torrent files could be downloaded.",
+    );
   } else if (failedNames.length) {
-    setProgressNotificationStatus(progressNotification, "warning");
-    progressNotification.textContent = `Downloaded ${completedDownloads}/${torrents.length} files (${failedNames.length} failed).`;
+    progress.setStatus("warning");
+    progress.setText(
+      `Downloaded ${completedDownloads}/${torrents.length} files (${failedNames.length} failed).`,
+    );
   } else {
-    progressNotification.textContent = "Download complete!";
+    progress.setText("Download complete!");
   }
   if (savedItems.length) recordHistoryAction("download", savedItems);
-  dismissProgressNotification(progressNotification);
+  progress.dismiss();
 }
 
-// Main download function that handles both individual and ZIP downloads
-// torrents: Array of torrent objects to download
-// zipName: Name to use for ZIP file if ZIP option is enabled
 export async function downloadTorrents(torrents, zipName) {
-  // Check user's ZIP preference
-  const prefs = await loadStoredPreferences();
+  if (torrentBatchDownloadBusy) {
+    showNotification("A download is already in progress.", false);
+    return;
+  }
 
-  // Use individual downloads if only one file or ZIP is disabled
-  // Otherwise use ZIP download
-  if (torrents.length === 1 || !prefs.useZip) {
-    await downloadIndividualTorrents(torrents);
-  } else {
-    await downloadTorrentsAsZip(torrents, zipName);
+  torrentBatchDownloadBusy = true;
+  try {
+    const prefs = await loadStoredPreferences();
+    if (torrents.length === 1 || !prefs.useZip) {
+      await downloadIndividualTorrents(torrents);
+    } else {
+      await downloadTorrentsAsZip(torrents, zipName);
+    }
+  } finally {
+    torrentBatchDownloadBusy = false;
   }
 }
 

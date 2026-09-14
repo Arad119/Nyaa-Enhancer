@@ -23,7 +23,12 @@ export function getNyaaSettingsExtensionUrl() {
   return chrome.runtime.getURL(NYAA_SETTINGS_EXTENSION_PATH);
 }
 
+function canQueryTabs() {
+  return typeof chrome?.tabs?.query === "function";
+}
+
 export async function queryNyaaTabs() {
+  if (!canQueryTabs()) return [];
   try {
     return await chrome.tabs.query({ url: NYAA_MATCHES });
   } catch {
@@ -32,6 +37,19 @@ export async function queryNyaaTabs() {
 }
 
 export async function sendMessageToNyaaTabs(message, { excludeTabId } = {}) {
+  if (!canQueryTabs()) {
+    try {
+      await chrome.runtime.sendMessage({
+        type: "broadcastToNyaaTabs",
+        message,
+        excludeTabId,
+      });
+    } catch {
+      // Background may be gone, or no receiver was listening.
+    }
+    return;
+  }
+
   const tabs = await queryNyaaTabs();
   await Promise.all(
     tabs.map((tab) => {

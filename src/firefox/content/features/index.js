@@ -25,6 +25,7 @@ import {
   applyAllTorrentFilters,
   addFiltersPanel,
   filterDeadTorrents,
+  removeFiltersPanel,
   syncFiltersPanelUI,
 } from "./filters/index.js";
 import { applyKeywordHighlights, initializeKeywordHighlights } from "./highlights/index.js";
@@ -59,7 +60,7 @@ import { initHistoryLogging } from "./history/index.js";
 import { invalidateHistoryHashIndex, trimHistoryToCap } from "./history/store.js";
 import { addHistoryNavItem, handleHistoryPage, removeHistoryNavItem } from "../pages/history/index.js";
 import { addSettingsNavItem, handleSettingsPage } from "../pages/settings/index.js";
-import { initShowMorePagination, scheduleAutoShowMore, syncShowMoreAutoControls, updateAutoLoadStatus } from "./show-more/index.js";
+import { applyAutoLoadBarVisibility, initShowMorePagination, scheduleAutoShowMore, stopAutoShowMore, syncShowMoreAutoControls, updateAutoLoadStatus } from "./show-more/index.js";
 import { loadStoredPreferences } from "../../shared/prefs.js";
 import { addCopyButton, addCheckboxColumn } from "./toolbar/index.js";
 import {
@@ -149,11 +150,19 @@ export const features = [
       if (FILTER_PANEL_SETTINGS.includes(setting)) {
         await syncFiltersPanelUI(setting, value);
       }
+      if (setting === "showFiltersPanel") {
+        if (value) await addFiltersPanel();
+        else removeFiltersPanel();
+      }
     },
   },
   {
     id: "toolbar",
     async init() {
+      await addCopyButton();
+      await addCheckboxColumn();
+    },
+    async onTableMutated() {
       await addCopyButton();
       await addCheckboxColumn();
     },
@@ -330,6 +339,9 @@ export const features = [
     init() {
       initializeKeywordHighlights();
     },
+    onTableMutated() {
+      applyKeywordHighlights();
+    },
     onSettingChanged(setting) {
       if (
         setting === "highlightKeywords" ||
@@ -466,11 +478,21 @@ export const features = [
     async onSettingChanged(setting) {
       if (
         setting === "showMoreAutoEnabled" ||
-        setting === "showMoreUntilVisible"
+        setting === "showMoreUntilVisible" ||
+        setting === "showMoreAutoDelayMs" ||
+        setting === "showAutoLoad"
       ) {
         const prefs = await loadStoredPreferences();
-        syncShowMoreAutoControls(prefs);
-        scheduleAutoShowMore();
+        if (setting === "showAutoLoad") {
+          await applyAutoLoadBarVisibility(prefs);
+        } else {
+          syncShowMoreAutoControls(prefs);
+        }
+        if (prefs.showAutoLoad !== false && prefs.showMoreAutoEnabled) {
+          scheduleAutoShowMore();
+        } else {
+          stopAutoShowMore();
+        }
       }
     },
   },

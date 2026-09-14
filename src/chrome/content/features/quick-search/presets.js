@@ -76,9 +76,7 @@ export async function loadQuickSearchPresets() {
 
 export async function saveQuickSearchPresets(presets) {
   const normalized = normalizeQuickSearchPresets(presets);
-  await new Promise((resolve) =>
-    savePreferences({ quickSearchPresets: normalized }, resolve),
-  );
+  await savePreferences({ quickSearchPresets: normalized });
   return normalized;
 }
 

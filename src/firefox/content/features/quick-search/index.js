@@ -990,9 +990,7 @@ export function loadQuickSearchState() {
 }
 
 export function saveQuickSearchState(state) {
-  return new Promise((resolve) => {
-    savePreferences({ quickSearchState: state }, resolve);
-  });
+  return savePreferences({ quickSearchState: state });
 }
 
 export function clearQuickSearchState() {

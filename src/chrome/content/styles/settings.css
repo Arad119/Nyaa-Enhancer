@@ -967,6 +967,21 @@ body.dark .ne-vibe-mix__item input[type="number"] {
   color: #888;
 }
 
+.ne-settings-field__with-action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ne-settings-field__with-action input {
+  flex: 1;
+  min-width: 0;
+}
+
+.ne-settings-field__with-action .ne-settings-btn {
+  flex-shrink: 0;
+}
+
 .ne-settings-field input,
 .ne-settings-field select {
   width: 100%;

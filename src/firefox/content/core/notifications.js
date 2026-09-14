@@ -31,22 +31,67 @@ export function showNotification(message, isSuccess = true) {
   }, 3000);
 }
 
-export function createProgressNotification() {
-  // Find or create the container for notifications
+function getNotificationContainer() {
   let container = document.querySelector(".magnet-notification-container");
   if (!container) {
     container = document.createElement("div");
     container.className = "magnet-notification-container";
     document.body.appendChild(container);
   }
+  return container;
+}
 
-  // Create the notification element
+export function createProgressNotification() {
   const notification = document.createElement("div");
   notification.className = "magnet-notification show";
   notification.style.backgroundColor = "#4CAF50";
-  container.appendChild(notification);
-
+  getNotificationContainer().appendChild(notification);
   return notification;
+}
+
+export function createCancellableProgressNotification({ onCancel } = {}) {
+  const notification = document.createElement("div");
+  notification.className = "magnet-notification magnet-notification--progress show";
+  notification.style.backgroundColor = "#4CAF50";
+
+  const row = document.createElement("div");
+  row.className = "magnet-notification__row";
+
+  const text = document.createElement("span");
+  text.className = "magnet-notification__text";
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.className = "magnet-notification__cancel";
+  cancelButton.textContent = "Cancel";
+  cancelButton.addEventListener("click", () => {
+    if (cancelButton.disabled) return;
+    cancelButton.disabled = true;
+    onCancel?.();
+  });
+
+  row.append(text, cancelButton);
+  notification.appendChild(row);
+  getNotificationContainer().appendChild(notification);
+
+  return {
+    notification,
+    setText(value) {
+      text.textContent = value;
+    },
+    setStatus(kind) {
+      setProgressNotificationStatus(notification, kind);
+    },
+    setCancelEnabled(enabled) {
+      cancelButton.disabled = !enabled;
+    },
+    setCancelVisible(visible) {
+      cancelButton.hidden = !visible;
+    },
+    dismiss(delayMs = 3000) {
+      dismissProgressNotification(notification, delayMs);
+    },
+  };
 }
 
 export function sanitizeFilename(filename) {
@@ -54,9 +99,6 @@ export function sanitizeFilename(filename) {
   return filename.replace(/[<>:"/\\|?*]/g, "_");
 }
 
-// Function to download torrents and package them into a ZIP file
-// torrents: Array of torrent objects with url and filename
-// zipName: Name of the output ZIP file
 export function dismissProgressNotification(notification, delayMs = 3000) {
   setTimeout(() => {
     notification.classList.remove("show");

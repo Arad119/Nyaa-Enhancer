@@ -19,6 +19,7 @@ export const NE_SETTINGS_NAV_SECTIONS = [
   { id: "ne-settings-download", label: "Download" },
   { id: "ne-settings-interface", label: "Interface" },
   { id: "ne-settings-filters", label: "Filters" },
+  { id: "ne-settings-autoload", label: "Auto-load" },
   { id: "ne-settings-history", label: "History" },
   { id: "ne-settings-view", label: "View Page" },
   { id: "ne-settings-monitoring", label: "Monitoring" },
@@ -54,26 +55,56 @@ export function neSettingsNormalizeShowMoreUntilVisible(value) {
   return Math.min(1000, parsed);
 }
 
-export async function neSettingsSave(settingKey, value) {
-  if (settingKey === "changelogDismissed") {
-    await new Promise((resolve) =>
-      savePreferences({ changelogDismissed: !value, tempDismissed: !value }, resolve),
-    );
-  } else {
-    await new Promise((resolve) =>
-      savePreferences({ [settingKey]: value }, resolve),
-    );
-  }
-  if (!isExtensionPage()) {
-    await handleSettingChange(settingKey, value);
-  }
-  const excludeTabId = isExtensionPage()
-    ? undefined
-    : (await browser.tabs.query({ active: true, currentWindow: true }))[0]?.id;
-  await sendMessageToNyaaTabs(
-    { type: "settingChanged", setting: settingKey, value },
-    { excludeTabId },
+export const NE_SETTINGS_AUTOLOAD_DELAY_DEFAULT_SEC = 2.5;
+export const NE_SETTINGS_AUTOLOAD_DELAY_MIN_SEC = 0.1;
+export const NE_SETTINGS_AUTOLOAD_DELAY_MAX_SEC = 60;
+
+export function neSettingsNormalizeShowMoreAutoDelaySeconds(value) {
+  const parsed = parseFloat(value);
+  if (!Number.isFinite(parsed)) return NE_SETTINGS_AUTOLOAD_DELAY_DEFAULT_SEC;
+  const clamped = Math.min(
+    NE_SETTINGS_AUTOLOAD_DELAY_MAX_SEC,
+    Math.max(NE_SETTINGS_AUTOLOAD_DELAY_MIN_SEC, parsed),
   );
+  return Math.round(clamped * 10) / 10;
+}
+
+export function neSettingsShowMoreAutoDelaySecondsToMs(seconds) {
+  return Math.round(neSettingsNormalizeShowMoreAutoDelaySeconds(seconds) * 1000);
+}
+
+export function neSettingsShowMoreAutoDelayMsToSeconds(ms) {
+  const parsed = Number(ms);
+  if (!Number.isFinite(parsed)) return NE_SETTINGS_AUTOLOAD_DELAY_DEFAULT_SEC;
+  return neSettingsNormalizeShowMoreAutoDelaySeconds(parsed / 1000);
+}
+
+export async function neSettingsSave(settingKey, value) {
+  try {
+    if (settingKey === "changelogDismissed") {
+      await savePreferences({
+        changelogDismissed: !value,
+        tempDismissed: !value,
+      });
+    } else {
+      await savePreferences({ [settingKey]: value });
+    }
+  } catch {
+    return false;
+  }
+  try {
+    if (!isExtensionPage()) {
+      await handleSettingChange(settingKey, value);
+    }
+    await sendMessageToNyaaTabs({
+      type: "settingChanged",
+      setting: settingKey,
+      value,
+    });
+  } catch (error) {
+    console.error("[Nyaa Enhancer] Failed to broadcast setting change.", error);
+  }
+  return true;
 }
 
 export function neSettingsSyncToggleVisual(toggle, checked) {
@@ -96,6 +127,21 @@ export function neSettingsUpdateDependentRows(buttonsEnabled) {
     .querySelectorAll(".ne-settings-page [data-depends-on='showButtons']")
     .forEach((row) => {
       row.classList.toggle("is-disabled", !buttonsEnabled);
+    });
+}
+
+export function neSettingsUpdateAutoLoadSection(enabled) {
+  const on = enabled !== false;
+  document
+    .querySelectorAll(".ne-settings-page [data-depends-on='showAutoLoad']")
+    .forEach((el) => {
+      el.classList.toggle("is-disabled", !on);
+      el.querySelectorAll("button, input").forEach((control) => {
+        if (control.classList.contains("ne-settings-toggle") && control.dataset.setting === "showAutoLoad") {
+          return;
+        }
+        control.disabled = !on;
+      });
     });
 }
 
@@ -133,17 +179,18 @@ export function neSettingsWireToggles() {
       if (toggle.disabled) return;
       const settingKey = toggle.dataset.setting;
       const newState = toggle.getAttribute("aria-checked") !== "true";
+      toggle.disabled = true;
+      const saved = await neSettingsSave(settingKey, newState);
+      toggle.disabled = false;
+      if (!saved) return;
+
       neSettingsSyncToggleVisual(toggle, newState);
-
-      if (settingKey === "changelogDismissed") {
-        await neSettingsSave(settingKey, newState);
-        return;
-      }
-
-      await neSettingsSave(settingKey, newState);
 
       if (settingKey === "showButtons") {
         neSettingsUpdateDependentRows(newState);
+      }
+      if (settingKey === "showAutoLoad") {
+        neSettingsUpdateAutoLoadSection(newState);
       }
       if (settingKey === "screenshotPreviewEnabled") {
         neSettingsUpdateScreenshotInputs(newState);
@@ -320,6 +367,8 @@ export async function neSettingsLoadValues() {
     showSendButtons: prefs.showSendButtons,
     showMonitorButtons: prefs.showMonitorButtons,
     showFilterNotifications: prefs.showFilterNotifications,
+    showFiltersPanel: prefs.showFiltersPanel !== false,
+    showAutoLoad: prefs.showAutoLoad !== false,
     showMoreAutoEnabled: !!prefs.showMoreAutoEnabled,
     hideComments: prefs.hideComments,
     improvedFileList: prefs.improvedFileList,
@@ -358,6 +407,7 @@ export async function neSettingsLoadValues() {
   neSettingsSetToggleState("changelogDismissed", !prefs.changelogDismissed);
 
   neSettingsUpdateDependentRows(prefs.showButtons);
+  neSettingsUpdateAutoLoadSection(prefs.showAutoLoad !== false);
   neSettingsUpdateScreenshotInputs(prefs.screenshotPreviewEnabled);
   neSettingsUpdateAmeNZBState(!!prefs.ameNZBApiKey);
   neSettingsUpdateAmeNZBQuota(prefs);
@@ -376,6 +426,12 @@ export async function neSettingsLoadValues() {
   if (showMoreUntil) {
     showMoreUntil.value = String(
       neSettingsNormalizeShowMoreUntilVisible(prefs.showMoreUntilVisible),
+    );
+  }
+  const showMoreDelay = document.getElementById("ne-show-more-auto-delay");
+  if (showMoreDelay) {
+    showMoreDelay.value = String(
+      neSettingsShowMoreAutoDelayMsToSeconds(prefs.showMoreAutoDelayMs),
     );
   }
   neSettingsSetVibeMix(
@@ -507,10 +563,11 @@ export async function neSettingsLoadMonitoringLists() {
 export function neSettingsNotifyMonitoringChanged() {
   if (!isExtensionPage()) {
     checkMonitoredUsers();
-    return;
   }
   sendMessageToNyaaTabs({ type: "refreshMonitoring" });
 }
+
+export function neSettingsUnmonitorUser(username) {
   getPreferences({ monitoredUsers: [] }, (items) => {
     const monitoredUsers = items.monitoredUsers.filter(
       (user) => user.username !== username,
@@ -520,6 +577,7 @@ export function neSettingsNotifyMonitoringChanged() {
       neSettingsNotifyMonitoringChanged();
     });
   });
+}
 
 export function neSettingsUnmonitorAllUsers() {
   savePreferences({ monitoredUsers: [] }, () => {
@@ -676,7 +734,8 @@ export async function neSettingsAddHighlightKeyword() {
   }
 
   highlightKeywords.push({ keyword, color });
-  await neSettingsSave("highlightKeywords", highlightKeywords);
+  const saved = await neSettingsSave("highlightKeywords", highlightKeywords);
+  if (!saved) return;
   neSettingsDisplayHighlightKeywords(highlightKeywords);
   input.value = "";
 }
@@ -689,7 +748,12 @@ export async function neSettingsUpdateHighlightColor(keywordToUpdate, colorValue
   const highlightKeywords = (prefs.highlightKeywords || []).map((item) =>
     item.keyword === keywordToUpdate ? { ...item, color } : item,
   );
-  await neSettingsSave("highlightKeywords", highlightKeywords);
+  const saved = await neSettingsSave("highlightKeywords", highlightKeywords);
+  if (!saved) {
+    const prefsAfter = await loadStoredPreferences();
+    neSettingsDisplayHighlightKeywords(prefsAfter.highlightKeywords || []);
+    return;
+  }
   neSettingsDisplayHighlightKeywords(highlightKeywords);
 }
 
@@ -698,12 +762,14 @@ export async function neSettingsRemoveHighlightKeyword(keywordToRemove) {
   const highlightKeywords = (prefs.highlightKeywords || []).filter(
     (item) => item.keyword !== keywordToRemove,
   );
-  await neSettingsSave("highlightKeywords", highlightKeywords);
+  const saved = await neSettingsSave("highlightKeywords", highlightKeywords);
+  if (!saved) return;
   neSettingsDisplayHighlightKeywords(highlightKeywords);
 }
 
 export async function neSettingsRemoveAllHighlightKeywords() {
-  await neSettingsSave("highlightKeywords", []);
+  const saved = await neSettingsSave("highlightKeywords", []);
+  if (!saved) return;
   neSettingsDisplayHighlightKeywords([]);
 }
 
@@ -1152,18 +1218,19 @@ async function commitVibeMix() {
   ) {
     return;
   }
+  const previous = { ...vibeMixSaved };
   vibeMixSaved = { ...mix };
-  await new Promise((resolve) =>
-    savePreferences(
-      {
-        similarVibeGenreWeight: mix.genre,
-        similarVibeTagWeight: mix.tags,
-        similarVibeStudioWeight: mix.studio,
-      },
-      resolve,
-    ),
-  );
-  await handleSettingChange("similarVibeGenreWeight", mix.genre);
+  try {
+    await savePreferences({
+      similarVibeGenreWeight: mix.genre,
+      similarVibeTagWeight: mix.tags,
+      similarVibeStudioWeight: mix.studio,
+    });
+    await handleSettingChange("similarVibeGenreWeight", mix.genre);
+  } catch {
+    vibeMixSaved = previous;
+    applyVibeMix(previous, { save: false });
+  }
 }
 
 function scheduleVibeMixSave() {
@@ -1406,12 +1473,14 @@ export function neSettingsWireScreenshotInputs() {
     const input = document.getElementById(inputId);
     if (!input) return;
     const commit = async () => {
+      const previous = input.value;
       let value = parseFloat(input.value);
       if (!isFinite(value) || value < minValue) {
         value = defaultValue;
         input.value = value;
       }
-      await neSettingsSave(settingKey, value);
+      const saved = await neSettingsSave(settingKey, value);
+      if (!saved) input.value = previous;
     };
     input.addEventListener("change", commit);
     input.addEventListener("blur", commit);
@@ -1421,24 +1490,58 @@ export function neSettingsWireScreenshotInputs() {
 }
 
 export function neSettingsWireShowMoreSection() {
-  const input = document.getElementById("ne-show-more-until-visible");
-  const commit = async () => {
-    if (!input) return;
-    const value = neSettingsNormalizeShowMoreUntilVisible(input.value);
-    input.value = String(value);
-    await neSettingsSave("showMoreUntilVisible", value);
+  const untilInput = document.getElementById("ne-show-more-until-visible");
+  const commitUntil = async () => {
+    if (!untilInput) return;
+    const previous = untilInput.value;
+    const value = neSettingsNormalizeShowMoreUntilVisible(untilInput.value);
+    untilInput.value = String(value);
+    const saved = await neSettingsSave("showMoreUntilVisible", value);
+    if (!saved) untilInput.value = previous;
   };
-  input?.addEventListener("change", commit);
-  input?.addEventListener("blur", commit);
+  untilInput?.addEventListener("change", commitUntil);
+  untilInput?.addEventListener("blur", commitUntil);
+
+  const delayInput = document.getElementById("ne-show-more-auto-delay");
+  const commitDelay = async () => {
+    if (!delayInput) return;
+    const previous = delayInput.value;
+    const seconds = neSettingsNormalizeShowMoreAutoDelaySeconds(delayInput.value);
+    delayInput.value = String(seconds);
+    const saved = await neSettingsSave(
+      "showMoreAutoDelayMs",
+      neSettingsShowMoreAutoDelaySecondsToMs(seconds),
+    );
+    if (!saved) delayInput.value = previous;
+  };
+  delayInput?.addEventListener("change", commitDelay);
+  delayInput?.addEventListener("blur", commitDelay);
+
+  document
+    .getElementById("ne-show-more-auto-delay-reset")
+    ?.addEventListener("click", async () => {
+      if (!delayInput || delayInput.disabled) return;
+      const previous = delayInput.value;
+      delayInput.value = String(NE_SETTINGS_AUTOLOAD_DELAY_DEFAULT_SEC);
+      const saved = await neSettingsSave(
+        "showMoreAutoDelayMs",
+        neSettingsShowMoreAutoDelaySecondsToMs(
+          NE_SETTINGS_AUTOLOAD_DELAY_DEFAULT_SEC,
+        ),
+      );
+      if (!saved) delayInput.value = previous;
+    });
 }
 
 export function neSettingsWireHistorySection() {
   const input = document.getElementById("ne-history-max-events");
   const commitCap = async () => {
     if (!input) return;
+    const previous = input.value;
     const value = neNormalizeHistoryMaxEvents(input.value);
     input.value = String(value);
-    await neSettingsSave("historyMaxEvents", value);
+    const saved = await neSettingsSave("historyMaxEvents", value);
+    if (!saved) input.value = previous;
   };
   input?.addEventListener("change", commitCap);
   input?.addEventListener("blur", commitCap);
@@ -1515,14 +1618,29 @@ export function neSettingsBuildPageHTML() {
           <h2 class="ne-settings-section__title"><i class="fa fa-filter" aria-hidden="true"></i> Filters</h2>
           <p class="ne-settings-section__desc">Filter options for the torrent list. Active filters (dead torrents, minimum seeders, blocked/required keywords, file size, completed downloads, upload date, and history) and saved presets are configured in the Filters panel above the torrent table.</p>
           <div class="ne-settings-rows" id="ne-settings-filters-rows"></div>
-          <div class="ne-settings-subsection">
+        </section>
+        <section id="ne-settings-autoload" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-bolt" aria-hidden="true"></i> Auto-load</h2>
+          <p class="ne-settings-section__desc">Load extra torrent pages in place until a visible-count target is reached. The Auto-load bar sits above the torrent table.</p>
+          <div class="ne-settings-rows" id="ne-settings-autoload-rows"></div>
+          <div class="ne-settings-subsection" id="ne-autoload-options" data-depends-on="showAutoLoad">
             <div class="ne-settings-input-grid">
               <div class="ne-settings-field">
                 <label for="ne-show-more-until-visible">Show more until N visible</label>
                 <input type="number" id="ne-show-more-until-visible" min="0" max="1000" step="1" />
               </div>
+              <div class="ne-settings-field">
+                <label for="ne-show-more-auto-delay">Delay between pages (seconds)</label>
+                <div class="ne-settings-field__with-action">
+                  <input type="number" id="ne-show-more-auto-delay" min="${NE_SETTINGS_AUTOLOAD_DELAY_MIN_SEC}" max="${NE_SETTINGS_AUTOLOAD_DELAY_MAX_SEC}" step="0.1" inputmode="decimal" />
+                  <button type="button" class="ne-settings-btn ne-settings-btn--outline ne-settings-btn--small" id="ne-show-more-auto-delay-reset">Reset</button>
+                </div>
+              </div>
             </div>
-            <p class="ne-settings-row__hint">Used when Auto-load is on above the torrent table. Keeps loading pages until this many torrents remain visible (max 1000). 0 loads one extra page at a time. Requests are spaced out and capped so Nyaa is not hammered.</p>
+            <p class="ne-settings-row__hint">Used when Auto-load is on above the torrent table. Keeps loading pages one at a time until this many torrents remain visible (max 1000). 0 loads one extra page at a time. Default delay is ${NE_SETTINGS_AUTOLOAD_DELAY_DEFAULT_SEC} seconds.</p>
+            <p class="ne-settings-disclaimer is-visible" id="ne-autoload-delay-disclaimer">
+              Short delays send page requests to Nyaa much more often. Values near ${NE_SETTINGS_AUTOLOAD_DELAY_MIN_SEC} seconds can get you rate limited or temporarily blocked. You are responsible for the delay you choose; use a low number at your own risk.
+            </p>
           </div>
         </section>
         <section id="ne-settings-history" class="ne-settings-section">
@@ -1793,8 +1911,26 @@ export function neSettingsBuildPageHTML() {
   );
 
   page.querySelector("#ne-settings-filters-rows").append(
+    neSettingsCreateToggleRow(
+      "showFiltersPanel",
+      "Show Filters panel",
+      "Show the Filters panel above the torrent table.",
+    ),
     neSettingsCreateToggleRow("showFilterNotifications", "Show filter notifications", "Display a toast when torrents are hidden by active filters."),
-    neSettingsCreateToggleRow("showMoreAutoEnabled", "Auto-load more results", "Turn on Auto-load above the torrent table. Pages keep loading until the visible-count target is reached, with delays and a per-burst page cap to avoid rate limits."),
+  );
+
+  page.querySelector("#ne-settings-autoload-rows").append(
+    neSettingsCreateToggleRow(
+      "showAutoLoad",
+      "Show Auto-load",
+      "Show the Auto-load bar above the torrent table.",
+    ),
+    neSettingsCreateToggleRow(
+      "showMoreAutoEnabled",
+      "Auto-load more results",
+      "Turn on Auto-load when you open a torrent list. You can also switch it from the bar on the page.",
+      "showAutoLoad",
+    ),
   );
 
   page.querySelector("#ne-settings-history-rows").append(

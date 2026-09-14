@@ -116,9 +116,7 @@ export async function loadFilterPresets() {
 
 export async function saveFilterPresets(presets) {
   const normalized = normalizeFilterPresets(presets);
-  await new Promise((resolve) =>
-    savePreferences({ filterPresets: normalized }, resolve),
-  );
+  await savePreferences({ filterPresets: normalized });
   return normalized;
 }
 

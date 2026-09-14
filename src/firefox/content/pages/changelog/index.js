@@ -34,9 +34,9 @@ export async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added a History page (off by default; enable in Settings) that logs visits, magnet copies, downloads, and sends<br>
-        • Added independent Block and Require keyword lists, named filter and Quick Search presets, and Auto-load<br>
-        • Added an upload date filter in the Filters panel, including a custom from/to date range
+        • Added a Settings toggle to hide the Filters panel, and a dedicated Auto-load section with a hide toggle and configurable page fetch delay<br>
+        • Auto-load now fetches one page at a time until the visible-count target, instead of bursting then pausing<br>
+        • Added a Cancel button on ZIP and torrent download progress toasts
         <div class="changelog-more">Plus more. <a href="/changelog">See the full changelog</a> for everything that's new.</div>
       </div>
       <div class="changelog-actions">
@@ -101,6 +101,20 @@ export async function handleChangelogPage() {
         </a>.
       </p>
     </header>
+    <div class="version-entry">
+      <h2>
+        Version 1.15.1
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.15.1" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added a Settings toggle to hide the Filters panel, and a dedicated Auto-load section with a hide toggle and configurable page fetch delay</li>
+        <li>Auto-load now fetches one page at a time until the visible-count target, instead of bursting then pausing</li>
+        <li>Added a Cancel button on ZIP and torrent download progress toasts</li>
+        <li>Fixed issue where Settings and Filters panel toggles could look saved even when the write failed; they now properly work and show a toast incase of failure</li>
+      </ul>
+    </div>
     <div class="version-entry">
       <h2>
         Version 1.15.0

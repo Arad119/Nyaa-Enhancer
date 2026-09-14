@@ -1,3 +1,4 @@
+import { sendMessageToNyaaTabs } from "../shared/domains.js";
 import {
   hasTorrentClientHostAccess,
   normalizeUrl,
@@ -132,8 +133,34 @@ export async function handleQbtFetchCategoriesAndTags({
   return fetchQbtCategoriesAndTags(baseUrl, username, password);
 }
 
+const BROADCAST_MESSAGE_TYPES = new Set([
+  "settingChanged",
+  "refreshMonitoring",
+  "keywordsUpdated",
+  "monitoredUsersUpdated",
+]);
+
+export function handleBroadcastToNyaaTabs(message, sender) {
+  const payload = message?.message;
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !BROADCAST_MESSAGE_TYPES.has(payload.type)
+  ) {
+    return Promise.resolve({ ok: false, error: "invalid_broadcast" });
+  }
+  const excludeTabId = message.excludeTabId ?? sender?.tab?.id;
+  return sendMessageToNyaaTabs(payload, { excludeTabId }).then(() => ({
+    ok: true,
+  }));
+}
+
 export function initMessageProxy() {
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener((message, sender) => {
+    if (message.type === "broadcastToNyaaTabs") {
+      return handleBroadcastToNyaaTabs(message, sender);
+    }
+
     if (message.type === "fetchUrl") {
       return handleFetchUrl(message);
     }

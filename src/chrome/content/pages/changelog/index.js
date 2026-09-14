@@ -34,9 +34,8 @@ export async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added a Settings toggle to hide the Filters panel, and a dedicated Auto-load section with a hide toggle and configurable page fetch delay<br>
-        • Auto-load now fetches one page at a time until the visible-count target, instead of bursting then pausing<br>
-        • Added a Cancel button on ZIP and torrent download progress toasts
+        • Added a Navbar section in Settings to show or hide built-in header links and search dropdowns<br>
+        • Fixed the header search wrapping onto a second row on smaller screens
         <div class="changelog-more">Plus more. <a href="/changelog">See the full changelog</a> for everything that's new.</div>
       </div>
       <div class="changelog-actions">
@@ -101,6 +100,18 @@ export async function handleChangelogPage() {
         </a>.
       </p>
     </header>
+    <div class="version-entry">
+      <h2>
+        Version 1.15.4
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.15.4" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added a Navbar section in Settings to show or hide built-in header links and search dropdowns</li>
+        <li>Fixed the header search wrapping onto a second row on smaller screens</li>
+      </ul>
+    </div>
     <div class="version-entry">
       <h2>
         Version 1.15.3

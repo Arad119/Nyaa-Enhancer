@@ -601,3 +601,57 @@ body.dark .version-link:hover {
   background: #1976d2;
 }
 
+.ne-navbar-hidden {
+  display: none !important;
+}
+
+.navbar-static-top .search-container.ne-navbar-search--no-filter:not(.ne-navbar-search--no-category)
+  #navFilter-category
+  .bootstrap-select
+  > button {
+  border-top-left-radius: 4px !important;
+  border-bottom-left-radius: 4px !important;
+}
+
+.navbar-static-top
+  .search-container.ne-navbar-search--no-filter.ne-navbar-search--no-category
+  .form-control.search-bar {
+  border-left-width: 1px;
+  border-left-style: solid;
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+
+/*
+ * Changelog / Settings / History overflow Nyaa's floated navbar in the
+ * 992–1479px containers (970px / 1170px). Nyaa's search already uses a
+ * column flex layout, so do not restyle .search-container display — only
+ * tighten padding and the md search width. At 1480px+ the 1400px container
+ * already has room.
+ */
+@media (min-width: 992px) and (max-width: 1479px) {
+  .navbar-static-top .navbar-nav > li > a {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+@media (min-width: 992px) and (max-width: 1199px) {
+  .navbar-static-top .navbar-nav > li > a {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .navbar-static-top .input-group.search-container {
+    width: 340px;
+  }
+
+  .navbar-static-top #navFilter-criteria .bootstrap-select {
+    width: 96px !important;
+  }
+
+  .navbar-static-top #navFilter-category .bootstrap-select {
+    width: 108px !important;
+  }
+}
+

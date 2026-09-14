@@ -60,6 +60,11 @@ import { initHistoryLogging } from "./history/index.js";
 import { invalidateHistoryHashIndex, trimHistoryToCap } from "./history/store.js";
 import { addHistoryNavItem, handleHistoryPage, removeHistoryNavItem } from "../pages/history/index.js";
 import { addSettingsNavItem, handleSettingsPage } from "../pages/settings/index.js";
+import {
+  applyNavbarVisibility,
+  isNavbarVisibilityPref,
+  setNavbarVisibilityPref,
+} from "./navbar/index.js";
 import { applyAutoLoadBarVisibility, initShowMorePagination, scheduleAutoShowMore, stopAutoShowMore, syncShowMoreAutoControls, updateAutoLoadStatus } from "./show-more/index.js";
 import { loadStoredPreferences } from "../../shared/prefs.js";
 import { addCopyButton, addCheckboxColumn } from "./toolbar/index.js";
@@ -535,6 +540,19 @@ export const features = [
           if (qbtSection) qbtSection.hidden = value !== "qbittorrent";
         }
       }
+    },
+  },
+  {
+    id: "navbar",
+    async init() {
+      await applyNavbarVisibility();
+    },
+    async afterObserver() {
+      await applyNavbarVisibility();
+    },
+    onSettingChanged(setting, value) {
+      if (!isNavbarVisibilityPref(setting)) return;
+      setNavbarVisibilityPref(setting, value);
     },
   },
   {

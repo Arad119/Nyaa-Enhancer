@@ -5,6 +5,7 @@ import {
 } from "../../../shared/domains.js";
 import { getKeywordSearchUrl, setNyaaOriginFallback } from "../../../shared/urls.js";
 import { NE_DEFAULT_HIGHLIGHT_COLOR, checkMonitoredUsers, getHighlightRules, handleSettingChange, normalizeHighlightColor } from "../../internal.js";
+import { NAVBAR_VISIBILITY_TOGGLES } from "../../features/navbar/index.js";
 import { clearSimilarCaches, formatSimilarCacheBytes, getSimilarCacheUsage, isSimilarCacheKey } from "../../features/similar/cache.js";
 import {
   HISTORY_MAX_EVENTS_MAX,
@@ -18,6 +19,7 @@ import {
 export const NE_SETTINGS_NAV_SECTIONS = [
   { id: "ne-settings-download", label: "Download" },
   { id: "ne-settings-interface", label: "Interface" },
+  { id: "ne-settings-navbar", label: "Navbar" },
   { id: "ne-settings-filters", label: "Filters" },
   { id: "ne-settings-autoload", label: "Auto-load" },
   { id: "ne-settings-history", label: "History" },
@@ -396,6 +398,14 @@ export async function neSettingsLoadValues() {
     showSeaDex: prefs.showSeaDex,
     prioritizeSeaDexHighlights: prefs.prioritizeSeaDexHighlights !== false,
     showChangelogNav: prefs.showChangelogNav,
+    showNavbarUpload: prefs.showNavbarUpload !== false,
+    showNavbarInfo: prefs.showNavbarInfo !== false,
+    showNavbarRss: prefs.showNavbarRss !== false,
+    showNavbarTwitter: prefs.showNavbarTwitter !== false,
+    showNavbarFap: prefs.showNavbarFap !== false,
+    showNavbarFilter: prefs.showNavbarFilter !== false,
+    showNavbarCategory: prefs.showNavbarCategory !== false,
+    showNavbarAccount: prefs.showNavbarAccount !== false,
     historyEnabled: !!prefs.historyEnabled,
     qbtPromptOnSend: prefs.qbtPromptOnSend !== false,
   };
@@ -1614,6 +1624,11 @@ export function neSettingsBuildPageHTML() {
           <p class="ne-settings-section__desc">Control which buttons and controls appear on Nyaa pages.</p>
           <div class="ne-settings-rows" id="ne-settings-interface-rows"></div>
         </section>
+        <section id="ne-settings-navbar" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-bars" aria-hidden="true"></i> Navbar</h2>
+          <p class="ne-settings-section__desc">Show or hide built-in Nyaa header links and search controls.</p>
+          <div class="ne-settings-rows" id="ne-settings-navbar-rows"></div>
+        </section>
         <section id="ne-settings-filters" class="ne-settings-section">
           <h2 class="ne-settings-section__title"><i class="fa fa-filter" aria-hidden="true"></i> Filters</h2>
           <p class="ne-settings-section__desc">Filter options for the torrent list. Active filters (dead torrents, minimum seeders, blocked/required keywords, file size, completed downloads, upload date, and history) and saved presets are configured in the Filters panel above the torrent table.</p>
@@ -1908,6 +1923,12 @@ export function neSettingsBuildPageHTML() {
     neSettingsCreateToggleRow("showMagnetButtons", "Show Magnet Copy buttons", "", "showButtons"),
     neSettingsCreateToggleRow("showSendButtons", "Show Send to Client button", "Requires a torrent client configured in the extension popup.", "showButtons"),
     neSettingsCreateToggleRow("showMonitorButtons", "Show Monitor buttons", "", "showButtons"),
+  );
+
+  page.querySelector("#ne-settings-navbar-rows").append(
+    ...NAVBAR_VISIBILITY_TOGGLES.map((item) =>
+      neSettingsCreateToggleRow(item.key, item.label, item.hint || ""),
+    ),
   );
 
   page.querySelector("#ne-settings-filters-rows").append(

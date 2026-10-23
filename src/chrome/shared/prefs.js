@@ -38,7 +38,6 @@ export const PREF_DEFAULTS = {
   useZip: true,
   showButtons: true,
   showATLinks: true,
-  useNewATDomain: true,
   showATComments: false,
   showATScreenshotsSection: true,
   showATFileInfoSection: true,

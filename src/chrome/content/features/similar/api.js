@@ -782,11 +782,8 @@ function pickBestAnilist(results, query, extra = {}) {
   return { media: best, score: bestScore };
 }
 
-async function identifyFromAnimetoshoSeries(infoHash, prefs = {}) {
-  const series = await getAnimetoshoSeriesForHash(
-    infoHash,
-    prefs.useNewATDomain !== false,
-  );
+async function identifyFromAnimetoshoSeries(infoHash) {
+  const series = await getAnimetoshoSeriesForHash(infoHash);
   const parsedTitle =
     series?.displayTitle || series?.fullTitle || series?.title || "";
   const queries = searchQueriesFromAnimetoshoSeries(series);
@@ -890,7 +887,7 @@ async function identifyAnime(infoHash, prefs = {}) {
     }
   }
 
-  const identified = await identifyFromAnimetoshoSeries(hash, prefs);
+  const identified = await identifyFromAnimetoshoSeries(hash);
   if (identified.error !== "rate_limited") {
     identifyCache[hash] = {
       fetchedAt: Date.now(),

@@ -69,7 +69,7 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 - [JSZip](https://cdnjs.com/libraries/jszip) - ZIP file creation for batch downloads
 - [TMDB](https://developer.themoviedb.org/docs) - Quick Search autocomplete and optional Similar recommendations
 - [TheXEM](https://thexem.info) - Alternate titles for Quick Search
-- [AnimeTosho](https://animetosho.xyz) - Torrent metadata, screenshots, FileInfo, and comments
+- [AnimeTosho](https://animetosho.net) - Torrent metadata, screenshots, FileInfo, and comments
 - [ameNZB](https://amenzb.moe) - NZB release metadata
 - [nekoBT](https://nekobt.to) - Release metadata
 - [Tsukihime](https://tsukihime.org) - Release metadata and MediaInfo
@@ -133,7 +133,7 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 - Magnet copy and Send-to-client on the view page
 - Click the torrent title or info hash to copy them
 - Tabbed panels: Description, AnimeTosho, Similar, ameNZB, nekoBT, and Tsukihime
-- AnimeTosho screenshots, FileInfo, downloads/attachments, and comments
+- AnimeTosho screenshots (with a subtitle-track picker), FileInfo, downloads/attachments, and comments
 - Improved file list with total and per-folder counts
 - Optional comment hiding
 - SeaDex best/alternate release highlighting
@@ -187,7 +187,7 @@ To install the extension in your browser, follow these steps.
 
 ### Installation
 
-**Chrome Web Store (pending update, currently at 1.13.1):**  
+**Chrome Web Store (up-to-date at 1.15.4):**  
 <a href="https://chromewebstore.google.com/detail/nyaa-enhancer/donibkpnifppkihgmnoocogmmbbocpdd" target="_blank">
 <img src="https://developer.chrome.com/static/docs/webstore/branding/image/HRs9MPufa1J1h5glNhut.png" alt="Chrome Web Store" height="50px" >
 </a>
@@ -197,7 +197,7 @@ To install the extension in your browser, follow these steps.
 <img src="https://extensionworkshop.com/assets/img/documentation/publish/get-the-addon-178x60px.dad84b42.png" alt="Firefox Add-Ons Store" height="50px" >
 </a>
 
-**Edge Add-Ons Store (pending update, currently at 1.12.2):**  
+**Edge Add-Ons Store (up-to-date at 1.15.4):**  
 <a href="https://microsoftedge.microsoft.com/addons/detail/nyaa-enhancer/cpkcppifogblfgbggdeljjnibjfcdakf" target="_blank">
 <img src="https://developer.microsoft.com/store/badges/images/English_get-it-from-MS.png" alt="Edge Add-Ons Store" height="50px" >
 </a>
@@ -346,7 +346,6 @@ _Monitoring:_
 _AnimeTosho:_
 
 - **Show AnimeTosho links**
-- **Use new AnimeTosho domain** (animetosho.xyz vs animetosho.org)
 - **Show AnimeTosho comments**, **Screenshots**, **FileInfo**, and **Downloads** sections
 
 _ameNZB_ (API key in the popup):

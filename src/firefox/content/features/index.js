@@ -7,12 +7,7 @@ import {
   addAnimetoshoComments,
   addAnimetoshoToViewPage,
   patchTorrentListLinkActionsForNewRows,
-  refreshAnimetoshoListLinks,
-  refreshAnimetoshoViewPageLink,
-  resetAnimetoshoEpisodeSelection,
   updateAnimetoshoEpisodeFeatures,
-  animetoshoTorrentDataCache,
-  animetoshoViewLinkCache,
 } from "./animetosho/index.js";
 import {
   addAmeNZBToViewPage,
@@ -224,21 +219,6 @@ export const features = [
             await updateAllTorrentListLinkActions({ showATLinks: true });
           }
           addAnimetoshoToViewPage();
-        }
-      } else if (setting === "useNewATDomain") {
-        animetoshoViewLinkCache.clear();
-        animetoshoTorrentDataCache.clear();
-        resetAnimetoshoEpisodeSelection();
-        if (window.location.pathname.startsWith("/view/")) {
-          refreshAnimetoshoViewPageLink();
-          const toshoPanel = document.getElementById("tosho-comments");
-          if (toshoPanel) {
-            toshoPanel.remove();
-            addAnimetoshoComments();
-          }
-          updateAnimetoshoEpisodeFeatures();
-        } else {
-          refreshAnimetoshoListLinks();
         }
       } else if (setting === "showATComments") {
         if (value) addAnimetoshoComments();

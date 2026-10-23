@@ -4,7 +4,6 @@ import {
   mergeAnimetoshoSeries,
   seriesFromAnimetoshoHtml,
   seriesFromAnimetoshoJson,
-  seriesFromAnimetoshoOrgJson,
 } from "./series.js";
 
 export const ANIMETOSHO_LIST_CATEGORY_TITLES = new Set([
@@ -39,75 +38,54 @@ export function isSupportedAnimeViewPageCategory() {
 
 export const animetoshoViewLinkCache = new Map();
 
-export function getAnimetoshoDomain(useNewATDomain) {
-  return useNewATDomain ? "animetosho.xyz" : "animetosho.org";
+export const ANIMETOSHO_DOMAIN = "animetosho.net";
+export const ANIMETOSHO_STORAGE_DOMAIN = `storage.${ANIMETOSHO_DOMAIN}`;
+export const ANIMETOSHO_FEED_DOMAIN = `feed.${ANIMETOSHO_DOMAIN}`;
+
+export function getAnimetoshoSearchApiUrl(hash) {
+  return `https://${ANIMETOSHO_FEED_DOMAIN}/json/v1/search?q=${encodeURIComponent(hash)}&limit=1`;
 }
 
-export function getAnimetoshoStorageDomain(useNewATDomain) {
-  return useNewATDomain ? "storage.animetosho.xyz" : "storage.animetosho.org";
-}
-
-export function normalizeATScreenshotStorageUrl(url, useNewATDomain) {
+export function normalizeATScreenshotStorageUrl(url) {
   if (!url || !url.includes("/sframes/")) return url;
-  const storageDomain = getAnimetoshoStorageDomain(useNewATDomain);
   return url
-    .replace(/.*\/sframes\//, `https://${storageDomain}/sframes/`)
+    .replace(/.*\/sframes\//, `https://${ANIMETOSHO_STORAGE_DOMAIN}/sframes/`)
     .replace(/&amp;/g, "&");
 }
 
-export function normalizeAnimetoshoViewUrl(url, atDomain) {
+// Rewrites retired domains (animetosho.org / animetosho.xyz) to the current one.
+export function normalizeAnimetoshoViewUrl(url) {
   if (!url) return null;
-  return url.replace(/animetosho\.(org|xyz)/, atDomain);
+  return url.replace(/animetosho\.(org|xyz|net)/, ANIMETOSHO_DOMAIN);
 }
 
-export function parseAnimetoshoOrgViewLink(json, atDomain) {
-  if (!json || json.error) return null;
-
-  let viewSuffix = null;
-  if (json.nyaa_id) viewSuffix = `n${json.nyaa_id}`;
-  else if (json.anidex_id) viewSuffix = `d${json.anidex_id}`;
-  else if (json.tosho_id) viewSuffix = `${json.tosho_id}`;
-  else if (json.nekobt_id) viewSuffix = `k${json.nekobt_id}`;
-
-  if (!viewSuffix) return null;
-  return `https://${atDomain}/view/${viewSuffix}`;
-}
-
-export function parseAnimetoshoXyzViewLink(json, atDomain) {
+export function parseAnimetoshoViewLink(json) {
   if (!json?.ok || !json.data?.length) return null;
   const viewUrl = json.data[0].urls?.view;
   if (!viewUrl) return null;
-  return normalizeAnimetoshoViewUrl(viewUrl, atDomain);
+  return normalizeAnimetoshoViewUrl(viewUrl);
 }
 
-export async function resolveAnimetoshoViewLink(infoHash, useNewATDomain) {
+export async function resolveAnimetoshoViewLink(infoHash) {
   const hash = infoHash?.trim().toLowerCase();
   if (!hash) return null;
 
-  const cacheKey = `${useNewATDomain ? "xyz" : "org"}:${hash}`;
-  let entry = animetoshoViewLinkCache.get(cacheKey);
+  let entry = animetoshoViewLinkCache.get(hash);
   if (entry?.resolved) return entry.link;
   if (entry?.promise) {
     await entry.promise;
-    return animetoshoViewLinkCache.get(cacheKey)?.link ?? null;
+    return animetoshoViewLinkCache.get(hash)?.link ?? null;
   }
 
-  const atDomain = getAnimetoshoDomain(useNewATDomain);
   entry = { link: null, resolved: false, promise: null };
-  animetoshoViewLinkCache.set(cacheKey, entry);
+  animetoshoViewLinkCache.set(hash, entry);
 
   entry.promise = (async () => {
     try {
-      const apiUrl = useNewATDomain
-        ? `https://feed.animetosho.xyz/json/v1/search?q=${encodeURIComponent(hash)}&limit=1`
-        : `https://feed.animetosho.org/json?show=torrent&btih=${encodeURIComponent(hash)}`;
-      const result = await fetchUrlViaBackground(apiUrl);
+      const result = await fetchUrlViaBackground(getAnimetoshoSearchApiUrl(hash));
       if (result?.ok) {
         try {
-          const json = JSON.parse(result.text);
-          entry.link = useNewATDomain
-            ? parseAnimetoshoXyzViewLink(json, atDomain)
-            : parseAnimetoshoOrgViewLink(json, atDomain);
+          entry.link = parseAnimetoshoViewLink(JSON.parse(result.text));
         } catch {
           /* ignore parse errors */
         }
@@ -122,14 +100,14 @@ export async function resolveAnimetoshoViewLink(infoHash, useNewATDomain) {
   return entry.link;
 }
 
-export function createAnimetoshoListAnchor(infoHash, useNewATDomain) {
+export function createAnimetoshoListAnchor(infoHash) {
   const atLink = document.createElement("a");
   atLink.className = "link-action-at";
   atLink.target = "_blank";
   atLink.title = "Open on Animetosho";
   atLink.innerHTML = '<i class="fa fa-fw fa-external-link"></i>';
   atLink.style.visibility = "hidden";
-  resolveAnimetoshoViewLink(infoHash, useNewATDomain).then((viewUrl) => {
+  resolveAnimetoshoViewLink(infoHash).then((viewUrl) => {
     if (viewUrl) {
       atLink.href = viewUrl;
       atLink.style.visibility = "";
@@ -168,56 +146,6 @@ export async function patchTorrentListLinkActionsForNewRows() {
       updateTorrentRowLinkActions(row, prefs);
     }
   });
-}
-
-export async function refreshAnimetoshoViewPageLink() {
-  const atRow = Array.from(document.querySelectorAll(".row")).find((row) =>
-    row.textContent.includes("Animetosho:"),
-  );
-  if (!atRow) return;
-
-  const atAnchor = atRow.querySelector("a");
-  if (!atAnchor) return;
-
-  const infoHash = document.querySelector("kbd")?.textContent?.trim();
-  if (!infoHash) return;
-
-  const prefs = await loadStoredPreferences();
-  const viewUrl = await resolveAnimetoshoViewLink(
-    infoHash,
-    prefs.useNewATDomain,
-  );
-  if (viewUrl) {
-    atAnchor.href = viewUrl;
-    atAnchor.textContent = viewUrl;
-    atAnchor.style.color = "";
-    atAnchor.style.pointerEvents = "";
-  } else {
-    atAnchor.removeAttribute("href");
-    atAnchor.textContent = "Not found on AnimeTosho";
-    atAnchor.style.color = "#999";
-    atAnchor.style.pointerEvents = "none";
-  }
-}
-
-export async function refreshAnimetoshoListLinks() {
-  const prefs = await loadStoredPreferences();
-  document
-    .querySelectorAll(".link-action-at:not(.link-action-at-placeholder)")
-    .forEach((link) => {
-      const row = link.closest("tr");
-      const infoHash = row ? getTorrentInfoHashFromRow(row) : "";
-      if (!infoHash) return;
-      link.style.visibility = "hidden";
-      resolveAnimetoshoViewLink(infoHash, prefs.useNewATDomain).then(
-        (viewUrl) => {
-          if (viewUrl) {
-            link.href = viewUrl;
-            link.style.visibility = "";
-          }
-        },
-      );
-    });
 }
 
 // Function to add Animetosho link to torrent view pages
@@ -261,10 +189,7 @@ export async function addAnimetoshoToViewPage() {
   infoHashRow.replaceWith(newRow);
 
   const atAnchor = newRow.querySelector("a");
-  const viewUrl = await resolveAnimetoshoViewLink(
-    infoHash,
-    prefs.useNewATDomain,
-  );
+  const viewUrl = await resolveAnimetoshoViewLink(infoHash);
   if (viewUrl) {
     atAnchor.href = viewUrl;
     atAnchor.textContent = viewUrl;
@@ -288,7 +213,7 @@ export async function addAnimetoshoComments() {
 
   const infoHash = document.querySelector("kbd")?.textContent?.trim();
   const toshoUrl = infoHash
-    ? await resolveAnimetoshoViewLink(infoHash, prefs.useNewATDomain)
+    ? await resolveAnimetoshoViewLink(infoHash)
     : null;
   if (!toshoUrl) return;
 
@@ -438,7 +363,7 @@ export async function addAnimetoshoComments() {
 
 export let atEpisodeFetchId = 0;
 export let atBatchViewHtml = null;
-export let atXyzViewPageHtml = null;
+export let atViewPageHtml = null;
 
 export const animetoshoTorrentDataCache = new Map();
 
@@ -464,6 +389,9 @@ export const atEpisodeSelection = {
   epId: null,
   epFilename: null,
   countVidFiles: 0,
+  // Subtitle track the viewer picked for screenshots ({ value, label }), kept
+  // while switching episodes of the same torrent. null = use the page default.
+  screenshotTrack: null,
 };
 
 export function resetAnimetoshoEpisodeSelection() {
@@ -471,8 +399,9 @@ export function resetAnimetoshoEpisodeSelection() {
   atEpisodeSelection.epId = null;
   atEpisodeSelection.epFilename = null;
   atEpisodeSelection.countVidFiles = 0;
+  atEpisodeSelection.screenshotTrack = null;
   atBatchViewHtml = null;
-  atXyzViewPageHtml = null;
+  atViewPageHtml = null;
 }
 
 export function isAnimetoshoSupportedViewPage() {
@@ -510,45 +439,11 @@ export function removeAnimetoshoEpisodeFeatures() {
   switchDescriptionPanelTab(panel, "description");
 }
 
-export function pickAnimetoshoVideoFiles(files) {
-  const videoFiles = [];
-  if (!Array.isArray(files)) return videoFiles;
-
-  const sorted = [...files].sort((a, b) =>
-    String(a.filename).localeCompare(String(b.filename)),
-  );
-
-  for (const file of sorted) {
-    const filename = String(file.filename || "").toLowerCase();
-    if (
-      !filename.endsWith(".mkv") &&
-      !filename.endsWith(".mp4") &&
-      !filename.endsWith(".ts")
-    ) {
-      continue;
-    }
-    if (
-      (filename.startsWith("extra") ||
-        filename.startsWith("bonus") ||
-        filename.startsWith("special") ||
-        filename.startsWith("creditless")) &&
-      filename.includes("/")
-    ) {
-      continue;
-    }
-    videoFiles.push({
-      id: String(file.id),
-      filename: String(file.filename).split("/").pop(),
-    });
-  }
-  return videoFiles;
-}
-
-export function isAnimetoshoXyzFileEpisodeId(episodeId) {
+export function isAnimetoshoFileEpisodeId(episodeId) {
   return String(episodeId || "").startsWith("/file/");
 }
 
-export function pickAnimetoshoXyzVideoFilesFromDoc(doc) {
+export function pickAnimetoshoVideoFilesFromDoc(doc) {
   const entries = [];
   doc
     .querySelectorAll(".view_list_entry .link a[href^='/file/']")
@@ -588,10 +483,10 @@ export function pickAnimetoshoXyzVideoFilesFromDoc(doc) {
   }));
 }
 
-export function parseAnimetoshoXyzViewPage(html) {
+export function parseAnimetoshoViewPage(html) {
   try {
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const videoFiles = pickAnimetoshoXyzVideoFilesFromDoc(doc);
+    const videoFiles = pickAnimetoshoVideoFilesFromDoc(doc);
     const singleFileLink = doc.querySelector('a[href*="file_info="]');
     let singleFileInfoLink = null;
 
@@ -617,73 +512,49 @@ export function parseAnimetoshoXyzViewPage(html) {
 }
 
 export function getAnimetoshoRecordVideoFiles(record) {
-  if (record.useNewATDomain) {
-    return record.xyzPageData?.videoFiles || [];
-  }
-  return record.videoFiles || [];
+  return record.pageData?.videoFiles || [];
 }
 
-export async function getAnimetoshoTorrentRecord(infoHash, useNewATDomain) {
+export async function getAnimetoshoTorrentRecord(infoHash) {
   const hash = infoHash?.trim().toLowerCase();
   if (!hash) return null;
 
-  const cacheKey = `${useNewATDomain ? "xyz" : "org"}:${hash}`;
-  let entry = animetoshoTorrentDataCache.get(cacheKey);
+  let entry = animetoshoTorrentDataCache.get(hash);
   if (entry?.resolved) return entry.data;
   if (entry?.promise) {
     await entry.promise;
-    return animetoshoTorrentDataCache.get(cacheKey)?.data ?? null;
+    return animetoshoTorrentDataCache.get(hash)?.data ?? null;
   }
 
-  const atDomain = getAnimetoshoDomain(useNewATDomain);
   entry = { data: null, resolved: false, promise: null };
-  animetoshoTorrentDataCache.set(cacheKey, entry);
+  animetoshoTorrentDataCache.set(hash, entry);
 
   entry.promise = (async () => {
     try {
-      const apiUrl = useNewATDomain
-        ? `https://feed.animetosho.xyz/json/v1/search?q=${encodeURIComponent(hash)}&limit=1`
-        : `https://feed.animetosho.org/json?show=torrent&btih=${encodeURIComponent(hash)}`;
-      const result = await fetchUrlViaBackground(apiUrl);
+      const result = await fetchUrlViaBackground(getAnimetoshoSearchApiUrl(hash));
       if (!result?.ok) return;
 
       const json = JSON.parse(result.text);
-      if (useNewATDomain) {
-        const item = json?.data?.[0];
-        if (!item) return;
-        let viewId = item.id != null ? String(item.id) : null;
-        let viewUrl = item.urls?.view || "";
-        if (!viewId && viewUrl) {
-          const match = viewUrl.match(/\/view\/(\d+)/);
-          viewId = match ? match[1] : null;
-        }
-        if (!viewUrl && viewId) {
-          viewUrl = `https://${atDomain}/view/${viewId}`;
-        }
-        viewUrl = normalizeAnimetoshoViewUrl(viewUrl, atDomain);
-        if (!viewUrl || !viewId) return;
-
-        entry.data = {
-          infoHash: hash,
-          useNewATDomain: true,
-          viewUrl,
-          xyzViewId: viewId,
-          videoFiles: [],
-          series: seriesFromAnimetoshoJson(item.series),
-        };
-      } else if (!json?.error) {
-        const viewUrl = parseAnimetoshoOrgViewLink(json, atDomain);
-        if (!viewUrl) return;
-        entry.data = {
-          infoHash: hash,
-          useNewATDomain: false,
-          viewUrl,
-          xyzViewId: null,
-          videoFiles: pickAnimetoshoVideoFiles(json.files),
-          torrentJson: json,
-          series: seriesFromAnimetoshoOrgJson(json),
-        };
+      const item = json?.data?.[0];
+      if (!item) return;
+      let viewId = item.id != null ? String(item.id) : null;
+      let viewUrl = item.urls?.view || "";
+      if (!viewId && viewUrl) {
+        const match = viewUrl.match(/\/view\/(\d+)/);
+        viewId = match ? match[1] : null;
       }
+      if (!viewUrl && viewId) {
+        viewUrl = `https://${ANIMETOSHO_DOMAIN}/view/${viewId}`;
+      }
+      viewUrl = normalizeAnimetoshoViewUrl(viewUrl);
+      if (!viewUrl || !viewId) return;
+
+      entry.data = {
+        infoHash: hash,
+        viewUrl,
+        viewId,
+        series: seriesFromAnimetoshoJson(item.series),
+      };
     } catch {
       /* ignore */
     } finally {
@@ -699,106 +570,64 @@ export async function getAnimetoshoTorrentRecord(infoHash, useNewATDomain) {
 export async function ensureAnimetoshoViewPageData(record) {
   if (!record?.viewUrl) return record;
 
-  if (record.useNewATDomain) {
-    if (!record.xyzPageData) {
-      const viewResult = await fetchUrlViaBackground(record.viewUrl);
-      if (viewResult?.ok) {
-        atXyzViewPageHtml = viewResult.text;
-        atBatchViewHtml = viewResult.text;
-        record.xyzPageData = parseAnimetoshoXyzViewPage(viewResult.text);
-      }
-    }
-    record.series = mergeAnimetoshoSeries(
-      record.series,
-      record.xyzPageData?.series,
-    );
-    return record;
-  }
-
-  if (!record.series?.fullTitle) {
+  if (!record.pageData) {
     const viewResult = await fetchUrlViaBackground(record.viewUrl);
     if (viewResult?.ok) {
-      record.series = mergeAnimetoshoSeries(
-        record.series,
-        seriesFromAnimetoshoHtml(viewResult.text),
-      );
+      atViewPageHtml = viewResult.text;
+      atBatchViewHtml = viewResult.text;
+      record.pageData = parseAnimetoshoViewPage(viewResult.text);
     }
   }
+  record.series = mergeAnimetoshoSeries(
+    record.series,
+    record.pageData?.series,
+  );
   return record;
 }
 
-export async function getAnimetoshoSeriesForHash(infoHash, useNewATDomain) {
-  const record = await getAnimetoshoTorrentRecord(infoHash, useNewATDomain);
+export async function getAnimetoshoSeriesForHash(infoHash) {
+  const record = await getAnimetoshoTorrentRecord(infoHash);
   if (!record) return null;
   await ensureAnimetoshoViewPageData(record);
   return record.series || null;
 }
 
 export function initAnimetoshoEpisodeSelection(record) {
-  const torrentKey = `${record.infoHash}:${record.useNewATDomain ? "xyz" : "org"}`;
+  const torrentKey = record.infoHash;
   if (atEpisodeSelection.torrentKey === torrentKey) return;
 
   resetAnimetoshoEpisodeSelection();
   atEpisodeSelection.torrentKey = torrentKey;
 
-  if (record.useNewATDomain) {
-    const { videoFiles, singleFileInfoLink } = record.xyzPageData || {
-      videoFiles: [],
-      singleFileInfoLink: null,
-    };
+  const { videoFiles, singleFileInfoLink } = record.pageData || {
+    videoFiles: [],
+    singleFileInfoLink: null,
+  };
 
-    if (videoFiles.length > 1) {
-      atEpisodeSelection.countVidFiles = videoFiles.length;
-      atEpisodeSelection.epId = videoFiles[0].id;
-      atEpisodeSelection.epFilename = videoFiles[0].filename;
-      return;
-    }
-
-    if (videoFiles.length === 1) {
-      atEpisodeSelection.countVidFiles = 1;
-      atEpisodeSelection.epId = videoFiles[0].id;
-      atEpisodeSelection.epFilename = videoFiles[0].filename;
-      return;
-    }
-
-    atEpisodeSelection.epId = record.xyzViewId;
-    atEpisodeSelection.countVidFiles = 1;
-    atEpisodeSelection.epFilename = singleFileInfoLink?.filename || null;
+  if (videoFiles.length > 0) {
+    atEpisodeSelection.countVidFiles = videoFiles.length;
+    atEpisodeSelection.epId = videoFiles[0].id;
+    atEpisodeSelection.epFilename = videoFiles[0].filename;
     return;
   }
 
-  atEpisodeSelection.countVidFiles = record.videoFiles.length;
-  if (record.videoFiles.length > 0) {
-    atEpisodeSelection.epId = record.videoFiles[0].id;
-    atEpisodeSelection.epFilename = record.videoFiles[0].filename;
-  }
+  atEpisodeSelection.epId = record.viewId;
+  atEpisodeSelection.countVidFiles = 1;
+  atEpisodeSelection.epFilename = singleFileInfoLink?.filename || null;
 }
 
-export async function fetchAnimetoshoEpisodeViewHtml(episodeId, useNewATDomain) {
-  const url = useNewATDomain
-    ? isAnimetoshoXyzFileEpisodeId(episodeId)
-      ? `https://animetosho.xyz${episodeId}`
-      : `https://animetosho.xyz/view/${episodeId}`
-    : `https://animetosho.org/file/${episodeId}`;
+export async function fetchAnimetoshoEpisodeViewHtml(episodeId) {
+  const url = isAnimetoshoFileEpisodeId(episodeId)
+    ? `https://${ANIMETOSHO_DOMAIN}${episodeId}`
+    : `https://${ANIMETOSHO_DOMAIN}/view/${episodeId}`;
   const result = await fetchUrlViaBackground(url);
   return result?.ok ? result.text : null;
 }
 
-export async function fetchAnimetoshoEpisodeFileinfo(
-  episodeId,
-  useNewATDomain,
-  episodeViewHtml,
-) {
+export async function fetchAnimetoshoEpisodeFileinfo(episodeId, episodeViewHtml) {
   if (!episodeViewHtml) return { fileInfo: null, filename: null };
 
-  if (!useNewATDomain) {
-    return {
-      fileInfo: extractATFileinfoFromHtml(episodeViewHtml),
-      filename: atEpisodeSelection.epFilename,
-    };
-  }
-
-  if (isAnimetoshoXyzFileEpisodeId(episodeId)) {
+  if (isAnimetoshoFileEpisodeId(episodeId)) {
     return {
       fileInfo: extractATFileinfoFromHtml(episodeViewHtml),
       filename: atEpisodeSelection.epFilename,
@@ -817,7 +646,7 @@ export async function fetchAnimetoshoEpisodeFileinfo(
 
   const fileInfoUrl = fileInfoHref.startsWith("http")
     ? fileInfoHref
-    : `https://animetosho.xyz${fileInfoHref}`;
+    : `https://${ANIMETOSHO_DOMAIN}${fileInfoHref}`;
   const result = await fetchUrlViaBackground(fileInfoUrl);
   if (!result?.ok) {
     return { fileInfo: null, filename };
@@ -833,14 +662,13 @@ export function createEmptyATAttachmentGroups() {
   return { file: [], subtitles: [], audio: [], video: [] };
 }
 
-export function resolveATAttachmentGroupUrls(groups, useNewATDomain) {
-  if (!useNewATDomain) return groups;
+export function resolveATAttachmentGroupUrls(groups) {
   const resolveList = (items) =>
     items.map((item) => ({
       ...item,
       link: item.link.startsWith("http")
         ? item.link
-        : `https://animetosho.xyz${item.link}`,
+        : `https://${ANIMETOSHO_DOMAIN}${item.link}`,
     }));
   return {
     file: resolveList(groups.file),
@@ -964,7 +792,7 @@ export function findBatchViewListEntry(doc, epId, epFilename) {
     }
     if (
       normalizedEpId &&
-      !isAnimetoshoXyzFileEpisodeId(normalizedEpId) &&
+      !isAnimetoshoFileEpisodeId(normalizedEpId) &&
       (href.includes(`/file/${normalizedEpId}`) ||
         href.endsWith(`.${normalizedEpId}`))
     ) {
@@ -1026,7 +854,6 @@ export function mergeAnimetoshoSubtitleAttachments(
   batchViewHtml,
   episodeViewHtml,
   countVidFiles,
-  useNewATDomain,
   epId,
   epFilename,
 ) {
@@ -1049,7 +876,7 @@ export function mergeAnimetoshoSubtitleAttachments(
     groups.subtitles = [...batchGroups.subtitles, ...groups.subtitles.slice(1)];
   }
 
-  return resolveATAttachmentGroupUrls(groups, useNewATDomain);
+  return resolveATAttachmentGroupUrls(groups);
 }
 
 export function extractATFileinfoFromHtml(html) {
@@ -1298,7 +1125,7 @@ export function setAnimetoshoTabStatus(body, message) {
   body.appendChild(status);
 }
 
-export function collectATScreenshotsFromRoot(root, useNewATDomain) {
+export function collectATScreenshotsFromRoot(root) {
   const screenshots = [];
 
   root.querySelectorAll("a.screenthumb").forEach((a) => {
@@ -1307,8 +1134,8 @@ export function collectATScreenshotsFromRoot(root, useNewATDomain) {
     const img = a.querySelector("img");
     const src = img?.getAttribute("src") || href;
 
-    const storageUrl = normalizeATScreenshotStorageUrl(href, useNewATDomain);
-    const thumbnailUrl = normalizeATScreenshotStorageUrl(src, useNewATDomain);
+    const storageUrl = normalizeATScreenshotStorageUrl(href);
+    const thumbnailUrl = normalizeATScreenshotStorageUrl(src);
 
     screenshots.push({
       url: storageUrl,
@@ -1320,7 +1147,38 @@ export function collectATScreenshotsFromRoot(root, useNewATDomain) {
   return screenshots;
 }
 
-export function extractATScreenshotsFromHtml(html, useNewATDomain) {
+// Subtitle tracks AnimeTosho can burn into screenshots, read from the
+// gallery's own picker (<select data-sframe-select>).
+export function collectATScreenshotSubtitleTracks(root) {
+  const select = root.querySelector("select[data-sframe-select]");
+  if (!select) return [];
+  return Array.from(select.options)
+    .map((option) => ({
+      value: option.value.trim(),
+      label: normalizeATAttachmentLabel(option.textContent),
+    }))
+    .filter((track) => /^\d+$/.test(track.value) && track.label);
+}
+
+export function getATScreenshotTrackParam(url) {
+  try {
+    return new URL(url).searchParams.get("s") || "";
+  } catch {
+    return "";
+  }
+}
+
+export function collectATScreenshotGalleryFromRoot(root) {
+  const screenshots = collectATScreenshotsFromRoot(root);
+  return {
+    screenshots,
+    subtitleTracks: collectATScreenshotSubtitleTracks(root),
+    // AnimeTosho links each screenshot with its default track already applied.
+    defaultTrack: getATScreenshotTrackParam(screenshots[0]?.url),
+  };
+}
+
+export function extractATScreenshotGalleryFromHtml(html) {
   try {
     const doc = new DOMParser().parseFromString(html, "text/html");
 
@@ -1331,15 +1189,45 @@ export function extractATScreenshotsFromHtml(html, useNewATDomain) {
         /^Screenshots$/i.test(normalizeATAttachmentLabel(th.textContent))
       ) {
         const td = row.querySelector("td");
-        return td ? collectATScreenshotsFromRoot(td, useNewATDomain) : [];
+        if (td) return collectATScreenshotGalleryFromRoot(td);
+        break;
       }
     }
 
-    return collectATScreenshotsFromRoot(doc, useNewATDomain);
+    return collectATScreenshotGalleryFromRoot(doc);
   } catch (error) {
     console.error("Error parsing AnimeTosho screenshots:", error);
-    return [];
+    return { screenshots: [], subtitleTracks: [], defaultTrack: "" };
   }
+}
+
+function stripATTrackNumber(label) {
+  return String(label || "").replace(/^#\d+:\s*/, "");
+}
+
+// Prefer the viewer's earlier pick (matched by track number + name, then by
+// name, since batch episodes can number tracks differently), else the page
+// default. Without a picker, keep whatever track the page linked.
+export function resolveATScreenshotTrack({ subtitleTracks, defaultTrack }) {
+  if (!subtitleTracks.length) return defaultTrack;
+
+  const choice = atEpisodeSelection.screenshotTrack;
+  if (choice) {
+    if (!choice.value) return "";
+    const name = stripATTrackNumber(choice.label);
+    const match =
+      subtitleTracks.find(
+        (track) =>
+          track.value === choice.value &&
+          stripATTrackNumber(track.label) === name,
+      ) ||
+      subtitleTracks.find((track) => stripATTrackNumber(track.label) === name);
+    if (match) return match.value;
+  }
+
+  return subtitleTracks.some((track) => track.value === defaultTrack)
+    ? defaultTrack
+    : "";
 }
 
 export function normalizeATAttachmentLabel(text) {
@@ -1477,12 +1365,23 @@ export function extractATAttachmentsFromHtml(html) {
 export function getATScreenshotDisplayUrl(url) {
   if (!url) return url;
   if (url.includes("/sframes/") || url.includes("storage.animetosho.")) {
-    return url.replace(/\.png$/i, ".jpg");
+    // Links carry query params (e.g. ?s=3), so match the extension before them.
+    return url.replace(/\.png(?=$|[?#])/i, ".jpg");
   }
   return url;
 }
 
+// Galleries can also list uploader screenshots from other image hosts.
+export function isATStorageUrl(url) {
+  try {
+    return new URL(url).hostname === ANIMETOSHO_STORAGE_DOMAIN;
+  } catch {
+    return false;
+  }
+}
+
 export function getATScreenshotImageUrl(url, trackNum) {
+  if (!isATStorageUrl(url)) return url;
   try {
     const imgUrlObj = new URL(url);
     if (trackNum) {
@@ -1499,18 +1398,16 @@ export function getATScreenshotImageUrl(url, trackNum) {
 export async function fetchAnimetoshoScreenshotHtml(
   record,
   epId,
-  useNewATDomain,
   episodeViewHtml,
 ) {
   if (
-    useNewATDomain &&
     atEpisodeSelection.countVidFiles > 1 &&
-    isAnimetoshoXyzFileEpisodeId(epId)
+    isAnimetoshoFileEpisodeId(epId)
   ) {
-    if (episodeViewHtml && String(epId) !== String(record.xyzViewId)) {
+    if (episodeViewHtml && String(epId) !== String(record.viewId)) {
       return episodeViewHtml;
     }
-    return fetchAnimetoshoEpisodeViewHtml(epId, useNewATDomain);
+    return fetchAnimetoshoEpisodeViewHtml(epId);
   }
   return episodeViewHtml;
 }
@@ -1637,8 +1534,13 @@ export function openATScreenshotModal(screenshots, initialIndex, trackNum) {
       loader.hidden = true;
     };
     modalImage.src = fullUrl;
+    // Open the lossless original; the modal itself shows the lighter JPG.
     openButton.onclick = () =>
-      window.open(fullUrl, "_blank", "noopener,noreferrer");
+      window.open(
+        getATScreenshotImageUrl(screenshot.url, trackNum),
+        "_blank",
+        "noopener,noreferrer",
+      );
 
     thumbButtons.forEach((btn, i) => {
       const active = i === currentIndex;
@@ -1737,77 +1639,154 @@ export function openATScreenshotModal(screenshots, initialIndex, trackNum) {
   updateModal();
 }
 
-export function renderATScreenshotsGrid(body, screenshots, subtitles, isXyz) {
-  body.replaceChildren();
-
+export function createATScreenshotTrackPicker(subtitleTracks, selectedTrack, onChange) {
   const toolbar = document.createElement("div");
   toolbar.className = "nyaa-enhancer-at-screenshots-toolbar";
 
-  const trackSelect = document.createElement("select");
-  trackSelect.className = "nyaa-enhancer-at-track-select";
-  const noTrackOption = document.createElement("option");
-  noTrackOption.value = "";
-  noTrackOption.textContent = "No Subtitle Track";
-  trackSelect.appendChild(noTrackOption);
+  const label = document.createElement("span");
+  label.className = "nyaa-enhancer-at-track-label";
+  label.textContent = "Subtitles:";
 
-  if (!isXyz) {
-    subtitles.forEach(({ text, link }) => {
-      const trackMatch = link.match(/_track(\d+)/);
-      if (trackMatch && !text.includes("All Attachments")) {
-        const option = document.createElement("option");
-        option.value = trackMatch[1];
-        option.textContent = `Track ${trackMatch[1]} - ${text}`;
-        trackSelect.appendChild(option);
-      }
-    });
+  const select = document.createElement("select");
+  select.className = "nyaa-enhancer-at-track-select";
+  select.setAttribute("aria-label", "Subtitles shown in screenshots");
+
+  const noneOption = document.createElement("option");
+  noneOption.value = "";
+  noneOption.textContent = "No subtitles";
+  select.appendChild(noneOption);
+
+  for (const { value, label: text } of subtitleTracks) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = text;
+    select.appendChild(option);
+  }
+  select.value = selectedTrack;
+
+  select.addEventListener("change", () => {
+    atEpisodeSelection.screenshotTrack = {
+      value: select.value,
+      label: select.selectedOptions[0]?.textContent || "",
+    };
+    onChange(select.value);
+  });
+
+  toolbar.append(label, select);
+  return toolbar;
+}
+
+// AnimeTosho renders subtitled frames on demand and answers 503 when too many
+// are rendering at once, so a failed load gets a couple of delayed retries.
+export const AT_SCREENSHOT_RETRY_DELAYS_MS = [1500, 4000];
+
+// Cached images (e.g. switching back to a viewed track) load within this window,
+// so they swap in place instead of flashing the skeleton.
+export const AT_SCREENSHOT_SKELETON_DELAY_MS = 150;
+
+// `holder` gets data-load-state="loading" | "loaded" | "error", which drives
+// the skeleton placeholder and keeps the browser's broken-image icon hidden.
+export function loadATScreenshotImage(img, url, holder) {
+  let attempt = 0;
+  // Events from a previous src are ignored once a track switch repoints the image.
+  const isCurrent = () => img.getAttribute("src") === url;
+  const setState = (state) => {
+    if (holder && isCurrent()) holder.dataset.loadState = state;
+  };
+  const skeletonTimer = setTimeout(
+    () => setState("loading"),
+    AT_SCREENSHOT_SKELETON_DELAY_MS,
+  );
+
+  img.onload = () => {
+    clearTimeout(skeletonTimer);
+    setState("loaded");
+  };
+  img.onerror = () => {
+    clearTimeout(skeletonTimer);
+    if (!isCurrent()) return;
+    const delay = isATStorageUrl(url)
+      ? AT_SCREENSHOT_RETRY_DELAYS_MS[attempt++]
+      : undefined;
+    if (delay == null) {
+      setState("error");
+      return;
+    }
+    setState("loading");
+    setTimeout(() => {
+      if (img.isConnected && isCurrent()) img.src = url;
+    }, delay);
+  };
+  img.src = url;
+}
+
+// Subtitled frames are served with Cache-Control: no-store, so the browser
+// would re-request them every time a track is revisited. Holding a reference
+// to each loaded frame lets the page reuse it; capped to the latest few tracks.
+export const AT_SCREENSHOT_KEEP_ALIVE_LIMIT = 30;
+
+export function keepATScreenshotAlive(cache, url) {
+  const keeper = cache.get(url) || new Image();
+  if (!keeper.src) keeper.src = url;
+  cache.delete(url);
+  cache.set(url, keeper);
+  while (cache.size > AT_SCREENSHOT_KEEP_ALIVE_LIMIT) {
+    cache.delete(cache.keys().next().value);
+  }
+}
+
+export function renderATScreenshotsGrid(body, gallery) {
+  const { screenshots, subtitleTracks } = gallery;
+  body.replaceChildren();
+
+  let trackNum = resolveATScreenshotTrack(gallery);
+  const images = [];
+  const loadedFrames = new Map();
+  const getImageUrl = (shot) =>
+    getATScreenshotImageUrl(getATScreenshotDisplayUrl(shot.url), trackNum);
+
+  if (subtitleTracks.length) {
+    body.appendChild(
+      createATScreenshotTrackPicker(subtitleTracks, trackNum, (value) => {
+        trackNum = value;
+        images.forEach((img, i) => {
+          loadATScreenshotImage(img, getImageUrl(screenshots[i]), img.parentElement);
+        });
+      }),
+    );
   }
 
   const grid = document.createElement("div");
   grid.className = "nyaa-enhancer-at-screenshot-grid";
 
-  function updateGrid(trackNum) {
-    grid.replaceChildren();
-    screenshots.forEach((shot) => {
-      const thumb = document.createElement("div");
-      thumb.className = "nyaa-enhancer-at-screenshot-thumb";
-      thumb.style.paddingBottom = "56.25%";
+  screenshots.forEach((shot, index) => {
+    const thumb = document.createElement("div");
+    thumb.className = "nyaa-enhancer-at-screenshot-thumb";
+    thumb.style.paddingBottom = "56.25%";
 
-      const overlay = document.createElement("div");
-      overlay.className = "nyaa-enhancer-at-screenshot-overlay";
-      overlay.textContent = shot.title;
+    const overlay = document.createElement("div");
+    overlay.className = "nyaa-enhancer-at-screenshot-overlay";
+    overlay.textContent = shot.title;
 
-      const img = document.createElement("img");
-      img.loading = "lazy";
-      img.alt = shot.title;
-      img.src = getATScreenshotImageUrl(
-        getATScreenshotDisplayUrl(shot.url),
-        trackNum,
-      );
-      img.onload = () => {
-        if (img.naturalWidth > 0) {
-          thumb.style.paddingBottom = `${(img.naturalHeight / img.naturalWidth) * 100}%`;
-        }
-      };
-
-      thumb.append(img, overlay);
-      thumb.addEventListener("click", () => {
-        const index = screenshots.findIndex((s) => s.url === shot.url);
-        openATScreenshotModal(screenshots, index >= 0 ? index : 0, trackNum);
-      });
-      grid.appendChild(thumb);
+    const img = document.createElement("img");
+    img.loading = "lazy";
+    img.alt = shot.title;
+    img.addEventListener("load", () => {
+      if (img.naturalWidth > 0) {
+        thumb.style.paddingBottom = `${(img.naturalHeight / img.naturalWidth) * 100}%`;
+      }
+      if (isATStorageUrl(img.src)) keepATScreenshotAlive(loadedFrames, img.src);
     });
-  }
+    loadATScreenshotImage(img, getImageUrl(shot), thumb);
+    images.push(img);
 
-  trackSelect.addEventListener("change", () => updateGrid(trackSelect.value));
-  if (!isXyz && trackSelect.options.length > 1) {
-    trackSelect.selectedIndex = 1;
-  }
-  updateGrid(trackSelect.value);
+    thumb.append(img, overlay);
+    thumb.addEventListener("click", () => {
+      openATScreenshotModal(screenshots, index, trackNum);
+    });
+    grid.appendChild(thumb);
+  });
 
-  if (!isXyz && trackSelect.options.length > 1) {
-    toolbar.appendChild(trackSelect);
-    body.appendChild(toolbar);
-  }
   body.appendChild(grid);
 }
 
@@ -1909,10 +1888,7 @@ export async function refreshAnimetoshoEpisodeFeatures(prefs, options = {}) {
       return;
     }
 
-    const record = await getAnimetoshoTorrentRecord(
-      infoHash,
-      prefs.useNewATDomain,
-    );
+    const record = await getAnimetoshoTorrentRecord(infoHash);
     if (fetchId !== atEpisodeFetchId) return;
 
     if (!record?.viewUrl) {
@@ -1923,7 +1899,7 @@ export async function refreshAnimetoshoEpisodeFeatures(prefs, options = {}) {
       return;
     }
 
-    if (record.useNewATDomain && !record.xyzPageData) {
+    if (!record.pageData) {
       await ensureAnimetoshoViewPageData(record);
       if (fetchId !== atEpisodeFetchId) return;
     }
@@ -1943,25 +1919,23 @@ export async function refreshAnimetoshoEpisodeFeatures(prefs, options = {}) {
       const batchResult = await fetchUrlViaBackground(record.viewUrl);
       if (fetchId !== atEpisodeFetchId) return;
       atBatchViewHtml = batchResult?.ok ? batchResult.text : null;
-      if (record.useNewATDomain && batchResult?.ok) {
-        atXyzViewPageHtml = batchResult.text;
-        if (!record.xyzPageData) {
-          record.xyzPageData = parseAnimetoshoXyzViewPage(batchResult.text);
+      if (batchResult?.ok) {
+        atViewPageHtml = batchResult.text;
+        if (!record.pageData) {
+          record.pageData = parseAnimetoshoViewPage(batchResult.text);
         }
       }
     }
 
     let episodeViewHtml;
     if (
-      record.useNewATDomain &&
-      String(atEpisodeSelection.epId) === String(record.xyzViewId) &&
-      atXyzViewPageHtml
+      String(atEpisodeSelection.epId) === String(record.viewId) &&
+      atViewPageHtml
     ) {
-      episodeViewHtml = atXyzViewPageHtml;
+      episodeViewHtml = atViewPageHtml;
     } else {
       episodeViewHtml = await fetchAnimetoshoEpisodeViewHtml(
         atEpisodeSelection.epId,
-        record.useNewATDomain,
       );
     }
     if (fetchId !== atEpisodeFetchId) return;
@@ -1985,7 +1959,6 @@ export async function refreshAnimetoshoEpisodeFeatures(prefs, options = {}) {
     if (wantFileinfo && fileinfoBody) {
       const { fileInfo, filename } = await fetchAnimetoshoEpisodeFileinfo(
         atEpisodeSelection.epId,
-        record.useNewATDomain,
         episodeViewHtml,
       );
       if (fetchId !== atEpisodeFetchId) return;
@@ -2008,7 +1981,6 @@ export async function refreshAnimetoshoEpisodeFeatures(prefs, options = {}) {
       atBatchViewHtml,
       episodeViewHtml,
       atEpisodeSelection.countVidFiles,
-      record.useNewATDomain,
       atEpisodeSelection.epId,
       atEpisodeSelection.epFilename,
     );
@@ -2028,30 +2000,18 @@ export async function refreshAnimetoshoEpisodeFeatures(prefs, options = {}) {
       const screenshotHtml = await fetchAnimetoshoScreenshotHtml(
         record,
         atEpisodeSelection.epId,
-        record.useNewATDomain,
         episodeViewHtml,
       );
       if (fetchId !== atEpisodeFetchId) return;
 
-      const screenshots = extractATScreenshotsFromHtml(
-        screenshotHtml,
-        record.useNewATDomain,
-      );
-      if (!screenshots.length) {
+      const gallery = extractATScreenshotGalleryFromHtml(screenshotHtml);
+      if (!gallery.screenshots.length) {
         setAnimetoshoTabStatus(
           screenshotBody,
           "No screenshots on AnimeTosho for this episode.",
         );
       } else {
-        const screenshotSubtitles = record.useNewATDomain
-          ? []
-          : attachmentGroups.subtitles;
-        renderATScreenshotsGrid(
-          screenshotBody,
-          screenshots,
-          screenshotSubtitles,
-          record.useNewATDomain,
-        );
+        renderATScreenshotsGrid(screenshotBody, gallery);
       }
     }
 

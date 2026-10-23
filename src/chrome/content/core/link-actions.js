@@ -252,7 +252,7 @@ export function updateTorrentRowLinkActions(row, prefs, { deferAnimetosho = fals
         atLink = null;
       }
       if (!atLink) {
-        atLink = createAnimetoshoListAnchor(infoHash, prefs.useNewATDomain);
+        atLink = createAnimetoshoListAnchor(infoHash);
         linkCell.appendChild(atLink);
         changed = true;
       }

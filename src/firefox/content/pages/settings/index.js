@@ -377,7 +377,6 @@ export async function neSettingsLoadValues() {
     copyTorrentTitle: prefs.copyTorrentTitle,
     copyTorrentInfoHash: prefs.copyTorrentInfoHash,
     showATLinks: prefs.showATLinks,
-    useNewATDomain: prefs.useNewATDomain,
     showATComments: prefs.showATComments,
     showATScreenshotsSection: prefs.showATScreenshotsSection,
     showATFileInfoSection: prefs.showATFileInfoSection,
@@ -1971,7 +1970,6 @@ export function neSettingsBuildPageHTML() {
 
   page.querySelector("#ne-settings-animetosho-rows").append(
     neSettingsCreateToggleRow("showATLinks", "Show AnimeTosho links"),
-    neSettingsCreateToggleRow("useNewATDomain", "Use new AnimeTosho domain", "Switch links between animetosho.org (legacy) and animetosho.xyz (new)."),
     neSettingsCreateToggleRow("showATComments", "Show AnimeTosho comments"),
     neSettingsCreateToggleRow("showATScreenshotsSection", "Show Screenshots section"),
     neSettingsCreateToggleRow("showATFileInfoSection", "Show FileInfo section"),

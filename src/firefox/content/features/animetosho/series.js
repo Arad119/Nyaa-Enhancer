@@ -32,20 +32,6 @@ export function seriesFromAnimetoshoJson(series) {
   };
 }
 
-export function seriesFromAnimetoshoOrgJson(json) {
-  if (!json || typeof json !== "object" || json.error) return null;
-  const title = decodeHtmlText(json.anidb_title || json.anime || "");
-  const anidbAid = positiveInt(json.aid || json.anidb_id);
-  if (!title && !anidbAid) return null;
-  return {
-    title,
-    fullTitle: title,
-    displayTitle: title,
-    anidbAid,
-    season: null,
-  };
-}
-
 export function seriesFromAnimetoshoHtml(html) {
   const text = String(html || "");
   const seriesLink = text.match(

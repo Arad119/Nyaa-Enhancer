@@ -34,8 +34,8 @@ export async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Added a Navbar section in Settings to show or hide built-in header links and search dropdowns<br>
-        • Fixed the header search wrapping onto a second row on smaller screens
+        • Moved AnimeTosho to its new animetosho.net domain, since the old domains have shut down<br>
+        • Added a subtitle picker for AnimeTosho screenshots
         <div class="changelog-more">Plus more. <a href="/changelog">See the full changelog</a> for everything that's new.</div>
       </div>
       <div class="changelog-actions">
@@ -100,6 +100,23 @@ export async function handleChangelogPage() {
         </a>.
       </p>
     </header>
+    <div class="version-entry">
+      <h2>
+        Version 1.15.5
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.15.5" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Moved AnimeTosho to its new animetosho.net domain, as animetosho.org has shut down and animetosho.xyz changed to the new domain</li>
+        <li>Removed the "Use new AnimeTosho domain" setting, since only the new domain is used now</li>
+        <li>Added a subtitle picker to AnimeTosho screenshots that starts on AnimeTosho's default track and keeps your choice when switching episodes in a batch</li>
+        <li>The full-size screenshot viewer now uses the selected subtitle track, and its Open button opens the full-quality original</li>
+        <li>Screenshots now load as lighter JPGs instead of full-size PNGs, so the Screenshots tab loads much faster and downloads much less</li>
+        <li>Fixed issue where some screenshots could stay blank when AnimeTosho was busy; they now retry automatically</li>
+        <li>Screenshots now show a loading placeholder and load faster</li>
+      </ul>
+    </div>
     <div class="version-entry">
       <h2>
         Version 1.15.4

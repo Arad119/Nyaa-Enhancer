@@ -1,5 +1,10 @@
 import { resolveNyaaSettingsTarget } from "../shared/domains.js";
 import { getPreferences, savePreferences } from "../shared/prefs.js";
+import {
+  cloudSyncErrorMessage,
+  validateWebdavUrl,
+  webdavPermissionPattern,
+} from "../shared/webdav.js";
 
 async function applySettingsPageLinks() {
   const links = document.querySelectorAll(".ne-settings-page-link");
@@ -603,6 +608,152 @@ document.getElementById("tcTestBtn").addEventListener("click", () => {
 });
 
 // ── End Torrent Client Tab ───────────────────────────────────────────────────
+
+// ── Cloud Sync (WebDAV) ─────────────────────────────────────────────────────
+
+// The folder address is set on the Settings page; kept here so Connect can
+// request the host permission without awaiting anything first.
+let cloudSyncUrl = "";
+
+function setWebdavStatus(text, color = "#999") {
+  const statusEl = document.getElementById("webdavStatus");
+  statusEl.textContent = text;
+  statusEl.style.color = color;
+}
+
+function renderCloudSyncAddress() {
+  const el = document.getElementById("cloudSyncAddress");
+  const result = validateWebdavUrl(cloudSyncUrl);
+  if (result.ok) {
+    el.textContent = result.url;
+    el.title = result.url;
+    el.classList.remove("is-missing");
+  } else {
+    el.textContent = result.empty
+      ? "Not set yet — add it on the Settings page"
+      : "Invalid — fix it on the Settings page";
+    el.title = "";
+    el.classList.add("is-missing");
+  }
+}
+
+function saveWebdavLogin() {
+  return savePreferences({
+    webdavUsername: document.getElementById("webdavUsername").value.trim(),
+    webdavPassword: document.getElementById("webdavPassword").value,
+  });
+}
+
+function formatCloudTime(ms) {
+  return ms ? new Date(ms).toLocaleString() : "";
+}
+
+getPreferences({ cloudSyncUrl: "", webdavUsername: "", webdavPassword: "" }, (items) => {
+  cloudSyncUrl = items.cloudSyncUrl || "";
+  document.getElementById("webdavUsername").value = items.webdavUsername || "";
+  document.getElementById("webdavPassword").value = items.webdavPassword || "";
+  renderCloudSyncAddress();
+});
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.cloudSyncUrl) {
+    cloudSyncUrl = changes.cloudSyncUrl.newValue || "";
+    renderCloudSyncAddress();
+  }
+});
+
+// Saved when a field loses focus (not on every keystroke: each save makes
+// the background re-check the connection).
+["webdavUsername", "webdavPassword"].forEach((id) => {
+  document.getElementById(id).addEventListener("change", saveWebdavLogin);
+});
+
+document.getElementById("webdavPasswordToggle").addEventListener("click", () => {
+  const input = document.getElementById("webdavPassword");
+  const btn = document.getElementById("webdavPasswordToggle");
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  btn.innerHTML = show ? EYE_SLASH_SVG : EYE_SVG;
+});
+
+function showCloudSyncTestResult(result) {
+  if (!result) {
+    setWebdavStatus("✗ No response from the extension.", "#ff4444");
+    return;
+  }
+  if (!result.ok) {
+    setWebdavStatus(`✗ ${result.message || cloudSyncErrorMessage(result.code)}`, "#ff4444");
+    return;
+  }
+  const found = result.remote?.updatedAt
+    ? ` Found a cloud copy from ${formatCloudTime(result.remote.updatedAt)}.`
+    : "";
+  setWebdavStatus(
+    `✓ Connected.${found} Turn on Cloud Sync on the Settings page if it isn't on yet.`,
+    "#4caf50",
+  );
+}
+
+// permissions.request must run in the same click turn as the user gesture
+// (no await before it), or the browser will not show the prompt.
+document.getElementById("webdavConnect").addEventListener("click", () => {
+  const username = document.getElementById("webdavUsername").value.trim();
+  const password = document.getElementById("webdavPassword").value;
+  const address = validateWebdavUrl(cloudSyncUrl);
+
+  if (!address.ok) {
+    setWebdavStatus(
+      address.empty
+        ? "Add your WebDAV folder address on the Settings page first (Cloud Sync)."
+        : `✗ ${address.message}`,
+      address.empty ? "#999" : "#ff4444",
+    );
+    return;
+  }
+  if (!username || !password) {
+    setWebdavStatus("Enter your WebDAV username and password first.");
+    return;
+  }
+
+  // Saved first: the browser may close the popup while the permission prompt shows.
+  saveWebdavLogin();
+  setWebdavStatus(
+    `Requesting access to ${new URL(address.url).hostname}… If the popup closes, accept the prompt and press Connect again.`,
+  );
+
+  chrome.permissions
+    .request({ origins: [webdavPermissionPattern(address.url)] })
+    .then((granted) => {
+      if (!granted) {
+        setWebdavStatus("✗ Permission to reach the server was denied.", "#ff4444");
+        return;
+      }
+      const button = document.getElementById("webdavConnect");
+      button.disabled = true;
+      setWebdavStatus("Checking the connection…");
+      chrome.runtime
+        .sendMessage({ type: "cloudSyncTest", url: address.url, username, password })
+        .then(showCloudSyncTestResult, () => showCloudSyncTestResult(null))
+        .finally(() => {
+          button.disabled = false;
+        });
+    })
+    .catch((err) => {
+      setWebdavStatus(`✗ ${err?.message || "Couldn't request permission."}`, "#ff4444");
+    });
+});
+
+document.getElementById("webdavClear").addEventListener("click", () => {
+  document.getElementById("webdavUsername").value = "";
+  const password = document.getElementById("webdavPassword");
+  password.value = "";
+  password.type = "password";
+  document.getElementById("webdavPasswordToggle").innerHTML = EYE_SVG;
+  savePreferences({ webdavUsername: "", webdavPassword: "" });
+  setWebdavStatus("Login removed from this device.");
+});
+
+// ── End Cloud Sync ──────────────────────────────────────────────────────────
 
 // Get version from manifest.json and update the version number in popup
 fetch(chrome.runtime.getURL("manifest.json"))

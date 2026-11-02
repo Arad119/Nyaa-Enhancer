@@ -36,7 +36,7 @@ export function formatSimilarCacheBytes(bytes) {
   return `${Number(v.toFixed(decimals))} ${units[i]}`;
 }
 
-function getBytesInUse(key) {
+export function getBytesInUse(key) {
   return new Promise((resolve) => {
     if (typeof chrome.storage?.local?.getBytesInUse !== "function") {
       resolve(0);

@@ -1,4 +1,13 @@
-import { getPreferences, loadStoredPreferences, savePreferences } from "../../../shared/prefs.js";
+import {
+  PREFS_EXPORT_FORMAT,
+  PREFS_EXPORT_VERSION,
+  exportPreferences,
+  getPreferences,
+  importPreferences,
+  loadStoredPreferences,
+  resetPreferences,
+  savePreferences,
+} from "../../../shared/prefs.js";
 import {
   isExtensionPage,
   sendMessageToNyaaTabs,
@@ -6,11 +15,21 @@ import {
 import { getKeywordSearchUrl, setNyaaOriginFallback } from "../../../shared/urls.js";
 import { NE_DEFAULT_HIGHLIGHT_COLOR, checkMonitoredUsers, getHighlightRules, handleSettingChange, normalizeHighlightColor } from "../../internal.js";
 import { NAVBAR_VISIBILITY_TOGGLES } from "../../features/navbar/index.js";
-import { clearSimilarCaches, formatSimilarCacheBytes, getSimilarCacheUsage, isSimilarCacheKey } from "../../features/similar/cache.js";
+import { clearSimilarCaches, formatSimilarCacheBytes, getBytesInUse, getSimilarCacheUsage, isSimilarCacheKey } from "../../features/similar/cache.js";
+import { XEM_ALL_NAMES_STORAGE_KEYS, clearXemNameCache } from "../../features/quick-search/index.js";
+import {
+  CLOUD_SYNC_CHECK_OPTIONS,
+  CLOUD_SYNC_STATE_KEY,
+  cloudSyncErrorMessage,
+  normalizeCloudSyncCheckMinutes,
+  validateWebdavUrl,
+} from "../../../shared/webdav.js";
 import {
   HISTORY_MAX_EVENTS_MAX,
   HISTORY_MAX_EVENTS_MIN,
   clearHistory,
+  importHistoryState,
+  loadHistoryState,
   neNormalizeHistoryMaxEvents,
 } from "../../features/history/store.js";
 
@@ -21,6 +40,7 @@ export const NE_SETTINGS_NAV_SECTIONS = [
   { id: "ne-settings-interface", label: "Interface" },
   { id: "ne-settings-navbar", label: "Navbar" },
   { id: "ne-settings-filters", label: "Filters" },
+  { id: "ne-settings-quicksearch", label: "Quick Search" },
   { id: "ne-settings-autoload", label: "Auto-load" },
   { id: "ne-settings-history", label: "History" },
   { id: "ne-settings-view", label: "View Page" },
@@ -33,6 +53,9 @@ export const NE_SETTINGS_NAV_SECTIONS = [
   { id: "ne-settings-features", label: "Additional Features" },
   { id: "ne-settings-highlights", label: "Highlights" },
   { id: "ne-settings-qbt", label: "qBittorrent" },
+  { id: "ne-settings-cloud", label: "Cloud Sync" },
+  { id: "ne-settings-cache", label: "Cache" },
+  { id: "ne-settings-backup", label: "Backup & Reset" },
 ];
 
 export function neSettingsCreateToggleRow(settingKey, label, hint = "", dependsOn = null) {
@@ -176,7 +199,7 @@ export function neSettingsUpdateAmeNZBQuota(prefs) {
 }
 
 export function neSettingsWireToggles() {
-  document.querySelectorAll(".ne-settings-page .ne-settings-toggle").forEach((toggle) => {
+  document.querySelectorAll(".ne-settings-page .ne-settings-toggle[data-setting]").forEach((toggle) => {
     toggle.addEventListener("click", async () => {
       if (toggle.disabled) return;
       const settingKey = toggle.dataset.setting;
@@ -320,41 +343,101 @@ export function neSettingsWireSearch() {
   });
 }
 
+// The highlighted nav link follows the section under a reading line near the
+// top of the window. After a nav click it stays on the clicked section until
+// the user scrolls themselves (sections near the bottom can't always reach
+// the top, and the smooth scroll passes other sections on the way).
+const NE_SETTINGS_NAV_READING_LINE = 0.25;
+const NE_SETTINGS_NAV_SCROLL_SETTLE_MS = 150;
+
 export function neSettingsWireNav() {
-  const navLinks = document.querySelectorAll(".ne-settings-nav__link");
+  const navLinks = [...document.querySelectorAll(".ne-settings-nav__link")];
+  if (!navLinks.length) return;
+
+  let clickedTarget = "";
+  let autoScrolling = false;
+  let settleTimer = 0;
+  let frame = 0;
+
+  const setActive = (id) => {
+    navLinks.forEach((link) => {
+      link.classList.toggle("is-active", link.dataset.target === id);
+    });
+  };
+
+  const visibleSections = () =>
+    NE_SETTINGS_NAV_SECTIONS.map((item) => document.getElementById(item.id)).filter(
+      (section) =>
+        section &&
+        !section.hidden &&
+        !section.classList.contains("ne-settings-search-hidden") &&
+        section.getClientRects().length > 0,
+    );
+
+  const updateFromScroll = () => {
+    frame = 0;
+    if (clickedTarget) return;
+    const sections = visibleSections();
+    if (!sections.length) return;
+    const line = window.innerHeight * NE_SETTINGS_NAV_READING_LINE;
+    let current = sections[0];
+    for (const section of sections) {
+      if (section.getBoundingClientRect().top > line) break;
+      current = section;
+    }
+    setActive(current.id);
+  };
+
+  // Ends the "clicked" state once the click's own smooth scroll has stopped
+  // and the user scrolls again.
+  const onScroll = () => {
+    if (autoScrolling) {
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        autoScrolling = false;
+      }, NE_SETTINGS_NAV_SCROLL_SETTLE_MS);
+      return;
+    }
+    clickedTarget = "";
+    if (!frame) frame = requestAnimationFrame(updateFromScroll);
+  };
+
   navLinks.forEach((link) => {
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      const targetId = link.dataset.target;
-      const section = document.getElementById(targetId);
-      if (section) {
-        section.scrollIntoView({ behavior: "smooth", block: "start" });
-        navLinks.forEach((l) => l.classList.remove("is-active"));
-        link.classList.add("is-active");
-      }
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      const section = document.getElementById(link.dataset.target);
+      if (!section) return;
+      clickedTarget = link.dataset.target;
+      autoScrolling = true;
+      setActive(clickedTarget);
+      // If the page doesn't need to move, no scroll events arrive at all.
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        autoScrolling = false;
+      }, NE_SETTINGS_NAV_SCROLL_SETTLE_MS * 3);
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
 
-  const sections = NE_SETTINGS_NAV_SECTIONS.map((s) =>
-    document.getElementById(s.id),
-  ).filter(Boolean);
+  // Scrolling by hand during the click's smooth scroll takes over at once.
+  const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+  const userTookOver = () => {
+    autoScrolling = false;
+    clearTimeout(settleTimer);
+  };
+  window.addEventListener("wheel", userTookOver, { passive: true });
+  window.addEventListener("touchmove", userTookOver, { passive: true });
+  window.addEventListener("keydown", (event) => {
+    if (SCROLL_KEYS.has(event.key) && !event.target.closest?.("input, textarea, select")) {
+      userTookOver();
+    }
+  });
 
-  if (!sections.length) return;
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      const visible = entries
-        .filter((e) => e.isIntersecting)
-        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-      if (!visible) return;
-      navLinks.forEach((l) => {
-        l.classList.toggle("is-active", l.dataset.target === visible.target.id);
-      });
-    },
-    { rootMargin: "-20% 0px -60% 0px", threshold: [0, 0.25, 0.5] },
-  );
-
-  sections.forEach((section) => observer.observe(section));
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", () => {
+    if (!frame) frame = requestAnimationFrame(updateFromScroll);
+  });
+  updateFromScroll();
 }
 
 export async function neSettingsLoadValues() {
@@ -368,6 +451,7 @@ export async function neSettingsLoadValues() {
     showMagnetButtons: prefs.showMagnetButtons,
     showSendButtons: prefs.showSendButtons,
     showMonitorButtons: prefs.showMonitorButtons,
+    showScrollToTop: prefs.showScrollToTop !== false,
     showFilterNotifications: prefs.showFilterNotifications,
     showFiltersPanel: prefs.showFiltersPanel !== false,
     showAutoLoad: prefs.showAutoLoad !== false,
@@ -407,6 +491,9 @@ export async function neSettingsLoadValues() {
     showNavbarAccount: prefs.showNavbarAccount !== false,
     historyEnabled: !!prefs.historyEnabled,
     qbtPromptOnSend: prefs.qbtPromptOnSend !== false,
+    cloudSyncEnabled: !!prefs.cloudSyncEnabled,
+    cloudSyncIncludeCredentials: !!prefs.cloudSyncIncludeCredentials,
+    cloudSyncIncludeHistory: !!prefs.cloudSyncIncludeHistory,
   };
 
   Object.entries(boolSettings).forEach(([key, value]) => {
@@ -430,6 +517,11 @@ export async function neSettingsLoadValues() {
     historyMaxInput.value = String(
       neNormalizeHistoryMaxEvents(prefs.historyMaxEvents),
     );
+  }
+  const animeProvider = document.getElementById("ne-quicksearch-provider");
+  if (animeProvider) {
+    animeProvider.value =
+      prefs.quickSearchAnimeProvider === "tmdb" ? "tmdb" : "tenrai";
   }
   const showMoreUntil = document.getElementById("ne-show-more-until-visible");
   if (showMoreUntil) {
@@ -1542,6 +1634,18 @@ export function neSettingsWireShowMoreSection() {
     });
 }
 
+export function neSettingsWireQuickSearchSection() {
+  const select = document.getElementById("ne-quicksearch-provider");
+  select?.addEventListener("change", async () => {
+    const value = select.value === "tmdb" ? "tmdb" : "tenrai";
+    const saved = await neSettingsSave("quickSearchAnimeProvider", value);
+    if (!saved) {
+      const prefs = await loadStoredPreferences();
+      select.value = prefs.quickSearchAnimeProvider === "tmdb" ? "tmdb" : "tenrai";
+    }
+  });
+}
+
 export function neSettingsWireHistorySection() {
   const input = document.getElementById("ne-history-max-events");
   const commitCap = async () => {
@@ -1567,6 +1671,755 @@ export function neSettingsWireHistorySection() {
       if (status) status.textContent = "Couldn't clear history.";
     } finally {
       button.disabled = false;
+    }
+  });
+}
+
+// ── Cloud Sync ──────────────────────────────────────────────────────────────
+
+const NE_CLOUD_WATCHED_KEYS = new Set([
+  CLOUD_SYNC_STATE_KEY,
+  "cloudSyncEnabled",
+  "cloudSyncUrl",
+  "cloudSyncIncludeCredentials",
+  "cloudSyncIncludeHistory",
+  "webdavUsername",
+  "webdavPassword",
+  "cloudSyncCheckMinutes",
+]);
+
+function neCloudTimeAgo(ms) {
+  if (!ms) return "Never";
+  const diff = Date.now() - ms;
+  if (diff < 45_000) return "Just now";
+  const mins = Math.round(diff / 60_000);
+  if (mins < 60) return `${mins} min${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  return new Date(ms).toLocaleString();
+}
+
+function neCloudSetCheck(el, kind, text) {
+  if (!el) return;
+  el.className = `ne-cloud-check ne-cloud-check--${kind}`;
+  el.textContent = text || "";
+  el.hidden = !text;
+}
+
+function neCloudRenderUrlCheck(value) {
+  const el = document.getElementById("ne-cloud-url-check");
+  const result = validateWebdavUrl(value);
+  if (result.empty) neCloudSetCheck(el, "info", "");
+  else if (!result.ok) neCloudSetCheck(el, "error", result.message);
+  else if (result.warnings.length) neCloudSetCheck(el, "warn", result.warnings.join(" "));
+  else neCloudSetCheck(el, "ok", "The address looks valid. Press Test connection to check it with your login.");
+  return result;
+}
+
+async function neCloudSend(message) {
+  try {
+    const result = await browser.runtime.sendMessage(message);
+    if (result) return result;
+  } catch {
+    /* handled below */
+  }
+  return {
+    ok: false,
+    code: "unknown",
+    message: "The extension didn't answer. Reload this page and try again.",
+  };
+}
+
+function neCloudStatusRow(list, label, value, kind = "") {
+  const term = document.createElement("dt");
+  term.textContent = label;
+  const detail = document.createElement("dd");
+  detail.textContent = value;
+  if (kind) detail.className = `ne-cloud-status__value--${kind}`;
+  list.append(term, detail);
+}
+
+async function neCloudRenderStatus(given) {
+  const status = given || (await neCloudSend({ type: "cloudSyncStatus" }));
+  const account = document.getElementById("ne-cloud-account");
+  const list = document.getElementById("ne-cloud-status");
+  if (!account || !list || status.ok === false) return;
+
+  if (!status.hasCredentials) {
+    neCloudSetCheck(
+      account,
+      "warn",
+      "No WebDAV login in this browser yet. Add it in the extension popup → Settings → Cloud Sync (WebDAV).",
+    );
+  } else if (status.url && !status.hasPermission) {
+    neCloudSetCheck(
+      account,
+      "warn",
+      `Logged in as ${status.username}, but your browser hasn't allowed access to this server yet. Press Connect in the extension popup.`,
+    );
+  } else {
+    neCloudSetCheck(account, "info", `Login: ${status.username} (change it in the extension popup).`);
+  }
+
+  list.replaceChildren();
+  let state = "Off";
+  let kind = "muted";
+  if (status.enabled) {
+    if (status.lastError?.code === "auth_failed") {
+      state = "Paused: the server rejected the login";
+      kind = "error";
+    } else if (status.pausedUntil > Date.now()) {
+      const until = new Date(status.pausedUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      state = `Paused until about ${until} (server refusing requests)`;
+      kind = "error";
+    } else if (status.lastError) {
+      state = "On, but the last sync failed";
+      kind = "error";
+    } else if (status.pending) {
+      state = `On, ${status.pending} change${status.pending === 1 ? "" : "s"} waiting to upload`;
+      kind = "warn";
+    } else if (status.lastSyncAt) {
+      state = "On, up to date";
+      kind = "ok";
+    } else {
+      state = "On, waiting for the first sync";
+      kind = "warn";
+    }
+  }
+  neCloudStatusRow(list, "Sync", state, kind);
+  if (status.enabled) {
+    const option = CLOUD_SYNC_CHECK_OPTIONS.find((item) => item.value === status.checkMinutes);
+    neCloudStatusRow(
+      list,
+      "Checks",
+      option ? option.label.replace(" (default)", "") : "Every 5 minutes",
+    );
+  }
+  if (status.lastError) {
+    neCloudStatusRow(
+      list,
+      "Problem",
+      `${status.lastError.message} (${neCloudTimeAgo(status.lastError.at).toLowerCase()})`,
+      "error",
+    );
+  }
+  neCloudStatusRow(list, "Last synced", neCloudTimeAgo(status.lastSyncAt));
+  neCloudStatusRow(
+    list,
+    "Cloud copy",
+    status.lastRemoteUpdatedAt
+      ? `Updated ${neCloudTimeAgo(status.lastRemoteUpdatedAt).toLowerCase()}${status.lastRemoteDevice ? ` by ${status.lastRemoteDevice}` : ""}`
+      : "Not found yet",
+  );
+  neCloudStatusRow(list, "This browser", status.deviceName || "Unknown");
+
+  ["ne-cloud-sync-now", "ne-cloud-upload", "ne-cloud-download"].forEach((id) => {
+    const button = document.getElementById(id);
+    if (button && !button.dataset.busy) button.disabled = !status.enabled;
+  });
+}
+
+function neCloudDescribeTest(result) {
+  if (!result.ok) return ["error", result.message || cloudSyncErrorMessage(result.code)];
+  if (!result.remote) {
+    return ["ok", "Connected. There's no cloud copy yet, so this browser's settings will be uploaded when you turn sync on."];
+  }
+  if (!result.remote.valid) {
+    return ["warn", "Connected, but the settings.json in the nyaa-enhancer folder isn't a valid Nyaa Enhancer file."];
+  }
+  const from = result.remote.device ? ` by ${result.remote.device}` : "";
+  return [
+    "ok",
+    `Connected. Found a cloud copy updated ${neCloudTimeAgo(result.remote.updatedAt).toLowerCase()}${from}. Turning sync on in this browser will use it.`,
+  ];
+}
+
+async function neCloudRunAction(button, message, busyText, doneText) {
+  const status = document.getElementById("ne-cloud-action-status");
+  button.disabled = true;
+  button.dataset.busy = "1";
+  if (status) status.textContent = busyText;
+  const result = await neCloudSend(message);
+  delete button.dataset.busy;
+  button.disabled = false;
+  if (result.ok) neSettingsShowFadingStatus(status, doneText);
+  else if (status) status.textContent = result.message || cloudSyncErrorMessage(result.code);
+  await neCloudRenderStatus();
+}
+
+export function neSettingsWireCloudSyncSection() {
+  const input = document.getElementById("ne-cloud-url");
+  if (!input) return;
+
+  const interval = document.getElementById("ne-cloud-check-interval");
+  loadStoredPreferences().then((prefs) => {
+    if (document.activeElement !== input) input.value = prefs.cloudSyncUrl || "";
+    neCloudRenderUrlCheck(input.value);
+    if (interval) {
+      interval.value = String(normalizeCloudSyncCheckMinutes(prefs.cloudSyncCheckMinutes));
+    }
+  });
+  interval?.addEventListener("change", () => {
+    neSettingsSave("cloudSyncCheckMinutes", normalizeCloudSyncCheckMinutes(interval.value));
+  });
+
+  input.addEventListener("input", () => {
+    neCloudRenderUrlCheck(input.value);
+    neCloudSetCheck(document.getElementById("ne-cloud-test-result"), "info", "");
+  });
+  input.addEventListener("change", async () => {
+    const result = neCloudRenderUrlCheck(input.value);
+    if (!result.ok && !result.empty) return;
+    const value = result.ok ? result.url : "";
+    input.value = value;
+    await neSettingsSave("cloudSyncUrl", value);
+  });
+
+  const testButton = document.getElementById("ne-cloud-test");
+  testButton?.addEventListener("click", async () => {
+    const resultEl = document.getElementById("ne-cloud-test-result");
+    const address = neCloudRenderUrlCheck(input.value);
+    if (!address.ok) {
+      neCloudSetCheck(resultEl, "error", address.empty ? "Enter your WebDAV folder address first." : address.message);
+      return;
+    }
+    testButton.disabled = true;
+    neCloudSetCheck(resultEl, "info", "Checking the connection…");
+    if (input.value !== address.url) input.value = address.url;
+    const prefs = await loadStoredPreferences();
+    if (prefs.cloudSyncUrl !== address.url) await neSettingsSave("cloudSyncUrl", address.url);
+    const result = await neCloudSend({ type: "cloudSyncTest", url: address.url });
+    testButton.disabled = false;
+    const [kind, text] = neCloudDescribeTest(result);
+    neCloudSetCheck(resultEl, kind, text);
+    await neCloudRenderStatus();
+  });
+
+  const syncNow = document.getElementById("ne-cloud-sync-now");
+  syncNow?.addEventListener("click", () =>
+    neCloudRunAction(syncNow, { type: "cloudSyncNow" }, "Syncing…", "Synced."),
+  );
+
+  const upload = document.getElementById("ne-cloud-upload");
+  upload?.addEventListener("click", async () => {
+    const confirmed = await neSettingsConfirmModal({
+      title: "Replace the cloud copy?",
+      paragraphs: ["The cloud copy is overwritten with this browser's settings. Your other browsers take them on their next sync."],
+      notes: ["Use this if the cloud copy is broken or you want this browser to be the one everything follows."],
+      confirmLabel: "Replace cloud copy",
+      danger: true,
+    });
+    if (confirmed) {
+      neCloudRunAction(upload, { type: "cloudSyncUpload" }, "Uploading…", "Cloud copy replaced.");
+    }
+  });
+
+  const download = document.getElementById("ne-cloud-download");
+  download?.addEventListener("click", async () => {
+    const confirmed = await neSettingsConfirmModal({
+      title: "Replace this browser's settings?",
+      paragraphs: ["This browser's settings are overwritten with the cloud copy, including changes that haven't been uploaded yet."],
+      notes: ["This can't be undone. Export your settings first if you want a backup."],
+      confirmLabel: "Replace this browser",
+      danger: true,
+    });
+    if (confirmed) {
+      neCloudRunAction(download, { type: "cloudSyncDownload" }, "Downloading…", "Settings replaced with the cloud copy.");
+    }
+  });
+
+  let renderTimer = 0;
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" && area !== "sync") return;
+    if (!document.getElementById("ne-cloud-status")) return;
+    if (changes.cloudSyncCheckMinutes && interval) {
+      interval.value = String(normalizeCloudSyncCheckMinutes(changes.cloudSyncCheckMinutes.newValue));
+    }
+    if (changes.cloudSyncUrl && document.activeElement !== input) {
+      input.value = changes.cloudSyncUrl.newValue || "";
+      neCloudRenderUrlCheck(input.value);
+    }
+    if (!Object.keys(changes).some((key) => NE_CLOUD_WATCHED_KEYS.has(key))) return;
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(() => neCloudRenderStatus(), 150);
+  });
+
+  // Keep the "x minutes ago" times fresh while the page is open.
+  setInterval(() => {
+    if (document.getElementById("ne-cloud-status") && !document.hidden) neCloudRenderStatus();
+  }, 30_000);
+
+  // Opening Settings also checks the cloud for changes from other browsers.
+  neCloudSend({ type: "cloudSyncWake" }).then((status) => neCloudRenderStatus(status));
+}
+
+function neSettingsIsCacheKey(key) {
+  return isSimilarCacheKey(key) || XEM_ALL_NAMES_STORAGE_KEYS.includes(key);
+}
+
+export function neSettingsWireCacheSection() {
+  const button = document.getElementById("ne-cache-clear-all");
+  const status = document.getElementById("ne-cache-clear-all-status");
+  if (!button) return;
+
+  const canMeasure = typeof browser.storage?.local?.getBytesInUse === "function";
+  const renderUsage = async () => {
+    if (!canMeasure) return;
+    const [similar, xem] = await Promise.all([
+      getSimilarCacheUsage().then((usage) => usage.total),
+      getBytesInUse(XEM_ALL_NAMES_STORAGE_KEYS),
+    ]);
+    const sizes = { similar, xem, total: similar + xem };
+    document
+      .querySelectorAll("#ne-settings-cache [data-cache-size]")
+      .forEach((el) => {
+        const bytes = formatSimilarCacheBytes(sizes[el.dataset.cacheSize]);
+        el.textContent = el.dataset.cacheSize === "total" ? `${bytes} in total` : bytes;
+        el.hidden = false;
+      });
+  };
+
+  renderUsage().catch(() => {});
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (!Object.keys(changes || {}).some(neSettingsIsCacheKey)) return;
+    if (!document.getElementById("ne-settings-cache")) return;
+    renderUsage().catch(() => {});
+  });
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    if (status) status.textContent = "Clearing…";
+    try {
+      await Promise.all([clearSimilarCaches(), clearXemNameCache()]);
+      await renderUsage().catch(() => {});
+      if (status) status.textContent = "All cache cleared.";
+    } catch (error) {
+      console.error("[Nyaa Enhancer] Failed to clear cache.", error);
+      if (status) status.textContent = "Couldn't clear the cache.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
+const NE_BACKUP_MAX_FILE_BYTES = 20 * 1024 * 1024;
+
+function neSettingsBackupReloadSoon() {
+  setTimeout(() => window.location.reload(), 1200);
+}
+
+async function neSettingsExportBackup() {
+  const includeCredentials = document.getElementById("ne-backup-export-credentials")?.getAttribute("aria-checked") === "true";
+  const includeHistory = document.getElementById("ne-backup-export-history")?.getAttribute("aria-checked") === "true";
+  const backup = {
+    format: PREFS_EXPORT_FORMAT,
+    version: PREFS_EXPORT_VERSION,
+    extensionVersion: browser.runtime.getManifest().version,
+    exportedAt: new Date().toISOString(),
+    includesCredentials: includeCredentials,
+    settings: await exportPreferences({ includeCredentials, includeCloudSetup: true }),
+  };
+  if (includeHistory) backup.history = await loadHistoryState();
+
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {
+    type: "application/json",
+  });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `nyaa-enhancer-settings-${backup.exportedAt.slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  return backup;
+}
+
+function neSettingsParseBackup(text) {
+  let backup;
+  try {
+    backup = JSON.parse(text);
+  } catch {
+    throw new Error("The file isn't valid JSON.");
+  }
+  if (backup?.format !== PREFS_EXPORT_FORMAT || !backup.settings) {
+    throw new Error("This isn't a Nyaa Enhancer settings file.");
+  }
+  if (!Number.isInteger(backup.version) || backup.version > PREFS_EXPORT_VERSION) {
+    throw new Error("This file was made by a newer version of Nyaa Enhancer. Update the extension and try again.");
+  }
+  return backup;
+}
+
+function neSettingsBackupToggleOn(id) {
+  return document.getElementById(id)?.getAttribute("aria-checked") === "true";
+}
+
+// What importing the picked file will do with the current import toggles.
+function neSettingsDescribeBackupImport(backup) {
+  const includeCredentials = neSettingsBackupToggleOn("ne-backup-import-credentials");
+  const includeHistory = neSettingsBackupToggleOn("ne-backup-import-history");
+  const exported = Date.parse(backup.exportedAt);
+  const lines = [
+    `Exported ${Number.isFinite(exported) ? new Date(exported).toLocaleString() : "at an unknown time"}${backup.extensionVersion ? ` from version ${backup.extensionVersion}` : ""}.`,
+    "Settings in the file replace your current ones.",
+  ];
+  if (backup.includesCredentials) {
+    lines.push(
+      includeCredentials
+        ? "Passwords and API keys in the file replace your current ones."
+        : "Passwords and API keys in the file are skipped (Import credentials is off).",
+    );
+  }
+  if (backup.history) {
+    const count = Array.isArray(backup.history.e) ? backup.history.e.length : 0;
+    lines.push(
+      includeHistory
+        ? `Your History log is replaced with ${count.toLocaleString()} entries from the file.`
+        : "History in the file is skipped (Import history is off).",
+    );
+  }
+  return lines;
+}
+
+async function neSettingsReadBackupFile(file) {
+  if (file.size > NE_BACKUP_MAX_FILE_BYTES) {
+    throw new Error("The file is too large to be a settings export.");
+  }
+  return neSettingsParseBackup(await file.text());
+}
+
+async function neSettingsApplyBackup(backup, status) {
+  const includeCredentials = neSettingsBackupToggleOn("ne-backup-import-credentials");
+  const includeHistory = neSettingsBackupToggleOn("ne-backup-import-history");
+
+  if (status) status.textContent = "Importing…";
+  const { applied, skipped } = await importPreferences(backup.settings, {
+    includeCredentials,
+    includeCloudSetup: true,
+  });
+  if (skipped.length) {
+    console.warn("[Nyaa Enhancer] Skipped unknown or invalid settings during import:", skipped);
+  }
+
+  let historyNote = "";
+  if (backup.history && includeHistory) {
+    const prefs = await loadStoredPreferences();
+    const kept = await importHistoryState(backup.history, prefs.historyMaxEvents);
+    historyNote = ` and ${kept.toLocaleString()} history entries`;
+  }
+
+  if (status) {
+    status.textContent = `Imported ${applied} settings${historyNote}${skipped.length ? ` (skipped ${skipped.length})` : ""}. Reloading…`;
+  }
+  neSettingsBackupReloadSoon();
+}
+
+// Nyaa's Bootstrap styles show input[type="file"] even when it is [hidden],
+// so the picker only exists while a file is being chosen.
+function neSettingsPickJsonFile() {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.style.setProperty("display", "none", "important");
+    const finish = (file) => {
+      input.remove();
+      resolve(file || null);
+    };
+    input.addEventListener("change", () => finish(input.files?.[0]), { once: true });
+    input.addEventListener("cancel", () => finish(null), { once: true });
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+const NE_STATUS_FADE_MS = 600;
+const neSettingsStatusFadeTimers = new WeakMap();
+
+// Shows a status message that fades out after delayMs, unless something else
+// has replaced it by then.
+function neSettingsShowFadingStatus(el, text, delayMs = 5_000) {
+  if (!el) return;
+  clearTimeout(neSettingsStatusFadeTimers.get(el));
+  el.classList.remove("is-fading");
+  el.textContent = text;
+  neSettingsStatusFadeTimers.set(
+    el,
+    setTimeout(() => {
+      if (el.textContent !== text) return;
+      el.classList.add("is-fading");
+      neSettingsStatusFadeTimers.set(
+        el,
+        setTimeout(() => {
+          if (el.textContent === text) el.textContent = "";
+          el.classList.remove("is-fading");
+        }, NE_STATUS_FADE_MS),
+      );
+    }, delayMs),
+  );
+}
+
+function neSettingsSetButtonContent(button, iconClass, label) {
+  const icon = document.createElement("i");
+  icon.className = `fa ${iconClass}`;
+  icon.setAttribute("aria-hidden", "true");
+  button.replaceChildren(icon, ` ${label}`);
+}
+
+function neSettingsCloseConfirmModal(overlay) {
+  if (!overlay || overlay.classList.contains("hiding")) return;
+  overlay.classList.add("hiding");
+  overlay.querySelector(".qbt-modal")?.classList.add("hiding");
+  overlay.addEventListener("animationend", (event) => {
+    if (event.target === overlay) overlay.remove();
+  });
+  // Fallback for when animations are disabled and animationend never fires.
+  setTimeout(() => overlay.remove(), 500);
+}
+
+// Themed replacement for window.confirm, built on the extension's dialog
+// styles. Resolves true only when the confirm button is pressed.
+export function neSettingsConfirmModal({
+  title,
+  paragraphs = [],
+  items = [],
+  notes = [],
+  confirmLabel = "Confirm",
+  danger = false,
+}) {
+  document.getElementById("neSettingsConfirmOverlay")?.remove();
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "qbt-modal-overlay";
+    overlay.id = "neSettingsConfirmOverlay";
+
+    const modal = document.createElement("div");
+    modal.className = "qbt-modal ne-settings-modal";
+    modal.setAttribute("role", "alertdialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "neSettingsConfirmTitle");
+
+    const header = document.createElement("div");
+    header.className = "qbt-modal-header";
+    const heading = document.createElement("h3");
+    heading.id = "neSettingsConfirmTitle";
+    heading.textContent = title;
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "qbt-modal-close";
+    closeBtn.setAttribute("aria-label", "Close");
+    closeBtn.textContent = "×";
+    header.append(heading, closeBtn);
+
+    const body = document.createElement("div");
+    body.className = "qbt-modal-body";
+    paragraphs.forEach((text) => {
+      const p = document.createElement("p");
+      p.className = "ne-settings-modal__text";
+      p.textContent = text;
+      body.appendChild(p);
+    });
+    if (items.length) {
+      const list = document.createElement("ul");
+      list.className = "ne-settings-modal__list";
+      items.forEach((text) => {
+        const li = document.createElement("li");
+        li.textContent = text;
+        list.appendChild(li);
+      });
+      body.appendChild(list);
+    }
+    notes.forEach((text) => {
+      const p = document.createElement("p");
+      p.className = "ne-settings-modal__note";
+      p.textContent = text;
+      body.appendChild(p);
+    });
+
+    const footer = document.createElement("div");
+    footer.className = "qbt-modal-footer";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "qbt-modal-btn qbt-modal-btn-cancel";
+    cancelBtn.textContent = "Cancel";
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = `qbt-modal-btn qbt-modal-btn-confirm${danger ? " ne-settings-modal__btn--danger" : ""}`;
+    confirmBtn.textContent = confirmLabel;
+    footer.append(cancelBtn, confirmBtn);
+
+    modal.append(header, body, footer);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        finish(false);
+      }
+    };
+    const finish = (confirmed) => {
+      document.removeEventListener("keydown", onKey, true);
+      neSettingsCloseConfirmModal(overlay);
+      resolve(confirmed);
+    };
+    closeBtn.addEventListener("click", () => finish(false));
+    cancelBtn.addEventListener("click", () => finish(false));
+    confirmBtn.addEventListener("click", () => finish(true));
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) finish(false);
+    });
+    document.addEventListener("keydown", onKey, true);
+    cancelBtn.focus();
+  });
+}
+
+export function neSettingsWireBackupSection() {
+  const importBtn = document.getElementById("ne-backup-import");
+  const importCancelBtn = document.getElementById("ne-backup-import-cancel");
+  const importStatus = document.getElementById("ne-backup-import-status");
+  const pendingEl = document.getElementById("ne-backup-import-pending");
+  let pending = null;
+
+  const renderPending = () => {
+    if (!importBtn) return;
+    if (!pending) {
+      if (pendingEl) pendingEl.hidden = true;
+      if (importCancelBtn) importCancelBtn.hidden = true;
+      importBtn.classList.replace("ne-settings-btn--primary", "ne-settings-btn--secondary");
+      neSettingsSetButtonContent(importBtn, "fa-upload", "Import settings…");
+      return;
+    }
+    const name = pending.file.name.length > 40
+      ? `${pending.file.name.slice(0, 37)}…`
+      : pending.file.name;
+    if (pendingEl) {
+      const title = pendingEl.querySelector("[data-pending-file]");
+      const list = pendingEl.querySelector("[data-pending-lines]");
+      if (title) title.textContent = pending.file.name;
+      list?.replaceChildren(
+        ...neSettingsDescribeBackupImport(pending.backup).map((line) => {
+          const li = document.createElement("li");
+          li.textContent = line;
+          return li;
+        }),
+      );
+      pendingEl.hidden = false;
+    }
+    if (importCancelBtn) importCancelBtn.hidden = false;
+    importBtn.classList.replace("ne-settings-btn--secondary", "ne-settings-btn--primary");
+    neSettingsSetButtonContent(importBtn, "fa-check", `Import “${name}”`);
+  };
+
+  // Per-action options, not saved preferences.
+  document
+    .querySelectorAll("#ne-settings-backup .ne-settings-toggle")
+    .forEach((toggle) => {
+      toggle.addEventListener("click", () => {
+        neSettingsSyncToggleVisual(
+          toggle,
+          toggle.getAttribute("aria-checked") !== "true",
+        );
+        if (pending && toggle.id.startsWith("ne-backup-import-")) renderPending();
+      });
+    });
+
+  const exportBtn = document.getElementById("ne-backup-export");
+  const exportStatus = document.getElementById("ne-backup-export-status");
+  exportBtn?.addEventListener("click", async () => {
+    exportBtn.disabled = true;
+    try {
+      const backup = await neSettingsExportBackup();
+      if (exportStatus) {
+        exportStatus.textContent = backup.includesCredentials
+          ? "Exported, including credentials. Keep this file private."
+          : "Exported.";
+      }
+    } catch (error) {
+      console.error("[Nyaa Enhancer] Settings export failed.", error);
+      if (exportStatus) exportStatus.textContent = "Couldn't export settings.";
+    } finally {
+      exportBtn.disabled = false;
+    }
+  });
+
+  // The first press picks a file and shows what it contains; the next press
+  // imports it straight away.
+  importBtn?.addEventListener("click", async () => {
+    if (importBtn.disabled) return;
+    importBtn.disabled = true;
+    try {
+      if (!pending) {
+        const file = await neSettingsPickJsonFile();
+        if (!file) return;
+        if (importStatus) importStatus.textContent = "";
+        pending = { file, backup: await neSettingsReadBackupFile(file) };
+        renderPending();
+        return;
+      }
+      if (importCancelBtn) importCancelBtn.disabled = true;
+      await neSettingsApplyBackup(pending.backup, importStatus);
+    } catch (error) {
+      console.error("[Nyaa Enhancer] Settings import failed.", error);
+      if (importStatus) importStatus.textContent = error?.message || "Couldn't import settings.";
+      if (importCancelBtn) importCancelBtn.disabled = false;
+    } finally {
+      importBtn.disabled = false;
+    }
+  });
+
+  importCancelBtn?.addEventListener("click", () => {
+    pending = null;
+    renderPending();
+    neSettingsShowFadingStatus(importStatus, "Import cancelled.");
+  });
+
+  const resetBtn = document.getElementById("ne-backup-reset");
+  const resetStatus = document.getElementById("ne-backup-reset-status");
+  resetBtn?.addEventListener("click", async () => {
+    const clearCredentials = neSettingsBackupToggleOn("ne-backup-reset-credentials");
+    const { cloudSyncEnabled } = await loadStoredPreferences();
+    const confirmed = await neSettingsConfirmModal({
+      title: "Reset all settings?",
+      paragraphs: [
+        "Every Nyaa Enhancer setting goes back to its default, and this is cleared:",
+      ],
+      items: [
+        "Filters and filter presets",
+        "Highlights",
+        "Monitored users and keywords",
+        "qBittorrent categories and tags",
+        ...(clearCredentials
+          ? ["Torrent client connection, passwords, API keys, and the Cloud Sync (WebDAV) login"]
+          : []),
+      ],
+      notes: [
+        clearCredentials
+          ? "History and caches are kept."
+          : "Your torrent client connection, passwords, API keys, history, and caches are kept.",
+        ...(cloudSyncEnabled
+          ? ["Cloud sync is on, so your other synced browsers are reset too. Your Cloud Sync setup itself is kept."]
+          : []),
+        "This can't be undone. Export your settings first if you want a backup.",
+      ],
+      confirmLabel: "Reset settings",
+      danger: true,
+    });
+    if (!confirmed) {
+      neSettingsShowFadingStatus(resetStatus, "Reset cancelled.");
+      return;
+    }
+    resetBtn.disabled = true;
+    if (resetStatus) resetStatus.textContent = "Resetting…";
+    try {
+      await resetPreferences({ clearCredentials });
+      if (resetStatus) resetStatus.textContent = "Settings reset. Reloading…";
+      neSettingsBackupReloadSoon();
+    } catch (error) {
+      console.error("[Nyaa Enhancer] Settings reset failed.", error);
+      if (resetStatus) resetStatus.textContent = "Couldn't reset settings.";
+      resetBtn.disabled = false;
     }
   });
 }
@@ -1633,6 +2486,19 @@ export function neSettingsBuildPageHTML() {
           <p class="ne-settings-section__desc">Filter options for the torrent list. Active filters (dead torrents, minimum seeders, blocked/required keywords, file size, completed downloads, upload date, and history) and saved presets are configured in the Filters panel above the torrent table.</p>
           <div class="ne-settings-rows" id="ne-settings-filters-rows"></div>
         </section>
+        <section id="ne-settings-quicksearch" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-search" aria-hidden="true"></i> Quick Search</h2>
+          <p class="ne-settings-section__desc">Options for the Quick Search popup on the torrent list.</p>
+          <div class="ne-settings-field">
+            <label for="ne-quicksearch-provider">Anime title provider</label>
+            <select id="ne-quicksearch-provider">
+              <option value="tenrai">Tenrai (no API key needed)</option>
+              <option value="tmdb">TMDB (needs an API key)</option>
+            </select>
+          </div>
+          <p class="ne-settings-row__hint">Suggests titles and loads aliases as you type in the Anime Name field. If the chosen provider fails or finds nothing, the other one is tried. TMDB is only used when a TMDB API key is set in the extension popup.</p>
+          <p class="ne-settings-notice">Tenrai allows 120 requests per minute and 4 per second. All Tenrai requests from Quick Search and Similar Anime share one queue across every tab and stay below that limit.</p>
+        </section>
         <section id="ne-settings-autoload" class="ne-settings-section">
           <h2 class="ne-settings-section__title"><i class="fa fa-bolt" aria-hidden="true"></i> Auto-load</h2>
           <p class="ne-settings-section__desc">Load extra torrent pages in place until a visible-count target is reached. The Auto-load bar sits above the torrent table.</p>
@@ -1677,7 +2543,7 @@ export function neSettingsBuildPageHTML() {
               <span id="ne-history-clear-settings-status" class="ne-settings-status" role="status"></span>
             </div>
           </div>
-          <p class="ne-settings-notice">When History is off, nothing is logged. When it is on, all entries stay on this device in local storage. History is never synced, uploaded, or sent anywhere.</p>
+          <p class="ne-settings-notice">When History is off, nothing is logged. When it is on, entries are kept in this browser's local storage. History only leaves this browser if you turn on Include history under Cloud Sync, and then only to your own WebDAV server.</p>
         </section>
         <section id="ne-settings-view" class="ne-settings-section">
           <h2 class="ne-settings-section__title"><i class="fa fa-file-text-o" aria-hidden="true"></i> Torrent View Page</h2>
@@ -1807,7 +2673,7 @@ export function neSettingsBuildPageHTML() {
             <div class="ne-similar-cache-actions">
               <button type="button" id="ne-similar-clear-cache" class="ne-settings-btn ne-settings-btn--secondary">
                 <i class="fa fa-trash" aria-hidden="true"></i>
-                Clear Similar cache
+                Clear Similar Cache
               </button>
               <div class="ne-similar-cache-usage" id="ne-similar-cache-usage" aria-live="polite">
                 <span class="ne-similar-cache-usage__total" data-cache-total>0 B</span>
@@ -1905,6 +2771,190 @@ export function neSettingsBuildPageHTML() {
             <span id="ne-qbt-sync-status" class="ne-settings-status"></span>
           </div>
         </section>
+        <section id="ne-settings-cloud" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-cloud" aria-hidden="true"></i> Cloud Sync</h2>
+          <p class="ne-settings-section__desc">Keep your settings in your own WebDAV storage (Nextcloud, a Synology NAS, Koofr and others), so every browser you turn this on in stays in sync. Changes are uploaded a few seconds after you make them, and your other browsers pick them up while you use Nyaa there (you choose how often below), and right away when you open this Settings page.</p>
+          <details class="ne-settings-howto" id="ne-cloud-guide">
+            <summary>How to set it up</summary>
+            <ol>
+              <li><strong>Find your WebDAV folder address.</strong> Every service shows it somewhere different (see the examples below). It's the full address of a folder, not just the website.</li>
+              <li><strong>Create an app password</strong> if your service has them (Nextcloud: Personal settings → Security → Devices &amp; sessions → Create new app password). It's safer than your real password and works when two-factor login is on.</li>
+              <li><strong>Paste the address below</strong> and click away from the field. The check under it tells you if the address looks right.</li>
+              <li><strong>Open the extension popup</strong> (the Nyaa Enhancer icon in your toolbar) → Settings tab → <strong>Cloud Sync (WebDAV)</strong>. Enter your username and the app password, then press <strong>Connect</strong> and allow access when your browser asks.</li>
+              <li><strong>Come back here, press Test connection</strong>, and once it says it's connected, <strong>turn on Enable cloud sync</strong>.</li>
+              <li>Repeat steps 3–5 in each other browser. When you turn sync on in a browser, it takes the settings already in the cloud. If the cloud is still empty, that browser's settings are uploaded instead.</li>
+            </ol>
+            <p class="ne-cloud-guide__title">Where to find the address</p>
+            <ul class="ne-cloud-guide__list">
+              <li><strong>Nextcloud:</strong> open Files → <em>Files settings</em> (bottom left) and copy the WebDAV address. It looks like <code>https://cloud.example.com/remote.php/dav/files/USERNAME</code>.</li>
+              <li><strong>Synology NAS:</strong> install and turn on <em>WebDAV Server</em> in Package Center, then use <code>https://YOUR-NAS:5006/home</code> (or another shared folder).</li>
+              <li><strong>Koofr:</strong> <code>https://app.koofr.net/dav/Koofr</code>. Koofr has no usernames: use your Koofr account email as the username, and an app password (Preferences → Password) as the WebDAV password.</li>
+              <li><strong>Other services:</strong> look for "WebDAV" in your account or app settings. Any folder address that accepts WebDAV works.</li>
+            </ul>
+            <p class="ne-cloud-guide__note">Nyaa Enhancer creates a <code>nyaa-enhancer</code> folder there with one file, <code>settings.json</code>. It's the same format as Export below, so you can also import it by hand.</p>
+          </details>
+          <div class="ne-settings-rows" id="ne-settings-cloud-rows"></div>
+          <div class="ne-settings-subsection">
+            <div class="ne-settings-field">
+              <label for="ne-cloud-url">WebDAV folder address</label>
+              <div class="ne-settings-field__with-action">
+                <input type="url" id="ne-cloud-url" placeholder="https://cloud.example.com/remote.php/dav/files/USERNAME" autocomplete="off" spellcheck="false" />
+                <button type="button" class="ne-settings-btn ne-settings-btn--outline ne-settings-btn--small" id="ne-cloud-test">Test connection</button>
+              </div>
+            </div>
+            <p class="ne-cloud-check" id="ne-cloud-url-check" hidden></p>
+            <p class="ne-cloud-check" id="ne-cloud-test-result" role="status" hidden></p>
+            <div class="ne-cloud-account" id="ne-cloud-account"></div>
+          </div>
+          <div class="ne-settings-rows" id="ne-settings-cloud-options"></div>
+          <div class="ne-settings-subsection">
+            <div class="ne-settings-field">
+              <label for="ne-cloud-check-interval">Check for changes from other browsers</label>
+              <select id="ne-cloud-check-interval">
+                ${CLOUD_SYNC_CHECK_OPTIONS.map((option) => `<option value="${option.value}">${option.label}</option>`).join("")}
+              </select>
+            </div>
+            <p class="ne-settings-row__hint ne-cloud-interval-hint">Checks only happen while you're using Nyaa in this browser, and a check that finds nothing new is a tiny request. Your own changes are always uploaded a few seconds after you make them. This choice is just for this browser.</p>
+          </div>
+          <div class="ne-settings-subsection">
+            <p class="ne-settings-subsection__title">Status</p>
+            <dl class="ne-cloud-status" id="ne-cloud-status"></dl>
+            <div class="ne-similar-cache-actions">
+              <button type="button" id="ne-cloud-sync-now" class="ne-settings-btn ne-settings-btn--primary">
+                <i class="fa fa-refresh" aria-hidden="true"></i>
+                Sync now
+              </button>
+              <button type="button" id="ne-cloud-upload" class="ne-settings-btn ne-settings-btn--outline ne-settings-btn--small">Replace cloud copy with this browser</button>
+              <button type="button" id="ne-cloud-download" class="ne-settings-btn ne-settings-btn--outline ne-settings-btn--small">Replace this browser with cloud copy</button>
+              <span id="ne-cloud-action-status" class="ne-settings-status" role="status"></span>
+            </div>
+          </div>
+          <p class="ne-settings-notice">Your data only goes to the server you enter here. These Cloud Sync settings stay in this browser. The WebDAV login is only uploaded with Include credentials on, and it never replaces another browser's own login. Use https:// addresses so your password and settings are encrypted on the way.</p>
+        </section>
+        <section id="ne-settings-cache" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-hdd-o" aria-hidden="true"></i> Cache</h2>
+          <p class="ne-settings-section__desc">Results stored on this device so the extension doesn't ask the same APIs again. Clearing is safe: anything removed is fetched again the next time it's needed.</p>
+          <div class="ne-settings-rows">
+            <div class="ne-settings-row">
+              <div class="ne-settings-row__info">
+                <span class="ne-settings-row__label">Similar Anime</span>
+                <span class="ne-settings-row__hint">Matches, recommendations, ID mappings, and card details.</span>
+              </div>
+              <span class="ne-settings-quota" data-cache-size="similar" hidden></span>
+            </div>
+            <div class="ne-settings-row">
+              <div class="ne-settings-row__info">
+                <span class="ne-settings-row__label">Quick Search alternative titles</span>
+                <span class="ne-settings-row__hint">TheXEM name lists used to find other titles for a show. Refreshed weekly.</span>
+              </div>
+              <span class="ne-settings-quota" data-cache-size="xem" hidden></span>
+            </div>
+          </div>
+          <div class="ne-similar-cache-actions">
+            <button type="button" id="ne-cache-clear-all" class="ne-settings-btn ne-settings-btn--secondary">
+              <i class="fa fa-trash" aria-hidden="true"></i>
+              Clear All Cache
+            </button>
+            <span class="ne-settings-status" data-cache-size="total" hidden></span>
+            <span id="ne-cache-clear-all-status" class="ne-settings-status" role="status"></span>
+          </div>
+          <p class="ne-settings-notice">Settings, history, and credentials are not touched. Pages that are already open keep their in-memory results until you reload them.</p>
+        </section>
+        <section id="ne-settings-backup" class="ne-settings-section">
+          <h2 class="ne-settings-section__title"><i class="fa fa-database" aria-hidden="true"></i> Backup &amp; Reset</h2>
+          <p class="ne-settings-section__desc">Move your settings to another browser or device with a JSON file, or go back to the defaults.</p>
+          <div class="ne-settings-subsection">
+            <p class="ne-settings-subsection__title">Export settings</p>
+            <p class="ne-settings-row__hint">Saves all your settings, filters and presets, highlights, monitored users and keywords, Quick Search and Send dialog choices, torrent client address and username, qBittorrent categories and tags, and your Cloud Sync address and options. Caches are not included.</p>
+            <div class="ne-settings-rows">
+              <div class="ne-settings-row">
+                <div class="ne-settings-row__info">
+                  <span class="ne-settings-row__label">Include credentials</span>
+                  <span class="ne-settings-row__hint">qBittorrent, Transmission, and Deluge passwords, the ameNZB and TMDB API keys, and your Cloud Sync (WebDAV) login. They are saved in plain text, so keep the file private.</span>
+                </div>
+                <button type="button" class="ne-settings-toggle is-off" id="ne-backup-export-credentials" role="switch" aria-checked="false" aria-label="Include credentials">
+                  <span class="ne-settings-toggle__thumb"></span>
+                </button>
+              </div>
+              <div class="ne-settings-row">
+                <div class="ne-settings-row__info">
+                  <span class="ne-settings-row__label">Include history</span>
+                  <span class="ne-settings-row__hint">Adds your local History log to the file.</span>
+                </div>
+                <button type="button" class="ne-settings-toggle is-off" id="ne-backup-export-history" role="switch" aria-checked="false" aria-label="Include history">
+                  <span class="ne-settings-toggle__thumb"></span>
+                </button>
+              </div>
+            </div>
+            <div class="ne-similar-cache-actions">
+              <button type="button" id="ne-backup-export" class="ne-settings-btn ne-settings-btn--primary">
+                <i class="fa fa-download" aria-hidden="true"></i>
+                Export settings
+              </button>
+              <span id="ne-backup-export-status" class="ne-settings-status" role="status"></span>
+            </div>
+          </div>
+          <div class="ne-settings-subsection">
+            <p class="ne-settings-subsection__title">Import settings</p>
+            <p class="ne-settings-row__hint">Settings in the file replace your current ones. Anything the file doesn't contain stays as it is. Choose a file first to see what it contains, then press Import again to apply it.</p>
+            <div class="ne-settings-rows">
+              <div class="ne-settings-row">
+                <div class="ne-settings-row__info">
+                  <span class="ne-settings-row__label">Import credentials</span>
+                  <span class="ne-settings-row__hint">Use passwords and API keys from the file if it has them. When off, your current credentials are kept.</span>
+                </div>
+                <button type="button" class="ne-settings-toggle is-off" id="ne-backup-import-credentials" role="switch" aria-checked="false" aria-label="Import credentials">
+                  <span class="ne-settings-toggle__thumb"></span>
+                </button>
+              </div>
+              <div class="ne-settings-row">
+                <div class="ne-settings-row__info">
+                  <span class="ne-settings-row__label">Import history</span>
+                  <span class="ne-settings-row__hint">Replace your current History log with the one in the file, if it has one.</span>
+                </div>
+                <button type="button" class="ne-settings-toggle is-off" id="ne-backup-import-history" role="switch" aria-checked="false" aria-label="Import history">
+                  <span class="ne-settings-toggle__thumb"></span>
+                </button>
+              </div>
+            </div>
+            <div class="ne-settings-backup-pending" id="ne-backup-import-pending" hidden>
+              <p class="ne-settings-backup-pending__file"><i class="fa fa-file-text-o" aria-hidden="true"></i> <span data-pending-file></span></p>
+              <ul class="ne-settings-backup-pending__lines" data-pending-lines></ul>
+              <p class="ne-settings-backup-pending__warning"><i class="fa fa-exclamation-triangle" aria-hidden="true"></i> Pressing Import applies this file right away. You won't be asked to confirm again.</p>
+            </div>
+            <div class="ne-similar-cache-actions">
+              <button type="button" id="ne-backup-import" class="ne-settings-btn ne-settings-btn--secondary">
+                <i class="fa fa-upload" aria-hidden="true"></i>
+                Import settings…
+              </button>
+              <button type="button" id="ne-backup-import-cancel" class="ne-settings-btn ne-settings-btn--ghost" hidden>Cancel</button>
+              <span id="ne-backup-import-status" class="ne-settings-status" role="status"></span>
+            </div>
+          </div>
+          <div class="ne-settings-subsection">
+            <p class="ne-settings-subsection__title">Reset settings</p>
+            <p class="ne-settings-row__hint">Restores every setting to its default and clears filters and presets, highlights, monitored users and keywords, and qBittorrent categories and tags. History and caches are kept.</p>
+            <div class="ne-settings-rows">
+              <div class="ne-settings-row">
+                <div class="ne-settings-row__info">
+                  <span class="ne-settings-row__label">Also clear torrent client and API keys</span>
+                  <span class="ne-settings-row__hint">Removes the torrent client connection, usernames, passwords, the ameNZB and TMDB API keys, and the Cloud Sync (WebDAV) login.</span>
+                </div>
+                <button type="button" class="ne-settings-toggle is-off" id="ne-backup-reset-credentials" role="switch" aria-checked="false" aria-label="Also clear torrent client and API keys">
+                  <span class="ne-settings-toggle__thumb"></span>
+                </button>
+              </div>
+            </div>
+            <div class="ne-similar-cache-actions">
+              <button type="button" id="ne-backup-reset" class="ne-settings-btn ne-settings-btn--danger">
+                <i class="fa fa-undo" aria-hidden="true"></i>
+                Reset settings
+              </button>
+              <span id="ne-backup-reset-status" class="ne-settings-status" role="status"></span>
+            </div>
+          </div>
+          <p class="ne-settings-notice">Export files are plain JSON and never leave your device unless you share them. Other open Nyaa tabs pick up imported or reset settings after a reload.</p>
+        </section>
       </div>
     </div>
   `;
@@ -1922,6 +2972,7 @@ export function neSettingsBuildPageHTML() {
     neSettingsCreateToggleRow("showMagnetButtons", "Show Magnet Copy buttons", "", "showButtons"),
     neSettingsCreateToggleRow("showSendButtons", "Show Send to Client button", "Requires a torrent client configured in the extension popup.", "showButtons"),
     neSettingsCreateToggleRow("showMonitorButtons", "Show Monitor buttons", "", "showButtons"),
+    neSettingsCreateToggleRow("showScrollToTop", "Show Back to Top button", "A round button in the bottom-right corner on the torrent list, user pages, and this page. Its ring fills as you scroll down; scrolling by hand stops it."),
   );
 
   page.querySelector("#ne-settings-navbar-rows").append(
@@ -2057,6 +3108,27 @@ export function neSettingsBuildPageHTML() {
     ),
   );
 
+  page.querySelector("#ne-settings-cloud-rows").append(
+    neSettingsCreateToggleRow(
+      "cloudSyncEnabled",
+      "Enable cloud sync",
+      "Uploads your settings after every change and keeps this browser up to date with your other devices.",
+    ),
+  );
+
+  page.querySelector("#ne-settings-cloud-options").append(
+    neSettingsCreateToggleRow(
+      "cloudSyncIncludeCredentials",
+      "Include credentials",
+      "Also sync the qBittorrent, Transmission and Deluge passwords, the ameNZB and TMDB API keys, and the WebDAV login. They are stored in plain text in the cloud file. Each browser keeps using its own WebDAV login. This choice applies to all your synced browsers.",
+    ),
+    neSettingsCreateToggleRow(
+      "cloudSyncIncludeHistory",
+      "Include history",
+      "Also sync your History log. Entries from all browsers are merged, and clearing history in one clears it everywhere. This choice applies to all your synced browsers.",
+    ),
+  );
+
   page.querySelector("#ne-settings-qbt-rows").append(
     neSettingsCreateToggleRow("qbtPromptOnSend", "Prompt on Send", "Show a dialog to pick category and tags each time you Send a torrent."),
   );
@@ -2086,12 +3158,26 @@ export async function handleSettingsPage() {
   neSettingsWireScreenshotInputs();
   neSettingsWireHistorySection();
   neSettingsWireShowMoreSection();
+  neSettingsWireQuickSearchSection();
+  neSettingsWireCloudSyncSection();
+  neSettingsWireCacheSection();
+  neSettingsWireBackupSection();
   await neSettingsLoadValues();
   neSettingsWireVibeWeights();
   neSettingsWireSimilarCache();
 
+  // Links such as /settings#ne-settings-quicksearch open a specific section.
+  const linkedSection = window.location.hash
+    ? document.getElementById(decodeURIComponent(window.location.hash.slice(1)))
+    : null;
+  if (linkedSection?.classList.contains("ne-settings-section")) {
+    linkedSection.scrollIntoView({ block: "start" });
+  }
+
   browser.storage.onChanged.addListener((changes, area) => {
     if ((area !== "sync" && area !== "local") || window.location.pathname !== "/settings") return;
+    // Sync bookkeeping changes often; only the Cloud Sync status needs it.
+    if (Object.keys(changes).every((key) => key === CLOUD_SYNC_STATE_KEY)) return;
     if (
       changes.ameNZBRequestCount ||
       changes.ameNZBRequestDate ||

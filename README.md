@@ -27,7 +27,7 @@
 <h3 align="center">Nyaa Enhancer</h3>
 
   <p align="center">
-    A comprehensive browser extension that enhances Nyaa torrent sites with batch copy/download/send, on-page filtering, monitoring, torrent-client integration, metadata from external websites (AnimeTosho, ameNZB, nekoBT, Tsukihime, and SeaDex), and a Similar tab for related, recommended, and same-vibe anime.
+    A comprehensive browser extension that enhances Nyaa torrent sites with batch copy/download/send, on-page filtering, monitoring, torrent-client integration, settings backup and WebDAV cloud sync, metadata from external websites (AnimeTosho, ameNZB, nekoBT, Tsukihime, and SeaDex), and a Similar tab for related, recommended, and same-vibe anime.
   </p>
 </div>
 
@@ -60,23 +60,23 @@
 
 ![Nyaa-Enhancer Screenshot][product-screenshot]
 
-Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workflow. It adds batch magnet copy, torrent download, and send-to-client actions, an on-page Filters panel, Quick Search, user and keyword monitoring, optional metadata from AnimeTosho, ameNZB, nekoBT, Tsukihime, and SeaDex, and a Similar tab that finds related, recommended, and same-vibe anime. Most options live on a Settings page in the Nyaa navbar; the extension popup is reserved for torrent-client connection details and API keys.
+Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workflow. It adds batch magnet copy, torrent download, and send-to-client actions, an on-page Filters panel (including a multi-category filter), Quick Search, user and keyword monitoring, settings Export/Import and Cloud Sync through your own WebDAV storage, optional metadata from AnimeTosho, ameNZB, nekoBT, Tsukihime, and SeaDex, and a Similar tab that finds related, recommended, and same-vibe anime. Most options live on a Settings page in the Nyaa navbar; the extension popup is reserved for torrent-client connection details, API keys, and the Cloud Sync login.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 ### Built With
 
 - [JSZip](https://cdnjs.com/libraries/jszip) - ZIP file creation for batch downloads
-- [TMDB](https://developer.themoviedb.org/docs) - Quick Search autocomplete and optional Similar recommendations
+- [TMDB](https://developer.themoviedb.org/docs) - Optional Quick Search autocomplete and Similar recommendations
 - [TheXEM](https://thexem.info) - Alternate titles for Quick Search
 - [AnimeTosho](https://animetosho.net) - Torrent metadata, screenshots, FileInfo, and comments
 - [ameNZB](https://amenzb.moe) - NZB release metadata
 - [nekoBT](https://nekobt.to) - Release metadata
 - [Tsukihime](https://tsukihime.org) - Release metadata and MediaInfo
 - [SeaDex](https://releases.moe) - Best/alternate release highlighting
-- [Tenrai](https://api.tenrai.org) - Similar identification, MAL recommendations, and vibe data
+- [Tenrai](https://api.tenrai.org) - Quick Search autocomplete (default, no API key needed), Similar identification, MAL recommendations, and vibe data
 - [AniList](https://docs.anilist.co) - Similar relations, recommendations, and details
-- [AnimeAPI](https://github.com/nattadasu/animeApi) - Cross-site ID mapping for Similar
+- [AnimeAPI](https://github.com/nattadasu/animeApi) - Cross-site ID mapping for Similar and Quick Search aliases
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -112,6 +112,7 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 
 - Hide dead torrents (0 seeders / leechers)
 - Minimum seeders threshold (hide torrents below a seeder count)
+- Category filter: tick several categories at once (ticking a main category includes all of its subcategories) and categories read from the site itself
 - Keyword filtering with independent Block and Require lists (both can be on at once)
 - Named filter presets (save, apply, rename, replace, remove, reorder)
 - File size filter with a min/max range slider and unit selectors
@@ -124,7 +125,8 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 
 - Search by title, encoder, quality, format, source, and category
 - Dual Audio, Season Pack, Last 30 Days, and optional file-size range
-- TMDB title autocomplete with TheXEM aliases (requires a TMDB API key in the popup)
+- Title autocomplete with alternate titles, using Tenrai by default (no API key needed) or TMDB (API key in the popup); if one provider fails or finds nothing, the other is tried
+- Tenrai requests from Quick Search and Similar share one rate-limited queue across all tabs
 - Optional “Remember selection” to restore the last search form
 - Named search presets (save, apply, rename, replace, remove, reorder)
 
@@ -172,6 +174,16 @@ Nyaa Enhancer is a browser extension that turns Nyaa into a faster torrent workf
 - Extension popup for torrent-client URL/credentials and API keys
 - Changelog page at `/changelog` with a dismissible What’s New popup
 - Toggles sync across devices; API keys, credentials, and monitoring lists stay in local storage
+
+**Backup, Cloud Sync, and Cache:**
+
+- **Export / Import** all settings, filters and presets, highlights, monitored users and keywords, Quick Search and Send dialog choices, and torrent-client setup as a JSON file
+- Optional **Include credentials** (off by default) for client passwords, API keys, and the WebDAV login, plus optional **Include history**
+- Two-step import that shows what the file contains before applying it, and **Reset settings** with a confirmation dialog
+- **Cloud Sync** keeps settings in sync across browsers through your own WebDAV storage (Nextcloud, Koofr, and others); changes upload a few seconds after you make them
+- Choose how often other browsers check for changes (every page, 1–60 minutes, or manual only), with **Sync now** and replace-in-either-direction buttons
+- Credentials and history are only synced when you turn them on
+- **Clear All Cache** for Similar Anime and Quick Search alternative-title caches, with their current size
 
 **Supported Domains:**
 
@@ -240,6 +252,7 @@ Firefox:
 - Hide dead torrents (0 seeders / leechers)
 - Require a minimum seeder count
 - Block keywords from a custom list (hide matching titles) and/or require keywords (show only titles that contain at least one)
+- Turn on **Filter by category** and tick the categories to show; the current page's category is shown without changing your saved selection
 - Save the current combination as a named preset; apply, rename, replace, remove, or reorder presets at the bottom of the panel
 - Set a file-size range with the min/max slider
 - Filter by completed downloads (greater than, equal to, or less than)
@@ -262,7 +275,7 @@ Firefox:
 **Quick Search:**
 
 - Build a query from title, encoder, quality, format, source, category, Dual Audio, Season Pack, Last 30 Days, and optional file size
-- With a TMDB API key (set in the popup), titles autocomplete and TheXEM aliases can be included
+- Titles autocomplete as you type, with alternate titles included; Tenrai works out of the box, and TMDB can be chosen in Settings → **Quick Search** (needs a TMDB API key in the popup)
 - Enable **Remember selection** to keep the last form state
 - Save the current form as a named preset; apply, rename, replace, remove, or reorder presets at the bottom of the popup
 
@@ -301,11 +314,22 @@ Firefox:
 - Browse **Related**, **Recommended**, and **Same vibe**; click a card for details, or Ctrl/Cmd-click to search
 - Tune the same-vibe mix, TMDB recommendations, and Quick Search behavior in Settings → Similar Anime
 
+**Backup and Cloud Sync:**
+
+- Open Settings → **Backup & Reset** and press **Export settings** (turn on **Include credentials** or **Include history** if you want them in the file)
+- To restore, press **Import settings**, choose the file, check what it contains, then press Import again to apply it
+- For Cloud Sync, follow the **How to set it up** guide in Settings → **Cloud Sync**: paste your WebDAV folder address, enter the username and app password in the popup and press **Connect**, then **Test connection** and turn on **Enable cloud sync**
+- Repeat in each browser; a browser that turns sync on takes the settings already in the cloud
+
 ![Nyaa-Enhancer Settings][product-settings]
 
 **Settings page** (`/settings`, also in the Nyaa navbar):
 
 - Use the search box at the top to filter settings by name or description
+
+_Quick Search:_
+
+- **Anime title provider**: Tenrai (no API key needed, default) or TMDB (needs an API key)
 
 _Download:_
 
@@ -319,10 +343,11 @@ _Interface:_
 - **Show Magnet Copy buttons**
 - **Show Send to Client button** (requires a client configured in the popup)
 - **Show Monitor buttons**
+- **Show Back to Top button**
 
 _Filters:_
 
-- **Show filter notifications**: toast when torrents are hidden. Active filters themselves (dead torrents, minimum seeders, blocked/required keywords, file size, completed downloads, upload date, and history) and presets are set in the on-page Filters panel
+- **Show filter notifications**: toast when torrents are hidden. Active filters themselves (dead torrents, minimum seeders, categories, blocked/required keywords, file size, completed downloads, upload date, and history) and presets are set in the on-page Filters panel
 - **Auto-load more results**: turn on Auto-load above the torrent table and keep fetching until the visible-count target
 - **Show more until N visible**: keep auto-loading until this many torrents remain visible (max 1000; 0 = one extra page at a time)
 
@@ -369,7 +394,7 @@ _Similar Anime:_
 - **Show details on card click**: synopsis, score, and links in a modal (Ctrl/Cmd-click still searches)
 - **Open Quick Search from Similar**: fill Quick Search with the title instead of searching Nyaa
 - **Same vibe mix**: two knobs split 100% across genres, tags, and studio
-- **Clear Similar cache**: ID mappings last up to 30 days; recs and details last 24 hours
+- **Clear Similar Cache**: ID mappings last up to 30 days; recs and details last 24 hours
 
 _Additional features:_
 
@@ -388,13 +413,31 @@ _qBittorrent (when that client is selected):_
 - Manage/sync categories and tags
 - **Prompt on Send** to pick category/tags each time
 
+_Cloud Sync:_
+
+- **WebDAV folder address** with an address check and **Test connection**
+- **Enable cloud sync**, **Include credentials**, and **Include history**
+- **Check for changes from other browsers**: how often this browser looks for changes
+- Status, **Sync now**, and buttons to replace the cloud copy with this browser or this browser with the cloud copy
+- Step-by-step setup guide for Nextcloud, Synology NAS, Koofr, and other WebDAV services
+
+_Cache:_
+
+- **Clear all Cache**: removes Similar Anime and Quick Search alternative-title caches (settings, history, and credentials are not touched)
+
+_Backup & Reset:_
+
+- **Export settings** and **Import settings** (JSON), with **Include credentials** and **Include history** toggles
+- **Reset settings** to defaults, with a confirmation dialog
+
 ![Extension Popup Preview][popup-preview]
 
 **Extension popup:**
 
 - **Torrent Client**: client type, URL, credentials, Test Connection / Save
 - **ameNZB API key** (from [amenzb.moe/profile](https://amenzb.moe/profile))
-- **TMDB API key** for Quick Search autocomplete and optional Similar recommendations (from [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api))
+- **TMDB API key** for optional Quick Search autocomplete and Similar recommendations (from [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api))
+- **Cloud Sync (WebDAV)**: username and app password, **Connect** (asks the browser for access to that server only), and Clear
 
 **Supported Domains:**
 

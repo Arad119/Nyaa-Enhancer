@@ -113,6 +113,9 @@ function normalizeState(raw) {
     n: normalizeNameMap(raw.n),
     h: normalizeHashMap(raw.h),
     e: filterEvents(raw.e),
+    // When the log was last cleared (seconds), so cloud sync can drop
+    // older events another device still has.
+    c: Number.isFinite(raw.c) && raw.c > 0 ? Math.floor(raw.c) : 0,
   };
 }
 
@@ -315,7 +318,50 @@ export async function removeHistoryEvent(id, actionCode, ts) {
 
 export async function clearHistory() {
   invalidateHistoryHashIndex();
-  await storageSet(emptyState());
+  await storageSet({ ...emptyState(), c: Math.floor(Date.now() / 1000) });
+}
+
+// Replaces the stored log with an exported one. Returns the kept event count.
+export async function importHistoryState(raw, cap) {
+  const state = normalizeState(raw);
+  trimEvents(state, cap);
+  invalidateHistoryHashIndex();
+  await storageSet(state);
+  return state.e.length;
+}
+
+// Merges an exported log into the stored one (used by cloud sync): events from
+// both are kept, except those older than the latest clear on either side.
+// beforeWrite sees the exact state about to be stored.
+export async function mergeHistoryState(raw, cap, { beforeWrite = null } = {}) {
+  const incoming = normalizeState(raw);
+  const state = await storageGet();
+  const incomingKeys = new Set(incoming.e.map((event) => event.join(":")));
+  const clearedAt = Math.max(state.c || 0, incoming.c || 0);
+  const seen = new Set();
+  const events = [];
+  for (const event of [...state.e, ...incoming.e]) {
+    if (clearedAt && event[2] <= clearedAt) continue;
+    const key = event.join(":");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    events.push(event);
+  }
+  events.sort((a, b) => a[2] - b[2]);
+  state.e = events;
+  state.c = clearedAt;
+  for (const [id, title] of Object.entries(incoming.n)) {
+    if (!state.n[id]) state.n[id] = title;
+  }
+  for (const [id, hash] of Object.entries(incoming.h)) {
+    if (!state.h[id]) state.h[id] = hash;
+  }
+  trimEvents(state, cap);
+  invalidateHistoryHashIndex();
+  beforeWrite?.(state);
+  await storageSet(state);
+  const localOnly = state.e.filter((event) => !incomingKeys.has(event.join(":"))).length;
+  return { count: state.e.length, localOnly };
 }
 
 export async function trimHistoryToCap(cap) {

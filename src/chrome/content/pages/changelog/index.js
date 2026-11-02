@@ -34,8 +34,9 @@ export async function showChangelog() {
         <span class="changelog-version">v${currentVersion}</span>
       </div>
       <div class="changelog-content">
-        • Moved AnimeTosho to its new animetosho.net domain, since the old domains have shut down<br>
-        • Added a subtitle picker for AnimeTosho screenshots
+        • Added Cloud Sync: keep your settings in sync across browsers using your own WebDAV storage (Nextcloud, Koofr and others), with a step-by-step setup guide in Settings and the login in the extension popup<br>
+        • Added settings Export and Import, which save all your settings, filters and presets, highlights, monitored users and keywords, Quick Search and Send dialog choices, and torrent client setup<br>
+        • Added a category filter that lets you pick several categories at once and categories read from the site so they're always up to date
         <div class="changelog-more">Plus more. <a href="/changelog">See the full changelog</a> for everything that's new.</div>
       </div>
       <div class="changelog-actions">
@@ -100,6 +101,24 @@ export async function handleChangelogPage() {
         </a>.
       </p>
     </header>
+    <div class="version-entry">
+      <h2>
+        Version 1.16.0
+        <a href="https://github.com/Arad119/Nyaa-Enhancer/releases/tag/v1.16.0" target="_blank" class="version-link">
+          <i class="fa fa-github"></i> View Release
+        </a>
+      </h2>
+      <ul>
+        <li>Added Cloud Sync: keep your settings in sync across browsers using your own WebDAV storage (Nextcloud, Koofr and others), with a step-by-step setup guide in Settings and the login in the extension popup</li>
+        <li>Added settings Export and Import, which save all your settings, filters and presets, highlights, monitored users and keywords, Quick Search and Send dialog choices, and torrent client setup</li>
+        <li>Added a Reset settings option with a confirmation dialog</li>
+        <li>Added a Cache section in Settings to clear all of the extension's caches at once</li>
+        <li>Added a category filter that lets you pick several categories at once and categories read from the site so they're always up to date</li>
+        <li>Quick Search now uses Tenrai by default, so it works without a TMDB API key, with TMDB available as a fallback</li>
+        <li>Added a Back to Top button on the torrent list, user pages and Settings, with a ring that fills as you scroll down; it scrolls faster on longer pages and stops if you scroll yourself (can be turned off under Settings → Interface)</li>
+        <li>Fixed issue where the Settings sidebar could highlight the wrong section after clicking a category</li>
+        </ul>
+    </div>
     <div class="version-entry">
       <h2>
         Version 1.15.5

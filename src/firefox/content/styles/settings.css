@@ -1283,6 +1283,15 @@ body:not(.dark) .ne-settings-btn--ghost:hover:not(:disabled) {
   color: #888;
 }
 
+.ne-settings-status.is-fading {
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.ne-settings-qbt-actions {
+  margin-top: 20px;
+}
+
 .ne-settings-qbt-actions,
 .ne-similar-cache-actions {
   display: flex;
@@ -1385,4 +1394,280 @@ body:not(.dark) .ne-similar-cache-usage__total {
   .ne-settings-toggle {
     align-self: flex-end;
   }
+}
+
+#ne-settings-backup .ne-settings-subsection > .ne-settings-row__hint {
+  margin: 0 0 4px;
+}
+
+#ne-settings-backup .ne-similar-cache-actions {
+  margin-top: 4px;
+}
+
+/* Class display rules (and Nyaa's Bootstrap) would otherwise override [hidden]. */
+.ne-settings-page [hidden] {
+  display: none !important;
+}
+
+.ne-settings-backup-pending {
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #55606a;
+  background: rgba(51, 122, 183, 0.08);
+  border-left: 3px solid #337ab7;
+  border-radius: 0 6px 6px 0;
+}
+
+body.dark .ne-settings-backup-pending {
+  color: #aab4bd;
+  background: rgba(51, 122, 183, 0.12);
+}
+
+.ne-settings-backup-pending__file {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+  word-break: break-all;
+}
+
+body:not(.dark) .ne-settings-backup-pending__file {
+  color: #243240;
+}
+
+body.dark .ne-settings-backup-pending__file {
+  color: #e0e6eb;
+}
+
+.ne-settings-backup-pending__lines {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.ne-settings-backup-pending__warning {
+  margin: 0;
+  color: #c77700;
+  font-weight: 500;
+}
+
+body.dark .ne-settings-backup-pending__warning {
+  color: #ffb74d;
+}
+
+.ne-settings-modal__text,
+.ne-settings-modal__note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #ccc;
+}
+
+.ne-settings-modal__note {
+  font-size: 12px;
+  color: #888;
+}
+
+.ne-settings-modal__list {
+  margin: -6px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e0e0e0;
+}
+
+.qbt-modal-btn.ne-settings-modal__btn--danger {
+  background: #e53935;
+  border-color: #c62828;
+}
+
+.qbt-modal-btn.ne-settings-modal__btn--danger:hover {
+  background: #c62828;
+  border-color: #b71c1c;
+}
+
+/* ── Cloud Sync ───────────────────────────────────────────────────────────── */
+
+#ne-settings-cloud .ne-settings-field input[type="url"] {
+  flex: 1;
+  min-width: 0;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+
+.ne-cloud-check {
+  position: relative;
+  margin: 8px 0 0;
+  padding: 7px 10px 7px 30px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ne-cloud-check::before {
+  position: absolute;
+  left: 10px;
+  top: 7px;
+  font-family: FontAwesome;
+  font-size: 13px;
+}
+
+.ne-cloud-check--ok {
+  color: #2e7d32;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.ne-cloud-check--ok::before {
+  content: "\f00c";
+}
+
+.ne-cloud-check--warn {
+  color: #9a6400;
+  background: rgba(255, 152, 0, 0.1);
+}
+
+.ne-cloud-check--warn::before {
+  content: "\f071";
+}
+
+.ne-cloud-check--error {
+  color: #c62828;
+  background: rgba(229, 57, 53, 0.09);
+}
+
+.ne-cloud-check--error::before {
+  content: "\f00d";
+}
+
+.ne-cloud-check--info {
+  color: #55606a;
+  background: rgba(51, 122, 183, 0.07);
+}
+
+.ne-cloud-check--info::before {
+  content: "\f05a";
+}
+
+body.dark .ne-cloud-check--ok {
+  color: #81c784;
+}
+
+body.dark .ne-cloud-check--warn {
+  color: #ffb74d;
+}
+
+body.dark .ne-cloud-check--error {
+  color: #ef9a9a;
+}
+
+body.dark .ne-cloud-check--info {
+  color: #aab4bd;
+  background: rgba(51, 122, 183, 0.12);
+}
+
+.ne-cloud-account:empty {
+  display: none;
+}
+
+.ne-cloud-status {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.ne-cloud-status dt {
+  font-weight: 500;
+  color: #888;
+}
+
+.ne-cloud-status dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ne-cloud-status__value--ok {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.ne-cloud-status__value--warn {
+  color: #9a6400;
+  font-weight: 600;
+}
+
+.ne-cloud-status__value--error {
+  color: #c62828;
+  font-weight: 600;
+}
+
+.ne-cloud-status__value--muted {
+  color: #888;
+}
+
+body.dark .ne-cloud-status__value--ok {
+  color: #81c784;
+}
+
+body.dark .ne-cloud-status__value--warn {
+  color: #ffb74d;
+}
+
+body.dark .ne-cloud-status__value--error {
+  color: #ef9a9a;
+}
+
+#ne-settings-cloud .ne-settings-howto {
+  margin-bottom: 18px;
+}
+
+.ne-cloud-guide__title {
+  margin: 12px 0 4px;
+  font-weight: 600;
+}
+
+.ne-cloud-guide__list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.ne-cloud-guide__list li {
+  margin-bottom: 6px;
+}
+
+.ne-cloud-guide__note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #888;
+}
+
+#ne-settings-cloud .ne-settings-howto code {
+  overflow-wrap: anywhere;
+  font-size: 11.5px;
+}
+
+@media (max-width: 600px) {
+  #ne-settings-cloud .ne-settings-field__with-action {
+    flex-wrap: wrap;
+  }
+
+  #ne-settings-cloud .ne-settings-field__with-action .ne-settings-btn {
+    width: 100%;
+  }
+
+  .ne-cloud-status {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .ne-cloud-status dd {
+    margin-bottom: 6px;
+  }
+}
+
+#ne-settings-cloud-options {
+  margin-top: 16px;
 }

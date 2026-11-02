@@ -1,3 +1,5 @@
+import { normalizeCloudSyncCheckMinutes, validateWebdavUrl } from "./webdav.js";
+
 // Secrets and large lists stay in chrome.storage.local (no 8KB/item sync quota,
 // and credentials are not uploaded to the user's chrome account).
 // Booleans/toggles remain in chrome.storage.sync so they follow the user.
@@ -31,6 +33,13 @@ export const LOCAL_PREF_KEYS = new Set([
   "showMoreAutoEnabled",
   "showMoreUntilVisible",
   "showMoreAutoDelayMs",
+  "cloudSyncEnabled",
+  "cloudSyncUrl",
+  "cloudSyncIncludeCredentials",
+  "cloudSyncIncludeHistory",
+  "webdavUsername",
+  "webdavPassword",
+  "cloudSyncCheckMinutes",
 ]);
 
 export const PREF_DEFAULTS = {
@@ -71,6 +80,7 @@ export const PREF_DEFAULTS = {
   showSendButtons: true,
   showQuickFilter: true,
   showMonitorButtons: true,
+  showScrollToTop: true,
   hideDeadTorrents: false,
   minSeedersFilterEnabled: false,
   minSeedersFilterValue: 5,
@@ -84,6 +94,7 @@ export const PREF_DEFAULTS = {
   requireKeywordsFilterEnabled: false,
   filterPresets: [],
   quickSearchPresets: [],
+  quickSearchAnimeProvider: "tenrai",
   showMoreAutoEnabled: false,
   showMoreUntilVisible: 150,
   showMoreAutoDelayMs: 2500,
@@ -107,6 +118,9 @@ export const PREF_DEFAULTS = {
   uploadDateFilterTo: "",
   historyHideFilterEnabled: false,
   historyHideActions: ["visit", "download", "save", "send"],
+  categoryFilterEnabled: false,
+  categoryFilterNyaa: [],
+  categoryFilterSukebei: [],
   historyEnabled: false,
   historyMaxEvents: 400,
   showChangelogNav: true,
@@ -135,6 +149,13 @@ export const PREF_DEFAULTS = {
   qbtLastCategory: null,
   qbtLastTags: null,
   lastNyaaOrigin: "",
+  cloudSyncEnabled: false,
+  cloudSyncUrl: "",
+  cloudSyncIncludeCredentials: false,
+  cloudSyncIncludeHistory: false,
+  webdavUsername: "",
+  webdavPassword: "",
+  cloudSyncCheckMinutes: 5,
 };
 
 let saveErrorHandler = null;
@@ -478,4 +499,245 @@ export async function loadStoredPreferences() {
 
 export function savePreference(key, value) {
   return savePreferences({ [key]: value });
+}
+
+// ── Import / export / reset ────────────────────────────────────────────────
+
+export const PREFS_EXPORT_FORMAT = "nyaa-enhancer-settings";
+export const PREFS_EXPORT_VERSION = 1;
+
+// Kept out of exports unless the user opts in: an export file holds them in
+// plain text, and they are deliberately never written to browser sync.
+export const CREDENTIAL_PREF_KEYS = new Set([
+  "qbtPassword",
+  "transmissionPassword",
+  "delugePassword",
+  "ameNZBApiKey",
+  "tmdbApiKey",
+  "webdavUsername",
+  "webdavPassword",
+]);
+
+// Torrent client connection details. Exported normally, but kept on reset
+// unless the user also asks to clear credentials.
+const CONNECTION_PREF_KEYS = new Set([
+  "torrentClient",
+  "torrentClientUrl",
+  "qbtUsername",
+  "transmissionUsername",
+]);
+
+// Cloud sync setup is per device: it is never exported, synced, or reset by
+// "Reset settings". The WebDAV login is the exception: it counts as a
+// credential, so it travels only with "Include credentials" and is cleared
+// only with "Also clear … API keys".
+export const CLOUD_SYNC_PREF_KEYS = [
+  "cloudSyncEnabled",
+  "cloudSyncUrl",
+  "cloudSyncIncludeCredentials",
+  "cloudSyncIncludeHistory",
+  "webdavUsername",
+  "webdavPassword",
+  "cloudSyncCheckMinutes",
+];
+
+// Runtime state and legacy keys that should not move between devices.
+const NON_PORTABLE_PREF_KEYS = new Set([
+  "ameNZBRequestCount",
+  "ameNZBRequestDate",
+  "lastNyaaOrigin",
+  "keywordFilterMigrated",
+  "keywords",
+  "keywordFilterEnabled",
+  "keywordFilterMode",
+  ...CLOUD_SYNC_PREF_KEYS.filter((key) => !CREDENTIAL_PREF_KEYS.has(key)),
+]);
+
+// Stored settings that are read with inline defaults instead of PREF_DEFAULTS.
+const EXTRA_PORTABLE_PREF_DEFAULTS = {
+  changelogDismissed: false,
+  quickSearchRememberSelection: true,
+  // Quick Search's remembered form (when "Remember selection" is on).
+  quickSearchState: {},
+};
+
+// Cloud Sync setup is included in manual backups (Export/Import) so a restore
+// brings it back, but never in the cloud copy, which can't carry its own
+// address. The on/off switch is left out on purpose: turning sync on adopts
+// the cloud copy, which would replace the settings just restored.
+const MANUAL_BACKUP_ONLY_DEFAULTS = {
+  cloudSyncUrl: "",
+  cloudSyncCheckMinutes: 5,
+  cloudSyncIncludeCredentials: false,
+  cloudSyncIncludeHistory: false,
+};
+
+function portablePrefDefaults() {
+  const defaults = { ...PREF_DEFAULTS, ...EXTRA_PORTABLE_PREF_DEFAULTS };
+  for (const key of NON_PORTABLE_PREF_KEYS) delete defaults[key];
+  return defaults;
+}
+
+// Whether a stored key is part of an export (credentials only when asked).
+export function isPortablePrefKey(key, { includeCredentials = false } = {}) {
+  if (CREDENTIAL_PREF_KEYS.has(key)) return includeCredentials;
+  return Object.prototype.hasOwnProperty.call(portablePrefDefaults(), key);
+}
+
+function isSitePath(value) {
+  return typeof value === "string" && /^\/(?!\/)[^"'<>\s\\]*$/.test(value);
+}
+
+function finiteOr(value, fallback) {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+// Monitored entries are rendered and fetched by URL, so imported ones are
+// rebuilt from known fields instead of being stored as-is.
+const PREF_IMPORT_SANITIZERS = {
+  quickSearchState: (state) =>
+    Object.fromEntries(
+      Object.entries(state).filter(([, value]) =>
+        ["string", "number", "boolean"].includes(typeof value),
+      ),
+    ),
+  monitoredUsers: (list) =>
+    list
+      .filter((user) => typeof user?.username === "string" && user.username.trim())
+      .map((user) => ({
+        username: user.username,
+        url: isSitePath(user.url)
+          ? user.url
+          : `/user/${encodeURIComponent(user.username)}`,
+        torrentCount: finiteOr(user.torrentCount, 0),
+        lastChecked: finiteOr(user.lastChecked, Date.now()),
+        lastDismissedCount: finiteOr(user.lastDismissedCount, 0),
+      })),
+  monitoredKeywords: (list) =>
+    list
+      .filter((entry) => typeof entry?.keyword === "string" && entry.keyword.trim())
+      .map((entry) => {
+        const clean = { keyword: entry.keyword };
+        if (isSitePath(entry.url)) clean.url = entry.url;
+        for (const key of [
+          "lastTorrentId",
+          "lastDismissedTorrentId",
+          "lastChecked",
+          "lastCheckedAt",
+        ]) {
+          const value = entry[key];
+          if (Number.isFinite(value) || typeof value === "string") {
+            clean[key] = value;
+          }
+        }
+        return clean;
+      }),
+};
+
+const isPlainObject = (value) =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+const isStringList = (value) =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
+
+// Keys whose valid values the default's type alone can't describe.
+const PREF_IMPORT_VALIDATORS = {
+  qbtLastCategory: (value) => value === null || typeof value === "string",
+  qbtLastTags: (value) => value === null || isStringList(value),
+  quickSearchState: isPlainObject,
+  cloudSyncUrl: (value) =>
+    typeof value === "string" && (value === "" || validateWebdavUrl(value).ok),
+  cloudSyncCheckMinutes: (value) =>
+    Number.isFinite(value) && normalizeCloudSyncCheckMinutes(value) === value,
+};
+
+function matchesDefaultType(value, defaultValue) {
+  if (Array.isArray(defaultValue)) return Array.isArray(value);
+  if (typeof defaultValue === "number") return Number.isFinite(value);
+  return typeof value === typeof defaultValue;
+}
+
+// includeCloudSetup: also the Cloud Sync address and options (manual
+// backups only, never the cloud copy).
+export async function exportPreferences({
+  includeCredentials = false,
+  includeCloudSetup = false,
+} = {}) {
+  const defaults = portablePrefDefaults();
+  if (!includeCredentials) {
+    for (const key of CREDENTIAL_PREF_KEYS) delete defaults[key];
+  }
+  if (includeCloudSetup) Object.assign(defaults, MANUAL_BACKUP_ONLY_DEFAULTS);
+  const prefs = await getPreferencesAsync(defaults);
+  const out = {};
+  for (const key of Object.keys(defaults)) {
+    if (prefs[key] !== undefined) out[key] = prefs[key];
+  }
+  return out;
+}
+
+// Applies only known keys whose type matches the default. Credentials in the
+// file are ignored unless includeCredentials is set; keys missing from the
+// file, and keys in skipKeys, keep their current value. beforeSave sees the
+// exact values about to be written.
+export async function importPreferences(
+  prefs,
+  {
+    includeCredentials = false,
+    includeCloudSetup = false,
+    skipKeys = null,
+    beforeSave = null,
+  } = {},
+) {
+  if (!prefs || typeof prefs !== "object" || Array.isArray(prefs)) {
+    throw new Error("The file has no settings to import.");
+  }
+  const defaults = portablePrefDefaults();
+  if (includeCloudSetup) Object.assign(defaults, MANUAL_BACKUP_ONLY_DEFAULTS);
+  const payload = {};
+  const skipped = [];
+  for (const [key, value] of Object.entries(prefs)) {
+    if (!Object.prototype.hasOwnProperty.call(defaults, key)) {
+      skipped.push(key);
+      continue;
+    }
+    if (CREDENTIAL_PREF_KEYS.has(key) && !includeCredentials) continue;
+    if (skipKeys?.has(key)) continue;
+    const valid = PREF_IMPORT_VALIDATORS[key]
+      ? PREF_IMPORT_VALIDATORS[key](value)
+      : matchesDefaultType(value, defaults[key]);
+    if (!valid) {
+      skipped.push(key);
+      continue;
+    }
+    payload[key] = PREF_IMPORT_SANITIZERS[key]?.(value) ?? value;
+  }
+  // Counted before the internal flag below, so the number matches the file.
+  const applied = Object.keys(payload).length;
+  // Imported lists already use the current keyword schema.
+  if ("blockKeywords" in payload || "requireKeywords" in payload) {
+    payload.keywordFilterMigrated = true;
+  }
+  beforeSave?.(payload);
+  await savePreferencesAsync(payload);
+  return { applied, skipped };
+}
+
+export async function resetPreferences({ clearCredentials = false } = {}) {
+  const keys = Object.keys(portablePrefDefaults()).concat(
+    "keywordFilterMigrated",
+    "keywords",
+    "keywordFilterEnabled",
+    "keywordFilterMode",
+    "tempDismissed",
+  );
+  const toRemove = keys.filter(
+    (key) =>
+      clearCredentials ||
+      (!CREDENTIAL_PREF_KEYS.has(key) && !CONNECTION_PREF_KEYS.has(key)),
+  );
+  await migrateLocalKeysFromSync();
+  await Promise.all([
+    areaRemove("sync", toRemove.filter((key) => !LOCAL_PREF_KEYS.has(key))),
+    areaRemove("local", toRemove.filter((key) => LOCAL_PREF_KEYS.has(key))),
+  ]);
 }

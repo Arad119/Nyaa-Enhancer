@@ -5,6 +5,9 @@ import {
 } from "../../../shared/prefs.js";
 
 export const FILTER_PRESET_KEYS = [
+  "categoryFilterEnabled",
+  "categoryFilterNyaa",
+  "categoryFilterSukebei",
   "hideDeadTorrents",
   "minSeedersFilterEnabled",
   "minSeedersFilterValue",

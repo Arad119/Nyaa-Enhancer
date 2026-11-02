@@ -7,6 +7,18 @@ import {
   normalizeHistoryHideActions,
 } from "../history/store.js";
 import {
+  categoryFilterPrefKey,
+  categoryIconUrl,
+  categoryIsSelected,
+  failsCategoryFilter,
+  findCategoryLabel,
+  getCategoryFilterState,
+  getCategorySelection,
+  getSiteCategories,
+  parentCategoryId,
+  toggleCategorySelection,
+} from "./categories.js";
+import {
   FILTER_PRESETS_MAX,
   addFilterPreset,
   findMatchingFilterPreset,
@@ -251,6 +263,7 @@ export function failsHistoryHideFilter(prefs, row, historyIndex) {
 
 export function getActiveFilterLabels(prefs) {
   const labels = [];
+  if (getCategoryFilterState(prefs).active) labels.push("category");
   if (prefs.hideDeadTorrents) labels.push("dead torrents");
   if (prefs.minSeedersFilterEnabled && getMinSeedersThreshold(prefs) > 0) {
     labels.push("minimum seeders");
@@ -296,6 +309,10 @@ export function shouldHideRowByFilters(row, prefs, historyIndex = null) {
   const sizeInBytes = sizeCell ? convertToBytes(sizeCell.textContent) : 0;
 
   if (prefs.hideDeadTorrents && seeders === 0 && leechers === 0) {
+    return true;
+  }
+
+  if (failsCategoryFilter(prefs, row)) {
     return true;
   }
 
@@ -633,6 +650,151 @@ export function neSetHistoryHideControlsEnabled(enabled) {
   container.classList.toggle("disabled", !enabled);
 }
 
+function neCategoryFilterNote(state, groups) {
+  const pageLabel = findCategoryLabel(groups, state.pageCategory);
+  if (state.paused === "subcategory") {
+    return `Nyaa is already showing only ${pageLabel} on this page, so that is what's selected here. Your own selection applies to other searches.`;
+  }
+  if (state.paused === "outside-parent") {
+    return `This search only covers ${pageLabel}, and none of your selected categories are in it, so nothing is hidden here.`;
+  }
+  if (state.pageCategory !== "0_0") {
+    return `This search only covers ${pageLabel}, so other main categories don't apply here.`;
+  }
+  return "";
+}
+
+export function neRenderCategoryFilter(prefs) {
+  const container = document.getElementById("ne-categoryFilterContainer");
+  const list = document.getElementById("ne-categoryFilterList");
+  if (!container || !list) return;
+
+  const groups = getSiteCategories();
+  const state = getCategoryFilterState(prefs);
+  const enabled = !!prefs.categoryFilterEnabled;
+  const locked = state.paused === "subcategory";
+  // On a subcategory page, show the category Nyaa already limits it to.
+  const shown = new Set(locked ? [state.pageCategory] : state.selection);
+  const pageParent =
+    state.pageCategory === "0_0" ? "" : parentCategoryId(state.pageCategory);
+
+  const makeCheckbox = (className, id, checked, disabled) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.dataset.neCategory = id;
+    button.setAttribute("role", "checkbox");
+    button.setAttribute("aria-checked", checked);
+    button.disabled = disabled;
+    const box = document.createElement("span");
+    box.className = "ne-filters-panel__cat-check";
+    box.setAttribute("aria-hidden", "true");
+    button.appendChild(box);
+    return button;
+  };
+
+  list.replaceChildren(
+    ...groups.map((group) => {
+      const outside = !!pageParent && pageParent !== group.id;
+      const disabled = !enabled || locked || outside;
+      const pickedSubs = group.subs.filter((sub) => categoryIsSelected(shown, sub.id));
+      const checked = shown.has(group.id)
+        ? "true"
+        : pickedSubs.length
+          ? "mixed"
+          : "false";
+
+      const card = document.createElement("div");
+      card.className = "ne-filters-panel__cat-card";
+      card.classList.toggle("is-active", checked !== "false");
+      card.classList.toggle("is-outside", outside);
+      if (outside) card.title = "Not part of this search";
+
+      const head = makeCheckbox("ne-filters-panel__cat-head", group.id, checked, disabled);
+      const name = document.createElement("span");
+      name.className = "ne-filters-panel__cat-name";
+      name.textContent = group.label;
+      const count = document.createElement("span");
+      count.className = "ne-filters-panel__cat-count";
+      count.textContent = `${pickedSubs.length}/${group.subs.length}`;
+      head.append(name, count);
+
+      const items = document.createElement("div");
+      items.className = "ne-filters-panel__cat-items";
+      group.subs.forEach((sub) => {
+        const item = makeCheckbox(
+          "ne-filters-panel__cat-item",
+          sub.id,
+          String(categoryIsSelected(shown, sub.id)),
+          disabled,
+        );
+        const icon = document.createElement("img");
+        icon.className = "ne-filters-panel__cat-icon";
+        icon.src = categoryIconUrl(sub.id);
+        icon.alt = "";
+        icon.loading = "lazy";
+        // Keep the slot so labels stay aligned when a badge is missing.
+        icon.addEventListener("error", () => { icon.style.visibility = "hidden"; }, { once: true });
+        const label = document.createElement("span");
+        label.className = "ne-filters-panel__cat-label";
+        label.textContent = sub.label;
+        item.append(icon, label);
+        items.appendChild(item);
+      });
+
+      card.append(head, items);
+      return card;
+    }),
+  );
+
+  const summary = document.getElementById("ne-categoryFilterSummary");
+  if (summary) {
+    const labels = [...shown].map((id) => findCategoryLabel(groups, id));
+    summary.textContent = locked
+      ? "This page only"
+      : labels.length
+        ? `${labels.length} selected`
+        : "None selected";
+    summary.title = labels.join(", ");
+  }
+
+  const note = document.getElementById("ne-categoryFilterNote");
+  if (note) {
+    note.textContent = neCategoryFilterNote(state, groups);
+    note.hidden = !note.textContent;
+  }
+  const clear = document.getElementById("ne-categoryFilterClear");
+  if (clear) clear.disabled = !enabled || !state.selection.length;
+  container.classList.toggle("disabled", !enabled);
+}
+
+export async function neSaveCategorySelection(selection) {
+  const prefs = await loadStoredPreferences();
+  const key = categoryFilterPrefKey();
+  neRenderCategoryFilter({ ...prefs, [key]: selection });
+  await neSaveFilterSetting(key, selection);
+}
+
+export function neWireCategoryFilter() {
+  document
+    .getElementById("ne-categoryFilterList")
+    ?.addEventListener("click", async (event) => {
+      const chip = event.target.closest("[data-ne-category]");
+      if (!chip || chip.disabled) return;
+      const prefs = await loadStoredPreferences();
+      await neSaveCategorySelection(
+        toggleCategorySelection(
+          getCategorySelection(prefs),
+          chip.dataset.neCategory,
+          getSiteCategories(),
+        ),
+      );
+    });
+  document
+    .getElementById("ne-categoryFilterClear")
+    ?.addEventListener("click", () => neSaveCategorySelection([]));
+}
+
 export function neNormalizeMinSeedersValue(value) {
   const parsed = parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
@@ -655,6 +817,7 @@ export function neSetFilterToggleState(toggleId, enabled) {
 
 export function neCountActiveFilters(prefs) {
   let count = 0;
+  if (prefs.categoryFilterEnabled) count++;
   if (prefs.hideDeadTorrents) count++;
   if (prefs.minSeedersFilterEnabled) count++;
   if (prefs.blockKeywordsFilterEnabled) count++;
@@ -669,6 +832,7 @@ export function neCountActiveFilters(prefs) {
 export async function resetAllTorrentFilters() {
   try {
     await savePreferences({
+      categoryFilterEnabled: false,
       hideDeadTorrents: false,
       minSeedersFilterEnabled: false,
       blockKeywordsFilterEnabled: false,
@@ -1158,6 +1322,8 @@ export function neSetFiltersPanelExpanded(expanded) {
 }
 
 export async function neSyncFiltersPanelFromPrefs(prefs) {
+  neSetFilterToggleState("categoryFilter", prefs.categoryFilterEnabled);
+  neRenderCategoryFilter(prefs);
   neSetFilterToggleState("hideDeadTorrents", prefs.hideDeadTorrents);
   neSetFilterToggleState("minSeedersFilter", prefs.minSeedersFilterEnabled);
   neSetFilterToggleState("blockKeywordsFilter", prefs.blockKeywordsFilterEnabled);
@@ -1243,6 +1409,12 @@ export async function addFiltersPanel() {
     <div class="ne-filters-panel__body" hidden>
       <div class="ne-filters-panel__toggles">
         <div class="ne-filters-panel__toggle-item">
+          <span class="ne-filters-panel__toggle-label">Filter by category</span>
+          <button type="button" class="ne-filters-panel__toggle" data-ne-toggle="categoryFilter" role="switch" aria-checked="false">
+            <span class="ne-filters-panel__toggle-indicator"></span>
+          </button>
+        </div>
+        <div class="ne-filters-panel__toggle-item">
           <span class="ne-filters-panel__toggle-label">Hide dead torrents (0 S/L)</span>
           <button type="button" class="ne-filters-panel__toggle" data-ne-toggle="hideDeadTorrents" role="switch" aria-checked="false">
             <span class="ne-filters-panel__toggle-indicator"></span>
@@ -1293,6 +1465,19 @@ export async function addFiltersPanel() {
       </div>
 
       <div class="ne-filters-panel__options">
+      <div class="ne-filters-panel__section ne-filters-panel__category-section" id="ne-categoryFilterContainer">
+        <div class="ne-filters-panel__section-head">
+          <h4 class="ne-filters-panel__section-title">Categories</h4>
+          <div class="ne-filters-panel__cat-tools">
+            <span class="ne-filters-panel__cat-summary" id="ne-categoryFilterSummary">None selected</span>
+            <button type="button" id="ne-categoryFilterClear" class="ne-filters-panel__keyword-remove-all" disabled>Clear</button>
+          </div>
+        </div>
+        <p class="ne-filters-panel__section-desc">Show only torrents from the categories you tick. Ticking a main category includes all of its subcategories. To mix main categories, search in All categories.</p>
+        <p class="ne-filters-panel__section-desc ne-filters-panel__category-note" id="ne-categoryFilterNote" hidden></p>
+        <div class="ne-filters-panel__cat-grid" id="ne-categoryFilterList"></div>
+      </div>
+
       <div class="ne-filters-panel__section ne-filters-panel__seeders-section" id="ne-minSeedersContainer">
         <h4 class="ne-filters-panel__section-title">Minimum seeders</h4>
         <p class="ne-filters-panel__section-desc">Hide torrents below this seeder count.</p>
@@ -1451,6 +1636,10 @@ export async function addFiltersPanel() {
     },
   );
 
+  neWireFilterToggle("categoryFilter", "categoryFilterEnabled", async () => {
+    neRenderCategoryFilter(await loadStoredPreferences());
+  });
+  neWireCategoryFilter();
   neWireFilterToggle("hideDeadTorrents", "hideDeadTorrents");
   neWireFilterToggle("minSeedersFilter", "minSeedersFilterEnabled", (enabled) => {
     neSetMinSeedersControlsEnabled(enabled);
@@ -1630,6 +1819,14 @@ export async function syncFiltersPanelUI(setting, value) {
   const prefs = await loadStoredPreferences();
 
   switch (setting) {
+    case "categoryFilterEnabled":
+      neSetFilterToggleState("categoryFilter", value);
+      neRenderCategoryFilter(prefs);
+      break;
+    case "categoryFilterNyaa":
+    case "categoryFilterSukebei":
+      neRenderCategoryFilter(prefs);
+      break;
     case "hideDeadTorrents":
       neSetFilterToggleState("hideDeadTorrents", value);
       break;

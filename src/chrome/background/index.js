@@ -1,4 +1,5 @@
 import { initBadgeListeners } from "./badge.js";
+import { initCloudSync } from "./cloud-sync.js";
 import { initMessageProxy } from "./fetch-proxy.js";
 import { bindProbeAlternateClients } from "./torrent-clients/detect.js";
 import { probeDelugeRpc } from "./torrent-clients/deluge.js";
@@ -23,3 +24,4 @@ bindProbeAlternateClients(async (baseUrl, except) => {
 
 initBadgeListeners();
 initMessageProxy();
+initCloudSync();

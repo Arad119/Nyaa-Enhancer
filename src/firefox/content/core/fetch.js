@@ -9,10 +9,11 @@ export function fetchJsonRequestViaBackground({
   method = "GET",
   body,
   headers,
+  maxWaitMs,
 } = {}) {
   return new Promise((resolve) => {
     browser.runtime.sendMessage(
-      { type: "fetchJson", url, method, body, headers },
+      { type: "fetchJson", url, method, body, headers, maxWaitMs },
       resolve,
     );
   });

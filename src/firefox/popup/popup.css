@@ -919,3 +919,43 @@ body {
 }
 
 /* ── End qBittorrent Categories & Tags UI ─────────────────────────────────── */
+
+/* Cloud Sync */
+
+.cloud-sync-address {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 10px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #222;
+}
+
+.cloud-sync-address .tc-label {
+  font-size: 11px;
+  color: #888;
+}
+
+.cloud-sync-address-value {
+  overflow: hidden;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  color: #ddd;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-sync-address-value.is-missing {
+  font-family: inherit;
+  color: #e0a040;
+}
+
+.cloud-sync-status {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cloud-sync-status:empty {
+  display: none;
+}

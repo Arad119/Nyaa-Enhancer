@@ -338,9 +338,10 @@
           >
             <span>API Key</span>
             <span style="color: #999; font-size: 12px"
-              >Used for anime title autocomplete in Quick Search, and for Similar
-              tab TMDB recommendations if you enable that in Settings. Create a
-              free key at
+              >Optional. Used for Quick Search anime titles when TMDB is the
+              chosen provider (or as a fallback for Tenrai), and for Similar tab
+              TMDB recommendations if you enable that in Settings. Create a free
+              key at
               <a
                 href="https://www.themoviedb.org/settings/api"
                 target="_blank"
@@ -402,6 +403,90 @@
             <span style="color: #999; font-size: 12px"
               >Alternative release titles are resolved via TheXEM using TVDB and
               AniDB mappings.</span
+            >
+          </div>
+        </div>
+
+        <!-- Cloud Sync (WebDAV) -->
+        <div class="settings-category">
+          <h3 class="category-title">Cloud Sync (WebDAV)</h3>
+          <div
+            class="setting-item"
+            style="flex-direction: column; align-items: stretch; gap: 8px"
+          >
+            <span style="color: #999; font-size: 12px"
+              >Your WebDAV login. The folder address, options and a setup
+              guide are under Cloud Sync on the
+              <a href="/settings" class="ne-settings-page-link" target="_blank" style="color: #337ab7"
+                >Settings page</a
+              >. Many services (like Nextcloud) need an
+              <strong style="color: #ddd">app password</strong> here instead of
+              your normal password.</span
+            >
+            <div class="cloud-sync-address">
+              <span class="tc-label">Folder address</span>
+              <span id="cloudSyncAddress" class="cloud-sync-address-value"></span>
+            </div>
+            <input
+              type="text"
+              id="webdavUsername"
+              placeholder="WebDAV username"
+              class="tc-input"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div class="api-key-wrapper">
+              <input
+                type="password"
+                id="webdavPassword"
+                placeholder="WebDAV password or app password"
+                class="api-key-input"
+                autocomplete="new-password"
+              />
+              <button
+                type="button"
+                id="webdavPasswordToggle"
+                class="api-key-eye"
+                title="Show/hide password"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="15"
+                  height="15"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
+            <div class="api-key-actions">
+              <button
+                type="button"
+                id="webdavConnect"
+                class="api-key-action-btn api-key-test-btn"
+              >
+                Connect
+              </button>
+              <button
+                type="button"
+                id="webdavClear"
+                class="api-key-action-btn api-key-clear-btn"
+              >
+                Clear
+              </button>
+            </div>
+            <span id="webdavStatus" class="cloud-sync-status" role="status"></span>
+            <span style="color: #777; font-size: 11px; line-height: 1.5"
+              >Connect asks your browser for permission to reach this server,
+              then checks the login. The login stays in this browser unless you
+              turn on Include credentials under Cloud Sync on the Settings
+              page.</span
             >
           </div>
         </div>

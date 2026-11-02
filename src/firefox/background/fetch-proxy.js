@@ -1,5 +1,10 @@
 import { sendMessageToNyaaTabs } from "../shared/domains.js";
 import {
+  isTenraiUrl,
+  noteTenraiResponse,
+  reserveTenraiSlot,
+} from "./tenrai-limit.js";
+import {
   hasTorrentClientHostAccess,
   normalizeUrl,
 } from "./torrent-clients/detect.js";
@@ -62,7 +67,32 @@ export function handleFetchJson(message) {
         : JSON.stringify(message.body);
   }
 
-  return fetch(message.url, init)
+  if (isTenraiUrl(message.url)) {
+    return fetchTenraiJson(message, init);
+  }
+  return fetchJsonResponse(message.url, init);
+}
+
+async function fetchTenraiJson(message, init) {
+  const maxWaitMs = Number.isFinite(message.maxWaitMs)
+    ? message.maxWaitMs
+    : Infinity;
+  const waitMs = await reserveTenraiSlot(maxWaitMs);
+  if (waitMs) {
+    return {
+      ok: false,
+      status: 429,
+      retryAfter: String(Math.ceil(waitMs / 1000)),
+      error: "rate_limited",
+    };
+  }
+  const result = await fetchJsonResponse(message.url, init);
+  noteTenraiResponse(result);
+  return result;
+}
+
+function fetchJsonResponse(url, init) {
+  return fetch(url, init)
     .then(async (response) => {
       const text = await response.text();
       let data = null;

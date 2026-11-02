@@ -1,5 +1,7 @@
 import { getPreferences, loadStoredPreferences, savePreferences } from "../../../shared/prefs.js";
 import { convertToBytes, fetchJsonViaBackground, formatNekoBTBytes, isNyaaTorrentDataRow, showNotification, syncSelectionToVisibleRows } from "../../internal.js";
+import { fetchJsonRequestViaBackground } from "../../core/fetch.js";
+import { lookupSimilarExternalIds } from "../similar/api.js";
 import {
   QUICK_SEARCH_PRESETS_MAX,
   addQuickSearchPreset,
@@ -333,6 +335,7 @@ export const TMDB_SEARCH_MIN_INTERVAL_MS = 600;
 export let tmdbSearchThrottleChain = Promise.resolve();
 export let tmdbSearchNextAllowedAt = 0;
 export const quickSearchAnimeMemoryCache = {
+  tenraiSearch: new Map(),
   tmdbSearch: new Map(),
   tmdbExternalIds: new Map(),
   tmdbAltTitles: new Map(),
@@ -342,6 +345,7 @@ export const quickSearchAnimeMemoryCache = {
 };
 
 export function clearQuickSearchAnimeCaches() {
+  quickSearchAnimeMemoryCache.tenraiSearch.clear();
   quickSearchAnimeMemoryCache.tmdbSearch.clear();
   quickSearchAnimeMemoryCache.tmdbExternalIds.clear();
   quickSearchAnimeMemoryCache.tmdbAltTitles.clear();
@@ -352,6 +356,13 @@ export function clearQuickSearchAnimeCaches() {
   quickSearchAnimeMemoryCache.xemAllNamesPromises.anidb = null;
   tmdbSearchThrottleChain = Promise.resolve();
   tmdbSearchNextAllowedAt = 0;
+}
+
+export const XEM_ALL_NAMES_STORAGE_KEYS = ["xemAllNames_tvdb", "xemAllNames_anidb"];
+
+export async function clearXemNameCache() {
+  clearQuickSearchAnimeCaches();
+  await browser.storage.local.remove(XEM_ALL_NAMES_STORAGE_KEYS);
 }
 
 export function normalizeAnimeAliasName(name) {
@@ -424,7 +435,7 @@ export async function getXemAllNames(origin) {
     return quickSearchAnimeMemoryCache.xemAllNames[origin];
   }
 
-  const storageKey = `xemAllNames_${origin}`;
+  const storageKey = `xemAllNames_${origin}`; // see XEM_ALL_NAMES_STORAGE_KEYS
   const stored = await browser.storage.local.get({ [storageKey]: null });
   const cached = stored[storageKey];
   if (
@@ -591,16 +602,94 @@ export async function getTmdbAlternativeTitles(tmdbId, apiKey) {
   return titles;
 }
 
-export async function resolveAnimeAliasesForSelection(selection, apiKey) {
-  const aliasSet = new Set();
-  addAnimeAliasNames(aliasSet, [selection.name, selection.originalName]);
+export const QUICK_SEARCH_ANIME_PROVIDERS = {
+  tenrai: "Tenrai",
+  tmdb: "TMDB",
+};
 
-  const [tvdbId, tmdbAltTitles] = await Promise.all([
-    getTmdbTvdbId(selection.id, apiKey),
-    getTmdbAlternativeTitles(selection.id, apiKey),
-  ]);
-  addAnimeAliasNames(aliasSet, tmdbAltTitles);
+const TENRAI_ANIME_SEARCH_URL = "https://api.tenrai.org/v1/anime";
+// Suggestions are skipped rather than queued for long when Tenrai's shared
+// rate limit is used up; the background queue enforces the limit itself.
+const TENRAI_SEARCH_MAX_WAIT_MS = 2500;
 
+function tenraiEntryNames(entry) {
+  const names = [
+    entry?.title_english,
+    entry?.title,
+    entry?.title_japanese,
+    ...(Array.isArray(entry?.title_synonyms) ? entry.title_synonyms : []),
+    ...(Array.isArray(entry?.titles) ? entry.titles.map((item) => item?.title) : []),
+  ];
+  return dedupeAnimeAliasNames(names.filter((name) => typeof name === "string"));
+}
+
+export async function searchTenraiAnime(query) {
+  const cacheKey = query.toLowerCase();
+  if (quickSearchAnimeMemoryCache.tenraiSearch.has(cacheKey)) {
+    return quickSearchAnimeMemoryCache.tenraiSearch.get(cacheKey);
+  }
+
+  const url = `${TENRAI_ANIME_SEARCH_URL}?q=${encodeURIComponent(query.slice(0, 300))}&limit=8&type_exclude=music,cm,pv`;
+  const result = await fetchJsonRequestViaBackground({
+    url,
+    maxWaitMs: TENRAI_SEARCH_MAX_WAIT_MS,
+  });
+  if (result?.status === 429) throw new Error("rate_limited");
+  if (!result?.ok || !Array.isArray(result.data?.data)) {
+    throw new Error("search_failed");
+  }
+
+  const shows = result.data.data
+    .filter((entry) => entry?.mal_id && (entry.title || entry.title_english))
+    .map((entry) => {
+      const name = entry.title_english || entry.title;
+      return {
+        provider: "tenrai",
+        id: entry.mal_id,
+        name,
+        originalName: entry.title && entry.title !== name ? entry.title : "",
+        firstAirDate:
+          String(entry.aired?.from || "").slice(0, 10) ||
+          (entry.year ? String(entry.year) : ""),
+        names: tenraiEntryNames(entry),
+      };
+    });
+
+  quickSearchAnimeMemoryCache.tenraiSearch.set(cacheKey, shows);
+  return shows;
+}
+
+export function getQuickSearchAnimeProviderOrder(prefs) {
+  const preferred = prefs?.quickSearchAnimeProvider === "tmdb" ? "tmdb" : "tenrai";
+  const order = preferred === "tmdb" ? ["tmdb", "tenrai"] : ["tenrai", "tmdb"];
+  return order.filter((provider) => provider !== "tmdb" || !!prefs?.tmdbApiKey);
+}
+
+// Tries the preferred provider first and falls back to the other one when it
+// fails or finds nothing.
+export async function searchQuickSearchAnime(query, prefs) {
+  const providers = getQuickSearchAnimeProviderOrder(prefs);
+  let lastError = null;
+  for (const provider of providers) {
+    try {
+      const results =
+        provider === "tmdb"
+          ? (await searchTmdbAnime(query, prefs.tmdbApiKey)).map((show) => ({
+              ...show,
+              provider: "tmdb",
+            }))
+          : await searchTenraiAnime(query);
+      if (results.length || provider === providers[providers.length - 1]) {
+        return { results, provider, fellBack: provider !== providers[0] };
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("search_failed");
+}
+
+async function addXemAnimeAliases(aliasSet, tvdbId, anidbIds = []) {
   let tvdbAllNames = null;
   let anidbAllNames = null;
 
@@ -624,10 +713,15 @@ export async function resolveAnimeAliasesForSelection(selection, apiKey) {
     addAnimeAliasNames(aliasSet, tvdbNames);
   }
 
+  const linkedAnidbIds = new Set(anidbIds.filter(Boolean).map(String));
   if (tvdbId && anidbAllNames) {
-    const linkedAnidbIds = findLinkedAnidbIds([...aliasSet, ...tvdbNames], anidbAllNames);
+    findLinkedAnidbIds([...aliasSet, ...tvdbNames], anidbAllNames).forEach(
+      (anidbId) => linkedAnidbIds.add(anidbId),
+    );
+  }
+  if (linkedAnidbIds.size) {
     const anidbNameLists = await Promise.all(
-      linkedAnidbIds.map(async (anidbId) => {
+      [...linkedAnidbIds].map(async (anidbId) => {
         const [xemAnidbNames, cachedAnidbNames] = await Promise.all([
           fetchXemShowNames("anidb", anidbId),
           Promise.resolve(getAllNamesEntryNames(anidbAllNames, anidbId)),
@@ -637,7 +731,36 @@ export async function resolveAnimeAliasesForSelection(selection, apiKey) {
     );
     anidbNameLists.forEach((names) => addAnimeAliasNames(aliasSet, names));
   }
+}
 
+async function resolveTenraiAnimeAliases(selection) {
+  const aliasSet = new Set();
+  addAnimeAliasNames(aliasSet, [selection.name, ...(selection.names || [])]);
+
+  // AnimeAPI maps the MAL ID to TVDB/AniDB so TheXEM can add its names too.
+  const mapping = await lookupSimilarExternalIds({ malId: selection.id });
+  await addXemAnimeAliases(
+    aliasSet,
+    mapping?.tvdbId || null,
+    mapping?.anidbId ? [mapping.anidbId] : [],
+  );
+  return dedupeAnimeAliasNames([...aliasSet], [selection.name]);
+}
+
+export async function resolveAnimeAliasesForSelection(selection, apiKey) {
+  if (selection.provider === "tenrai") {
+    return resolveTenraiAnimeAliases(selection);
+  }
+
+  const aliasSet = new Set();
+  addAnimeAliasNames(aliasSet, [selection.name, selection.originalName]);
+
+  const [tvdbId, tmdbAltTitles] = await Promise.all([
+    getTmdbTvdbId(selection.id, apiKey),
+    getTmdbAlternativeTitles(selection.id, apiKey),
+  ]);
+  addAnimeAliasNames(aliasSet, tmdbAltTitles);
+  await addXemAnimeAliases(aliasSet, tvdbId);
   return dedupeAnimeAliasNames([...aliasSet], [selection.name]);
 }
 
@@ -782,11 +905,17 @@ export function initQuickSearchAnimeAutocomplete(popup) {
   });
 
   loadStoredPreferences().then((prefs) => {
-    if (!prefs.tmdbApiKey) {
-      hintEl.hidden = false;
-      hintEl.textContent =
-        "Add a TMDB API key in extension settings to search anime titles and load aliases.";
+    const [primary, fallback] = getQuickSearchAnimeProviderOrder(prefs);
+    let source = `Titles from ${QUICK_SEARCH_ANIME_PROVIDERS[primary]}`;
+    if (fallback) source += `, with ${QUICK_SEARCH_ANIME_PROVIDERS[fallback]} as fallback`;
+    if (prefs.quickSearchAnimeProvider === "tmdb" && primary !== "tmdb") {
+      source = "TMDB needs an API key in the extension popup, so titles come from Tenrai";
     }
+    const link = document.createElement("a");
+    link.href = "/settings#ne-settings-quicksearch";
+    link.textContent = "Settings → Quick Search";
+    hintEl.replaceChildren(`${source}. Change the provider in `, link, ".");
+    hintEl.hidden = false;
   });
 
   animeInput.addEventListener("input", () => {
@@ -801,18 +930,16 @@ export function initQuickSearchAnimeAutocomplete(popup) {
       }
 
       const prefs = await loadStoredPreferences();
-      if (!prefs.tmdbApiKey) {
-        hideSuggestions();
-        return;
-      }
-
       const token = ++activeSearchToken;
       suggestionsEl.hidden = false;
       suggestionsEl.innerHTML =
         '<div class="qf-anime-suggestion qf-anime-suggestion--status">Searching…</div>';
 
       try {
-        const results = await searchTmdbAnime(query, prefs.tmdbApiKey);
+        const { results, provider, fellBack } = await searchQuickSearchAnime(
+          query,
+          prefs,
+        );
         if (token !== activeSearchToken) return;
 
         if (!results.length) {
@@ -869,11 +996,17 @@ export function initQuickSearchAnimeAutocomplete(popup) {
           });
           suggestionsEl.appendChild(button);
         });
+        if (fellBack) {
+          const note = document.createElement("div");
+          note.className = "qf-anime-suggestion qf-anime-suggestion--status";
+          note.textContent = `Showing ${QUICK_SEARCH_ANIME_PROVIDERS[provider]} results`;
+          suggestionsEl.appendChild(note);
+        }
       } catch (error) {
         if (token !== activeSearchToken) return;
         suggestionsEl.innerHTML =
           error?.message === "rate_limited"
-            ? '<div class="qf-anime-suggestion qf-anime-suggestion--status">TMDB rate limit reached — wait a moment</div>'
+            ? '<div class="qf-anime-suggestion qf-anime-suggestion--status">Rate limit reached — wait a moment</div>'
             : '<div class="qf-anime-suggestion qf-anime-suggestion--status">Search failed</div>';
       }
     }, TMDB_SEARCH_DEBOUNCE_MS);

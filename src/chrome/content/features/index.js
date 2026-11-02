@@ -61,7 +61,9 @@ import {
   setNavbarVisibilityPref,
 } from "./navbar/index.js";
 import { applyAutoLoadBarVisibility, initShowMorePagination, scheduleAutoShowMore, stopAutoShowMore, syncShowMoreAutoControls, updateAutoLoadStatus } from "./show-more/index.js";
+import { initScrollToTop, removeScrollToTop } from "./scroll-to-top/index.js";
 import { loadStoredPreferences } from "../../shared/prefs.js";
+import { CLOUD_SYNC_CHECK_MANUAL } from "../../shared/webdav.js";
 import { addCopyButton, addCheckboxColumn } from "./toolbar/index.js";
 import {
   addTsukihimeToViewPage,
@@ -85,6 +87,9 @@ import {
 } from "./view-page/index.js";
 
 const FILTER_PANEL_SETTINGS = [
+  "categoryFilterEnabled",
+  "categoryFilterNyaa",
+  "categoryFilterSukebei",
   "hideDeadTorrents",
   "minSeedersFilterEnabled",
   "minSeedersFilterValue",
@@ -121,6 +126,9 @@ export const features = [
     },
     async onSettingChanged(setting, value) {
       if (
+        setting === "categoryFilterEnabled" ||
+        setting === "categoryFilterNyaa" ||
+        setting === "categoryFilterSukebei" ||
         setting === "hideDeadTorrents" ||
         setting === "minSeedersFilterEnabled" ||
         setting === "minSeedersFilterValue" ||
@@ -508,6 +516,19 @@ export const features = [
     },
   },
   {
+    id: "cloud-sync",
+    async init() {
+      // Lets cloud sync pick up changes from your other browsers while you
+      // use Nyaa (the background checks as often as the user chose).
+      const prefs = await loadStoredPreferences();
+      if (!prefs.cloudSyncEnabled) return;
+      if (Number(prefs.cloudSyncCheckMinutes) === CLOUD_SYNC_CHECK_MANUAL) return;
+      chrome.runtime
+        .sendMessage({ type: "cloudSyncWake", source: "page" })
+        .catch(() => {});
+    },
+  },
+  {
     id: "settings",
     afterObserver() {
       handleSettingsPage();
@@ -520,6 +541,17 @@ export const features = [
           if (qbtSection) qbtSection.hidden = value !== "qbittorrent";
         }
       }
+    },
+  },
+  {
+    id: "scrollToTop",
+    async afterObserver() {
+      await initScrollToTop();
+    },
+    async onSettingChanged(setting, value) {
+      if (setting !== "showScrollToTop") return;
+      if (value) await initScrollToTop();
+      else removeScrollToTop();
     },
   },
   {
